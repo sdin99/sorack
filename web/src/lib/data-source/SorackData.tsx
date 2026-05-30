@@ -1,11 +1,6 @@
-// Single hook (useSorack) that returns everything the design components
-// already destructured by name from data.tsx — so swapping mock → api is
-// a one-line change in each component instead of a full refactor.
-//
-// React Query handles fetching/caching/refetching; legacy mock fallbacks
-// (VLAN_DEF, FIREWALL, PUBLIC_HOST, AUTO_SPEC_KEYS, CURATED_EXTRAS,
-// DATA_SOURCE, override layer) still come from data.tsx for now —
-// they'll migrate as those domains get backend representation.
+// Single hook (useSorack) that returns inventory + helpers + mutations.
+// React Query handles fetching / caching / refetching; description overrides
+// are kept client-side (localStorage) via data.tsx.
 // @ts-nocheck — same scope as the design components it serves.
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
 import {
@@ -31,21 +26,7 @@ import {
 } from "./api";
 import { history } from "@/lib/history";
 import { slugify, uniqueSlug } from "@/lib/slug";
-import {
-  VLAN_DEF,
-  FIREWALL,
-  VLAN_ASSIGN,
-  PUBLIC_HOST,
-  DATA_SOURCE,
-  AUTO_SPEC_KEYS,
-  CURATED_EXTRAS,
-  getOverride,
-  setOverride,
-  loadOverrides,
-  saveOverrides,
-  countAuto,
-  countCurated,
-} from "@/lib/data";
+import { getOverride, setOverride } from "@/lib/data";
 
 // ──────────────────────────────────────────────────────────────────────
 
@@ -74,28 +55,15 @@ interface SorackData {
   ALERTS: any[];
   FAVORITES: string[];
 
-  // legacy mock metadata that's still hardcoded
-  VLAN_DEF: typeof VLAN_DEF;
-  FIREWALL: typeof FIREWALL;
-  VLAN_ASSIGN: typeof VLAN_ASSIGN;
-  PUBLIC_HOST: typeof PUBLIC_HOST;
-  DATA_SOURCE: typeof DATA_SOURCE;
-  AUTO_SPEC_KEYS: typeof AUTO_SPEC_KEYS;
-  CURATED_EXTRAS: typeof CURATED_EXTRAS;
-
   // helpers (closed over the current NODES/RUNBOOKS)
   getNode: (id: string) => any;
   getChildren: (id: string) => any[];
   getPath: (id: string) => any[];
   searchAll: (q: string) => any[];
 
-  // override layer (localStorage, unchanged from mock)
+  // description overrides (localStorage-backed)
   getOverride: typeof getOverride;
   setOverride: typeof setOverride;
-  loadOverrides: typeof loadOverrides;
-  saveOverrides: typeof saveOverrides;
-  countAuto: typeof countAuto;
-  countCurated: typeof countCurated;
 
   // node mutations (Phase 3B) — each resolves to the server's view of the row
   // and invalidates the inventory query so the topology refreshes.
@@ -301,23 +269,12 @@ function DataInner({ children }: { children: ReactNode }) {
       RUNBOOKS,
       ALERTS,
       FAVORITES,
-      VLAN_DEF,
-      FIREWALL,
-      VLAN_ASSIGN,
-      PUBLIC_HOST,
-      DATA_SOURCE,
-      AUTO_SPEC_KEYS,
-      CURATED_EXTRAS,
       getNode,
       getChildren,
       getPath,
       searchAll,
       getOverride,
       setOverride,
-      loadOverrides,
-      saveOverrides,
-      countAuto,
-      countCurated,
       createNode: async (payload: NodeCreatePayload) => {
         const res = await createNodeM.mutateAsync(payload);
         history.push({ type: "create", payload });

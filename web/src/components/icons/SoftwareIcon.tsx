@@ -8,7 +8,6 @@
 // graph-node badges we leave brand=false so the icon takes currentColor and
 // blends with the node surface.
 
-import * as React from "react";
 import { siPostgresql, siJellyfin, siAdguard, siProxmox } from "simple-icons";
 
 interface SimpleIconShape { path: string; hex: string; title: string; }
