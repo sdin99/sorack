@@ -1,0 +1,51 @@
+# RBAC for the sorack dev pod's k8s health adapter.
+#
+# The adapter (api/src/health/adapters/k8s.ts) reads namespace-level workload
+# state to populate node detail (pod/deploy/sts ready counts, etc.). It needs
+# read-only access cluster-wide because the dashboard can monitor any
+# namespace. Strictly get/list, no watch on secrets/configmaps — a monitoring
+# read grant, nothing that can mutate or read app credentials.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sorack
+  namespace: sorack
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sorack-readonly
+rules:
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - pods
+      - services
+      - endpoints
+      - persistentvolumeclaims
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sorack-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sorack-readonly
+subjects:
+  - kind: ServiceAccount
+    name: sorack
+    namespace: sorack

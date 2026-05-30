@@ -1,0 +1,33 @@
+# Headless service for stable Pod DNS (sorack-postgres-0.sorack-postgres-headless...).
+apiVersion: v1
+kind: Service
+metadata:
+  name: sorack-postgres-headless
+  namespace: sorack
+  labels:
+    app: sorack-postgres
+spec:
+  clusterIP: None
+  selector:
+    app: sorack-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+# Regular ClusterIP — apps connect via sorack-postgres.sorack.svc.cluster.local:5432
+apiVersion: v1
+kind: Service
+metadata:
+  name: sorack-postgres
+  namespace: sorack
+  labels:
+    app: sorack-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: sorack-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

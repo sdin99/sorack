@@ -1,0 +1,105 @@
+# Sorack dev pod.
+# - Mounts the cluster node's checked-out Sorack repo via hostPath so edits
+#   on the host hit Vite/tsx watchers inside the pod immediately. CHANGE THE
+#   hostPath PATH AT THE BOTTOM to wherever you cloned the repo on the node.
+# - Image: node:22-alpine directly (no custom dev image), pnpm via corepack.
+# - Pod start: pnpm install at workspace root → `pnpm dev` runs web (5173) +
+#   api (3001) concurrently. Vite proxies /api/* to localhost:3001.
+# - node_modules live inside the hostPath; the host itself doesn't run Node,
+#   so no env contention.
+#
+# Single-node cluster, so hostPath is fine. For multi-node use a nodeSelector
+# or a PVC-based code sync. For production, build an image instead of
+# mounting source.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sorack
+  namespace: sorack
+  labels:
+    app: sorack
+spec:
+  replicas: 1
+  # Code changes hot-reload inside the pod; restarts are clean swap-outs.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sorack
+  template:
+    metadata:
+      labels:
+        app: sorack
+    spec:
+      # Read-only cluster access for the k8s health adapter (see rbac.yaml).
+      serviceAccountName: sorack
+      # Match the host UID owning the hostPath so files stay writable.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: dev
+          image: node:22-alpine
+          workingDir: /workspace
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eux
+              mkdir -p "$PNPM_HOME" "$COREPACK_HOME"
+              # runAsUser:1000 can't write /usr/local/bin → user-scoped install.
+              corepack enable --install-directory "$PNPM_HOME"
+              pnpm install --frozen-lockfile=false
+              exec pnpm dev
+          ports:
+            - name: http
+              containerPort: 5173
+            - name: api
+              containerPort: 3001
+          env:
+            - name: PNPM_HOME
+              value: /workspace/.pnpm-home
+            - name: COREPACK_HOME
+              value: /workspace/.corepack
+            - name: PATH
+              value: /workspace/.pnpm-home:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            # Health probe cadence — matches the frontend inventory poll (5s)
+            # so "checked Ns ago" stays small instead of climbing to ~30s.
+            - name: SORACK_HEALTH_INTERVAL_MS
+              value: "5000"
+          envFrom:
+            # Inject credentials and any optional adapter env (SORACK_*) from
+            # a Secret named `sorack-postgres-credentials`. Create it with
+            # whatever method you prefer (plain Secret / sealed-secrets /
+            # external-secrets / Infisical / etc) — see deploy/postgres/
+            # secret.example.yaml for the expected keys. Optional so the dev
+            # pod can start even before credentials land.
+            - secretRef:
+                name: sorack-postgres-credentials
+                optional: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          volumeMounts:
+            - name: src
+              mountPath: /workspace
+          # pnpm install + first Vite/tsx boot can take a couple of minutes.
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 60 # 60 * 5s = 5 min
+            periodSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: src
+          hostPath:
+            # CHANGE THIS to where you cloned the repo on the cluster node.
+            path: /home/youruser/projects/sorack
+            type: Directory

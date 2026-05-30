@@ -1,0 +1,32 @@
+# Example Ingress — exposes the dev UI at the host you set below. The
+# cluster-issuer / ingressClassName are vendor-specific; adjust to your
+# cluster (Traefik / nginx-ingress / etc) or remove the TLS section and
+# front it with your own proxy.
+#
+# Not applied by default; copy to ingress.yaml and customize.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sorack
+  namespace: sorack
+  annotations:
+    # cert-manager issuer; remove if you handle TLS elsewhere.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik # or nginx / etc
+  rules:
+    - host: dash.sorack.com # CHANGE to your hostname
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sorack
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - dash.sorack.com # CHANGE to your hostname
+      secretName: dash-sorack-tls

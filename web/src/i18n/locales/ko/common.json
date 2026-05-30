@@ -1,0 +1,225 @@
+{
+  "action": {
+    "cancel": "취소",
+    "save": "저장",
+    "saving": "저장 중…",
+    "saved": "저장됨 ✓",
+    "edit": "수정",
+    "close": "닫기",
+    "back": "뒤로",
+    "menu": "메뉴",
+    "more": "더보기",
+    "create": "생성",
+    "undo": "실행 취소",
+    "redo": "다시 실행",
+    "expandSidebar": "사이드바 펼치기",
+    "collapseSidebar": "사이드바 접기"
+  },
+  "lang": {
+    "label": "언어",
+    "en": "English",
+    "ko": "한국어"
+  },
+  "auth": {
+    "username": "아이디",
+    "password": "비밀번호",
+    "signIn": "로그인",
+    "signOut": "로그아웃",
+    "invalid": "아이디 또는 비밀번호가 올바르지 않습니다",
+    "tooManyAttempts": "시도 횟수 초과 — 잠시 후 다시 시도하세요"
+  },
+  "settings": {
+    "title": "설정",
+    "appearance": "외관",
+    "theme": "테마",
+    "themeHint": "대시보드 색상 테마",
+    "themeDark": "다크",
+    "themeLight": "라이트",
+    "langHint": "인터페이스 언어",
+    "account": "계정",
+    "changePassword": "비밀번호 변경",
+    "currentPassword": "현재 비밀번호",
+    "newPassword": "새 비밀번호",
+    "confirmPassword": "새 비밀번호 확인",
+    "passwordChanged": "비밀번호가 변경되었습니다",
+    "passwordMismatch": "비밀번호가 일치하지 않습니다",
+    "passwordTooShort": "비밀번호는 8자 이상이어야 합니다",
+    "currentWrong": "현재 비밀번호가 올바르지 않습니다"
+  },
+  "topbar": {
+    "searchTrigger": "인프라·런북 검색"
+  },
+  "drawer": {
+    "title": "메뉴",
+    "subtitle": "빠른 이동",
+    "favorites": "즐겨찾기",
+    "runbookIndex": "런북 인덱스",
+    "atAGlance": "한눈에"
+  },
+  "nodeForm": {
+    "titleCreate": "노드 생성",
+    "titleEdit": "노드 수정",
+    "name": "이름",
+    "namePlaceholder": "예: prod-k8s-master",
+    "id": "id",
+    "type": "타입",
+    "parent": "상위 노드",
+    "parentNone": "(없음)",
+    "status": "상태",
+    "errorMissing": "이름, id, 타입은 필수입니다"
+  },
+  "nodeActions": {
+    "edit": "수정",
+    "addChild": "하위 노드 추가",
+    "addRoot": "여기에 노드 추가",
+    "makeRoot": "최상단으로 (상위 노드 해제)",
+    "configureType": "유형 설정",
+    "configureSoftware": "소프트웨어 설정",
+    "configureThis": "설정",
+    "remove": "삭제",
+    "delete": "삭제",
+    "deleteTitle": "노드를 삭제할까요?",
+    "deleteMessage": "\"{{name}}\"이(가) 삭제됩니다. 하위 노드는 남지만 상위 연결이 끊깁니다."
+  },
+  "edgeActions": {
+    "create": {
+      "depends": "depends on (의존)",
+      "mounts": "mounts (마운트)",
+      "routes": "routes to (라우팅)",
+      "contains": "contains (부모로 묶기)"
+    },
+    "changeTo": {
+      "depends": "depends 로 변경",
+      "mounts": "mounts 로 변경",
+      "routes": "routes 로 변경"
+    },
+    "delete": "엣지 삭제",
+    "deleteTitle": "엣지를 삭제할까요?",
+    "deleteMessage": "이 엣지가 토폴로지에서 제거됩니다.",
+    "detach": "연결 해제 (자식을 최상단으로)",
+    "verb": {
+      "depends": "depends on",
+      "mounts": "mounts",
+      "routes": "routes to"
+    }
+  },
+  "stats": {
+    "nodes": "노드",
+    "runbooks": "런북",
+    "alerts": "알림"
+  },
+  "status": {
+    "ok": "정상",
+    "warn": "경고",
+    "err": "오류"
+  },
+  "search": {
+    "title": "검색",
+    "placeholder": "호스트·서비스·네임스페이스·런북…",
+    "hintNav": "이동",
+    "hintOpen": "열기",
+    "typeToSearch": "검색어를 입력하세요",
+    "empty": "\"{{q}}\" 결과 없음"
+  },
+  "searchResultType": {
+    "node": "노드",
+    "runbook": "런북"
+  },
+  "alerts": {
+    "title": "알림",
+    "sevErr": "오류",
+    "sevWarn": "경고"
+  },
+  "runbook": {
+    "title": "런북",
+    "searchPlaceholder": "런북 검색…",
+    "updated": "{{date}} 업데이트",
+    "filter": {
+      "all": "전체"
+    },
+    "state": {
+      "planned": "계획됨",
+      "in-progress": "진행중",
+      "completed": "완료",
+      "rollback": "롤백"
+    }
+  },
+  "nd": {
+    "synced": "{{count}}건 동기화",
+    "curated": "{{count}}건 수동 관리",
+    "lastSync": "최근 동기화 {{age}}",
+    "activeIssues": "⚠ 활성 이슈",
+    "liveMetrics": "실시간 메트릭",
+    "metricsMeta": "Prometheus · 15초 전",
+    "spec": "스펙",
+    "notesTags": "노트 · 태그",
+    "manuallyMaintained": "수동 관리",
+    "descEmpty": "아직 작성된 description 이 없어요. 탭해서 추가.",
+    "contains": "포함",
+    "relationships": "관계",
+    "healthVia": "{{source}} 체크",
+    "topologyAuto": "토폴로지 · 자동",
+    "relatedRunbooks": "관련 런북",
+    "manuallyLinked": "수동 연결",
+    "statusManual": "수동",
+    "setStatus": "상태 설정",
+    "monitoredVia": "모니터링 · {{source}}",
+    "setupMonitoring": "모니터링 설정",
+    "removeMonitoring": "제거",
+    "notMonitored": "모니터링 안 됨",
+    "aspectInfra": "인프라",
+    "openMonitoringSettings": "모니터링 설정",
+    "galleryMonitoring": "모니터링",
+    "probeTypeLabel": "via {{type}}",
+    "testConnection": "테스트",
+    "testing": "테스트 중…",
+    "awaitingCheck": "첫 체크 대기 중…",
+    "needHostPort": "host·port 필요",
+    "needUrl": "url 필요",
+    "needNamespace": "namespace 필요",
+    "needPveNode": "PVE 노드명 필요",
+    "needSystemHost": "host 필요 (또는 manual.ip 설정)",
+    "pveHostPh": "host (선택 — 비우면 노드 IP)",
+    "pveNodeLbl": "PVE 노드",
+    "httpExpectLbl": "expect",
+    "httpExpectPh": "선택 문자열",
+    "tcpHostFallbackPh": "{{ip}}  (manual.ip 사용)",
+    "useNodeIp": "노드 IP 사용",
+    "saveMonitoring": "모니터링 저장",
+    "savingMonitoring": "모니터링 저장 중…",
+    "savedMonitoring": "모니터링 저장됨 ✓",
+    "needValue": "값 필요",
+    "needKey": "키 필요",
+    "autoField": "(자동)",
+    "collapseEmpty": "빈 항목 숨기기",
+    "showAllFields": "전체 보기",
+    "newNodeSetup": "새 노드 — 이름과 유형을 정하면 시작됩니다",
+    "setupName": "이름",
+    "setupNamePh": "새 노드 이름",
+    "setupId": "id",
+    "setupType": "유형",
+    "setupSoftware": "소프트웨어",
+    "setupFinish": "완료",
+    "setupIdTaken": "이미 사용 중인 id",
+    "setupIdInvalid": "a-z, 0-9, - 만 사용",
+    "galleryPickType": "유형 설정",
+    "galleryPickSoftware": "소프트웨어 설정",
+    "gallerySearch": "검색…",
+    "galleryNoMatch": "결과 없음",
+    "galleryOpenDetail": "상세 보기",
+    "gallerySelect": "선택",
+    "gallerySelected": "선택됨",
+    "galleryAdd": "추가",
+    "galleryRemove": "제거",
+    "galleryFields": "필드",
+    "noSoftware": "(소프트웨어 없음)",
+    "addCustomField": "커스텀 필드",
+    "details": "상세",
+    "widget": {
+      "resources": "리소스",
+      "workloads": "워크로드",
+      "requests": "리소스 요청",
+      "pods": "파드"
+    }
+  }
+}

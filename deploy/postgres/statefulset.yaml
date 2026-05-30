@@ -1,0 +1,86 @@
+# Postgres 17 single-instance. local-path PVC (50Gi) — fsync semantics safe
+# for Postgres. NAS NFS avoided due to corruption risk; backups go to NAS
+# via pg_dump cron (separate manifest, future).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sorack-postgres
+  namespace: sorack
+  labels:
+    app: sorack-postgres
+spec:
+  serviceName: sorack-postgres-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sorack-postgres
+  template:
+    metadata:
+      labels:
+        app: sorack-postgres
+    spec:
+      securityContext:
+        # postgres image runs as uid 70 (alpine) — fsGroup so PVC writable.
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sorack-postgres-credentials
+                  key: POSTGRES_USERNAME
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sorack-postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: sorack
+            - name: PGDATA
+              # PGDATA in a subdir so the mount root can hold lost+found etc.
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d sorack"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pg_isready -U $POSTGRES_USER -d sorack"
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1500m
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        # CHANGE to your cluster's storage class (or remove this line to use
+        # the cluster default). Common: local-path (Rancher), nfs-csi,
+        # rook-ceph-block, the cloud provider's default.
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 50Gi

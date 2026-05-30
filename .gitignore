@@ -1,0 +1,40 @@
+node_modules/
+dist/
+build/
+.next/
+.cache/
+.vite/
+.parcel-cache/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# build artifacts
+*.tsbuildinfo
+
+# Claude
+.claude/
+
+# dev pod runtime artifacts (hostPath mount 부산물)
+.corepack/
+.pnpm-home/
+
+design/
+docs/

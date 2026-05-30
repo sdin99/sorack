@@ -1,0 +1,225 @@
+{
+  "action": {
+    "cancel": "cancel",
+    "save": "save",
+    "saving": "saving…",
+    "saved": "saved ✓",
+    "edit": "edit",
+    "close": "close",
+    "back": "back",
+    "menu": "menu",
+    "more": "more actions",
+    "create": "create",
+    "undo": "undo",
+    "redo": "redo",
+    "expandSidebar": "expand sidebar",
+    "collapseSidebar": "collapse sidebar"
+  },
+  "lang": {
+    "label": "language",
+    "en": "English",
+    "ko": "한국어"
+  },
+  "auth": {
+    "username": "username",
+    "password": "password",
+    "signIn": "sign in",
+    "signOut": "sign out",
+    "invalid": "invalid username or password",
+    "tooManyAttempts": "too many attempts — try again later"
+  },
+  "settings": {
+    "title": "settings",
+    "appearance": "appearance",
+    "theme": "theme",
+    "themeHint": "color scheme for the dashboard",
+    "themeDark": "dark",
+    "themeLight": "light",
+    "langHint": "interface language",
+    "account": "account",
+    "changePassword": "change password",
+    "currentPassword": "current password",
+    "newPassword": "new password",
+    "confirmPassword": "confirm new password",
+    "passwordChanged": "password changed",
+    "passwordMismatch": "passwords don't match",
+    "passwordTooShort": "password must be at least 8 characters",
+    "currentWrong": "current password is incorrect"
+  },
+  "topbar": {
+    "searchTrigger": "search infra, runbooks"
+  },
+  "drawer": {
+    "title": "menu",
+    "subtitle": "quick jumps",
+    "favorites": "favorites",
+    "runbookIndex": "runbook index",
+    "atAGlance": "at a glance"
+  },
+  "nodeForm": {
+    "titleCreate": "new node",
+    "titleEdit": "edit node",
+    "name": "name",
+    "namePlaceholder": "e.g. prod-k8s-master",
+    "id": "id",
+    "type": "type",
+    "parent": "parent",
+    "parentNone": "(none)",
+    "status": "status",
+    "errorMissing": "name, id and type are required"
+  },
+  "nodeActions": {
+    "edit": "edit",
+    "addChild": "add child node",
+    "addRoot": "add node here",
+    "makeRoot": "make root (no parent)",
+    "configureType": "Configure type…",
+    "configureSoftware": "Configure software…",
+    "configureThis": "Configure…",
+    "remove": "Remove",
+    "delete": "delete",
+    "deleteTitle": "delete node?",
+    "deleteMessage": "\"{{name}}\" will be deleted. children stay but lose their parent link."
+  },
+  "edgeActions": {
+    "create": {
+      "depends": "depends on",
+      "mounts": "mounts",
+      "routes": "routes to",
+      "contains": "contains (re-parent)"
+    },
+    "changeTo": {
+      "depends": "change to depends",
+      "mounts": "change to mounts",
+      "routes": "change to routes"
+    },
+    "delete": "delete edge",
+    "deleteTitle": "delete edge?",
+    "deleteMessage": "this edge will be removed from the topology.",
+    "detach": "detach (make child a root)",
+    "verb": {
+      "depends": "depends on",
+      "mounts": "mounts",
+      "routes": "routes to"
+    }
+  },
+  "stats": {
+    "nodes": "nodes",
+    "runbooks": "runbooks",
+    "alerts": "alerts"
+  },
+  "status": {
+    "ok": "healthy",
+    "warn": "warning",
+    "err": "error"
+  },
+  "search": {
+    "title": "search",
+    "placeholder": "hosts, services, namespaces, runbooks…",
+    "hintNav": "nav",
+    "hintOpen": "open",
+    "typeToSearch": "type to search",
+    "empty": "no matches for \"{{q}}\""
+  },
+  "searchResultType": {
+    "node": "node",
+    "runbook": "runbook"
+  },
+  "alerts": {
+    "title": "alerts",
+    "sevErr": "ERR",
+    "sevWarn": "WARN"
+  },
+  "runbook": {
+    "title": "runbooks",
+    "searchPlaceholder": "search runbooks…",
+    "updated": "updated {{date}}",
+    "filter": {
+      "all": "all"
+    },
+    "state": {
+      "planned": "planned",
+      "in-progress": "in-progress",
+      "completed": "completed",
+      "rollback": "rollback"
+    }
+  },
+  "nd": {
+    "synced": "{{count}} synced",
+    "curated": "{{count}} curated",
+    "lastSync": "last sync {{age}}",
+    "activeIssues": "⚠ active issues",
+    "liveMetrics": "live metrics",
+    "metricsMeta": "Prometheus · 15s ago",
+    "spec": "spec",
+    "notesTags": "notes · tags",
+    "manuallyMaintained": "manually maintained",
+    "descEmpty": "no description yet. tap to add.",
+    "contains": "contains",
+    "topologyAuto": "topology · auto",
+    "relationships": "relationships",
+    "healthVia": "via {{source}}",
+    "relatedRunbooks": "related runbooks",
+    "manuallyLinked": "manually linked",
+    "statusManual": "manual",
+    "setStatus": "set status",
+    "monitoredVia": "monitored · {{source}}",
+    "setupMonitoring": "set up monitoring",
+    "removeMonitoring": "remove",
+    "notMonitored": "not monitored",
+    "aspectInfra": "infra",
+    "openMonitoringSettings": "monitoring settings",
+    "galleryMonitoring": "Monitoring",
+    "probeTypeLabel": "via {{type}}",
+    "testConnection": "test",
+    "testing": "testing…",
+    "awaitingCheck": "awaiting first check…",
+    "needHostPort": "host and port required",
+    "needUrl": "url required",
+    "needNamespace": "namespace required",
+    "needPveNode": "PVE node name required",
+    "needSystemHost": "host required (or set manual.ip)",
+    "pveHostPh": "host (optional — defaults to node IP)",
+    "pveNodeLbl": "PVE node",
+    "httpExpectLbl": "expect",
+    "httpExpectPh": "optional substring",
+    "tcpHostFallbackPh": "{{ip}}  (using manual.ip)",
+    "useNodeIp": "use node IP",
+    "saveMonitoring": "save monitoring",
+    "savingMonitoring": "saving monitoring…",
+    "savedMonitoring": "monitoring saved ✓",
+    "needValue": "value required",
+    "needKey": "key required",
+    "autoField": "(auto)",
+    "collapseEmpty": "hide empty",
+    "showAllFields": "show all",
+    "newNodeSetup": "new node — name it and pick a type to get started",
+    "setupName": "name",
+    "setupNamePh": "new node name",
+    "setupId": "id",
+    "setupType": "type",
+    "setupSoftware": "software",
+    "setupFinish": "Done",
+    "setupIdTaken": "id already in use",
+    "setupIdInvalid": "use a-z, 0-9, and -",
+    "galleryPickType": "Configure type…",
+    "galleryPickSoftware": "Configure software…",
+    "gallerySearch": "Search…",
+    "galleryNoMatch": "No matches",
+    "galleryOpenDetail": "open details",
+    "gallerySelect": "Select",
+    "gallerySelected": "Selected",
+    "galleryAdd": "Add",
+    "galleryRemove": "Remove",
+    "galleryFields": "Fields",
+    "noSoftware": "(no software)",
+    "addCustomField": "custom field",
+    "details": "details",
+    "widget": {
+      "resources": "resources",
+      "workloads": "workloads",
+      "requests": "requests",
+      "pods": "pods"
+    }
+  }
+}

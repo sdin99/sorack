@@ -1,0 +1,17 @@
+{
+  "name": "sorack",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev": "concurrently --names web,api -c cyan,magenta \"pnpm --dir web dev\" \"pnpm --dir api dev\"",
+    "dev:web": "pnpm --dir web dev",
+    "dev:api": "pnpm --dir api dev",
+    "build": "pnpm --dir api build && pnpm --dir web build",
+    "typecheck": "pnpm --dir api typecheck && pnpm --dir web typecheck",
+    "db:generate": "pnpm --dir api db:generate",
+    "db:migrate": "pnpm --dir api db:migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

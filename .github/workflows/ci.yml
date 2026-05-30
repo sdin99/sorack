@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # pnpm version is pinned via `packageManager` in package.json — no
+        # explicit version here so the two stay in sync.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Fail-fast: type errors block merge, build catches anything tsc
+      # misses (e.g. Vite resolve issues).
+      - run: pnpm typecheck
+
+      - run: pnpm build

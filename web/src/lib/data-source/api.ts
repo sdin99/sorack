@@ -1,0 +1,177 @@
+// API client — fetches the inventory/runbooks/alerts the web shell needs.
+// Errors bubble to React Query; callers don't need try/catch.
+
+export interface ApiNode {
+  id: string;
+  type: string;
+  parentId: string | null;
+  name: string;
+  status: "ok" | "warn" | "err" | "unknown";
+  meta: Record<string, unknown>;
+  position: { x: number; y: number } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  type: string;
+  meta: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ApiRunbook {
+  id: string;
+  title: string;
+  category: "task" | "sop";
+  status: "planned" | "in_progress" | "completed" | "rolled_back";
+  markdown: string;
+  nodeRefs: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiAlert {
+  id: string;
+  severity: "ok" | "warn" | "err";
+  title: string;
+  detail: string | null;
+  nodeId: string | null;
+  age: string | null;
+  createdAt: string;
+}
+
+// Thrown on a 401 so callers (and the global handler) can distinguish
+// "logged out" from other failures.
+export class UnauthorizedError extends Error {
+  constructor() { super("unauthorized"); this.name = "UnauthorizedError"; }
+}
+
+// Global 401 hook — AuthProvider registers this so an expired session
+// anywhere flips the app back to the login gate.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) { onUnauthorized = fn; }
+
+async function getJSON<T>(url: string): Promise<T> {
+  const r = await fetch(url, { credentials: "include" });
+  if (r.status === 401) { onUnauthorized?.(); throw new UnauthorizedError(); }
+  if (!r.ok) throw new Error(`${url} ${r.status}`);
+  return r.json();
+}
+
+async function sendJSON<T>(method: "POST" | "PATCH" | "DELETE", url: string, body?: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method,
+    credentials: "include",
+    headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 401) { onUnauthorized?.(); throw new UnauthorizedError(); }
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).error ?? ""; } catch { /* swallow */ }
+    throw new Error(`${method} ${url} ${r.status}${detail ? `: ${detail}` : ""}`);
+  }
+  return r.json();
+}
+
+export const fetchInventory = () =>
+  getJSON<{ nodes: ApiNode[]; edges: ApiEdge[] }>("/api/inventory");
+export const fetchRunbooks = () => getJSON<ApiRunbook[]>("/api/runbooks");
+export const fetchAlerts = () => getJSON<ApiAlert[]>("/api/alerts");
+
+// ── node mutations (Phase 3B) ────────────────────────────────────────
+
+export interface NodeCreatePayload {
+  id: string;
+  type: string;
+  name: string;
+  parentId?: string | null;
+  status?: ApiNode["status"];
+  meta?: Record<string, unknown>;
+  position?: { x: number; y: number } | null;
+}
+export type NodeUpdatePayload = Partial<Omit<NodeCreatePayload, "id">>;
+
+export const createNode = (payload: NodeCreatePayload) =>
+  sendJSON<ApiNode>("POST", "/api/nodes", payload);
+export const updateNode = (id: string, patch: NodeUpdatePayload) =>
+  sendJSON<ApiNode>("PATCH", `/api/nodes/${encodeURIComponent(id)}`, patch);
+export const deleteNode = (id: string) =>
+  sendJSON<{ ok: true }>("DELETE", `/api/nodes/${encodeURIComponent(id)}`);
+
+// Run a probe config once without saving — for the "test connection" button.
+export interface ProbeTestResult {
+  status: "ok" | "warn" | "err" | "unknown";
+  latencyMs?: number;
+  message?: string;
+}
+export const testProbe = (id: string, config: Record<string, unknown>) =>
+  sendJSON<ProbeTestResult>("POST", `/api/nodes/${encodeURIComponent(id)}/probe/test`, config);
+
+// ── edge mutations (Phase 3D) ────────────────────────────────────────
+
+export interface EdgeCreatePayload {
+  sourceId: string;
+  targetId: string;
+  type?: string;
+  meta?: Record<string, unknown>;
+}
+export type EdgeUpdatePayload = Partial<Pick<EdgeCreatePayload, "type" | "meta">>;
+
+export const createEdge = (payload: EdgeCreatePayload) =>
+  sendJSON<ApiEdge>("POST", "/api/edges", payload);
+export const updateEdge = (id: string, patch: EdgeUpdatePayload) =>
+  sendJSON<ApiEdge>("PATCH", `/api/edges/${encodeURIComponent(id)}`, patch);
+export const deleteEdge = (id: string) =>
+  sendJSON<{ ok: true }>("DELETE", `/api/edges/${encodeURIComponent(id)}`);
+
+// ── auth ─────────────────────────────────────────────────────────────
+// These handle their own 401s (login = bad creds, me = logged out) so
+// they don't trip the global onUnauthorized handler / loop.
+
+export interface MeResponse { user: { username: string } }
+
+export async function login(username: string, password: string): Promise<void> {
+  const r = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => ({}));
+    const err = new Error(detail.error ?? `login ${r.status}`);
+    (err as any).status = r.status;
+    throw err;
+  }
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const r = await fetch("/api/auth/password", {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => ({}));
+    const err = new Error(detail.error ?? `password ${r.status}`);
+    (err as any).status = r.status;
+    throw err;
+  }
+}
+
+// Resolves to the current user, or null if not authenticated.
+export async function fetchMe(): Promise<MeResponse | null> {
+  const r = await fetch("/api/auth/me", { credentials: "include" });
+  if (r.status === 401) return null;
+  if (!r.ok) throw new Error(`me ${r.status}`);
+  return r.json();
+}
