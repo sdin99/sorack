@@ -72,7 +72,7 @@ const seedRunbooks = [
   {
     id: "welcome",
     title: "Welcome to Sorack",
-    category: "doc" as const,
+    category: "sop" as const,
     status: "completed" as const,
     markdown:
       "# Welcome\n\nSorack is a homelab control-plane dashboard. This runbook is a placeholder — replace with your own operational notes.\n\nSee the README for self-hosting setup.",

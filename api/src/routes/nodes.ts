@@ -126,10 +126,13 @@ nodesRoutes.patch("/:id", async (c) => {
 // saving it. Admin-only (behind requireAuth) by virtue of the /api/* guard.
 nodesRoutes.post("/:id/probe/test", async (c) => {
   const id = c.req.param("id");
-  const config = (await c.req.json()) as Record<string, any>;
-  if (!config || typeof config.type !== "string") {
+  const body = (await c.req.json()) as Record<string, unknown>;
+  if (!body || typeof body.type !== "string") {
     return c.json({ error: "probe config with a type is required" }, 400);
   }
+  // Now that the type is a string, the body satisfies the ProbeConfig shape
+  // (`type: string` + extra adapter-specific keys validated by the adapter).
+  const config = body as { type: string; [k: string]: unknown };
   const [node] = await db.select().from(nodes).where(eq(nodes.id, id));
   if (!node) return c.json({ error: "not found" }, 404);
   const adapter = getAdapter(config.type);

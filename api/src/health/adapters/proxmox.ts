@@ -92,36 +92,6 @@ function pveGet<T = any>(
   });
 }
 
-// bytes → GiB, one decimal. Returns undefined for missing/zero-ish inputs so a
-// partial response doesn't render a "0 GB" gauge.
-function gib(bytes: unknown): number | undefined {
-  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes <= 0) return undefined;
-  return Math.round((bytes / 2 ** 30) * 10) / 10;
-}
-
-// {used,total,unit} gauge cell — only when total is known.
-function sizeMetric(used: unknown, total: unknown): { used: number; total: number; unit: string } | undefined {
-  const t = gib(total);
-  if (t === undefined) return undefined;
-  const u = gib(used) ?? 0;
-  return { used: u, total: t, unit: "GB" };
-}
-
-function cpuMetric(cpu: unknown): { pct: number } | undefined {
-  if (typeof cpu !== "number" || !Number.isFinite(cpu)) return undefined;
-  return { pct: Math.round(cpu * 100 * 10) / 10 };
-}
-
-function humanizeUptime(sec: unknown): string | undefined {
-  if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return undefined;
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
 // SOFTWARE-AXIS observed for proxmox-ve. The PVE API surface gets used here
 // only for fields the SOFTWARE template owns: pveVersion (/version) and the
 // guest counts (/nodes/{node}/qemu, /lxc). HOST-axis identity (os / kernel /
