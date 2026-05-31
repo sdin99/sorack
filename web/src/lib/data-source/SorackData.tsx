@@ -18,11 +18,17 @@ import {
   createEdge,
   updateEdge,
   deleteEdge,
+  createRunbook,
+  updateRunbook,
+  deleteRunbook,
   type NodeCreatePayload,
   type NodeUpdatePayload,
   type EdgeCreatePayload,
   type EdgeUpdatePayload,
+  type RunbookCreatePayload,
+  type RunbookUpdatePayload,
   type ApiEdge,
+  type ApiRunbook,
 } from "./api";
 import { history } from "@/lib/history";
 import { slugify, uniqueSlug } from "@/lib/slug";
@@ -79,6 +85,11 @@ interface SorackData {
   createEdge: (payload: EdgeCreatePayload) => Promise<ApiEdge>;
   updateEdge: (id: string, patch: EdgeUpdatePayload) => Promise<ApiEdge>;
   deleteEdge: (id: string) => Promise<any>;
+  // Runbook mutations (Epic 5 Phase 1b). File is the source of truth on disk;
+  // these endpoints write the file + cache row, then react-query refetches.
+  createRunbook: (payload: RunbookCreatePayload) => Promise<ApiRunbook>;
+  updateRunbook: (id: string, patch: RunbookUpdatePayload) => Promise<ApiRunbook>;
+  deleteRunbook: (id: string) => Promise<any>;
   // Sets node.name. If the node was created with meta.idAuto (an
   // auto-named "New" placeholder), this also re-slugs the id from the
   // new name and cascades parentId updates to all children, so the
@@ -173,6 +184,14 @@ function DataInner({ children }: { children: ReactNode }) {
     onSuccess: invalidateInventory,
   });
   const deleteEdgeM = useMutation({ mutationFn: deleteEdge, onSuccess: invalidateInventory });
+
+  const invalidateRunbooks = () => qc.invalidateQueries({ queryKey: ["runbooks"] });
+  const createRunbookM = useMutation({ mutationFn: createRunbook, onSuccess: invalidateRunbooks });
+  const updateRunbookM = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: RunbookUpdatePayload }) => updateRunbook(id, patch),
+    onSuccess: invalidateRunbooks,
+  });
+  const deleteRunbookM = useMutation({ mutationFn: deleteRunbook, onSuccess: invalidateRunbooks });
 
   // Ref to the latest server-shape nodes so the history wrappers can
   // snapshot "before" state without re-rendering on every NODES change.
@@ -353,6 +372,9 @@ function DataInner({ children }: { children: ReactNode }) {
       createEdge: (payload: EdgeCreatePayload) => createEdgeM.mutateAsync(payload),
       updateEdge: (id: string, patch: EdgeUpdatePayload) => updateEdgeM.mutateAsync({ id, patch }),
       deleteEdge: (id: string) => deleteEdgeM.mutateAsync(id),
+      createRunbook: (payload: RunbookCreatePayload) => createRunbookM.mutateAsync(payload),
+      updateRunbook: (id: string, patch: RunbookUpdatePayload) => updateRunbookM.mutateAsync({ id, patch }),
+      deleteRunbook: (id: string) => deleteRunbookM.mutateAsync(id),
       renameNode: async (id: string, newName: string, opts?: { nextId?: string }) => {
         const name = newName.trim();
         const node = apiNodesRef.current.find((n) => n.id === id);
@@ -412,7 +434,8 @@ function DataInner({ children }: { children: ReactNode }) {
     };
   }, [inv.data, rbs.data, als.data, inv.isLoading, rbs.isLoading, als.isLoading,
       createNodeM, updateNodeM, deleteNodeM,
-      createEdgeM, updateEdgeM, deleteEdgeM]);
+      createEdgeM, updateEdgeM, deleteEdgeM,
+      createRunbookM, updateRunbookM, deleteRunbookM]);
 
   return <SorackCtx.Provider value={value}>{children}</SorackCtx.Provider>;
 }

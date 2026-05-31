@@ -14,6 +14,7 @@ import { INFRA_META, SOFTWARE, TYPE_DETAIL, isWidget, fieldValue, humanizeKey, d
 import { Dropdown } from "@/components/Dropdown";
 import { TagsEditor } from "./TagsEditor";
 import { CardGallery, type CardItem } from "./CardGallery";
+import { RunbookEditor } from "./RunbookEditor";
 import { testProbe } from "@/lib/data-source/api";
 import { slugify, uniqueSlug } from "@/lib/slug";
 
@@ -1713,13 +1714,40 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
 // ─── Runbook full-screen viewer ────────────────────────────────────
 export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook }) {
   const { t } = useTranslation();
-  const { NODES, RUNBOOKS } = useSorack();
+  const { NODES, RUNBOOKS, createRunbook, updateRunbook, deleteRunbook } = useSorack();
   const [filterCat, setFilterCat] = useStateD('all');
   const [filterState, setFilterState] = useStateD('all');
   const [query, setQuery] = useStateD('');
   const [showTree, setShowTree] = useStateD(!runbookId);
+  const [editingTitle, setEditingTitle] = useStateD(false);
+  const [titleDraft, setTitleDraft] = useStateD('');
 
   const rb = runbookId ? RUNBOOKS[runbookId] : null;
+
+  const handleCreate = async () => {
+    const title = window.prompt(t('runbook.newPromptTitle', { defaultValue: 'New runbook title?' }));
+    if (!title || !title.trim()) return;
+    const r = await createRunbook({ title: title.trim() });
+    onJumpRunbook(r.id);
+    setShowTree(false);
+  };
+
+  const handleDelete = async () => {
+    if (!rb) return;
+    if (!window.confirm(t('runbook.deleteConfirm', { title: rb.title, defaultValue: `Delete "${rb.title}"?` }))) return;
+    await deleteRunbook(rb.id);
+    onJumpRunbook(''); // navigate back to list
+    setShowTree(true);
+  };
+
+  const startTitleEdit = () => { if (rb) { setTitleDraft(rb.title); setEditingTitle(true); } };
+  const commitTitle = async () => {
+    if (!rb) return;
+    const next = titleDraft.trim();
+    setEditingTitle(false);
+    if (!next || next === rb.title) return;
+    await updateRunbook(rb.id, { title: next });
+  };
 
   const filtered = useMemoD(() => Object.values(RUNBOOKS).filter(r => {
     if (filterCat !== 'all' && r.category !== filterCat) return false;
@@ -1762,14 +1790,17 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
             </button>
           ))}
         </div>
-        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'var(--surface-1)' }}>
+        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'var(--surface-1)', display: 'flex', gap: 8 }}>
           <input
             className="search-input"
-            style={{ width: '100%' }}
+            style={{ flex: 1 }}
             placeholder={t('runbook.searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <button className="rb-new-btn" onClick={handleCreate} title={t('runbook.new', { defaultValue: 'New runbook' })}>
+            <svg width="14" height="14" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M11 4v14M4 11h14" /></svg>
+          </button>
         </div>
         <div className="rb-tree-list" style={{ flex: 1, overflowY: 'auto' }}>
           {Object.entries(grouped).map(([cat, items]) => (
@@ -1792,21 +1823,40 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
       </div>
 
       {rb && !showTree && (
-        <div className="rb-article-wrap" style={{ flex: 1, overflowY: 'auto' }}>
-          <article className="rb-article">
+        <div className="rb-article-wrap" style={{ flex: 1, overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className="rb-article-head">
             <div className="rb-meta-row">
               <span className="rb-meta-cat">{rb.category}</span>
               <span className={`rb-meta-state rb-meta-state--${rb.state}`}>{t(`runbook.state.${rb.state}`, { defaultValue: rb.state })}</span>
               <span className="rb-meta-date">{t('runbook.updated', { date: rb.updated })}</span>
+              <button className="rb-head-del" onClick={handleDelete} title={t('action.delete', { defaultValue: 'Delete' })} aria-label="delete">
+                <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 5h10M7 5V3.5h4V5M5.5 5l.6 9a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-9" />
+                </svg>
+              </button>
             </div>
-            <h1 className="rb-h1">{rb.title}</h1>
-            {rb.tags && rb.tags.length > 0 && (
-              <div className="rb-tags">{rb.tags.map(t => <span key={t} className="rb-tag">#{t}</span>)}</div>
+            {editingTitle ? (
+              <input
+                className="rb-h1 rb-h1--input"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitTitle(); }
+                  else if (e.key === 'Escape') { setEditingTitle(false); }
+                }}
+                autoFocus
+              />
+            ) : (
+              <h1 className="rb-h1" onDoubleClick={startTitleEdit} title="double-click to edit">{rb.title}</h1>
             )}
-            <div className="rb-content">
-              {renderMarkdown(rb.md, (id) => { onJumpNode(id); }, onJumpRunbook, NODES, RUNBOOKS)}
-            </div>
-          </article>
+          </div>
+          <RunbookEditor
+            runbookId={rb.id}
+            initialContent={rb.md ?? ''}
+            previewRender={(md) => renderMarkdown(md, (id) => { onJumpNode(id); }, onJumpRunbook, NODES, RUNBOOKS)}
+            onSave={(md) => updateRunbook(rb.id, { markdown: md })}
+          />
         </div>
       )}
     </div>

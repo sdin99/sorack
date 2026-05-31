@@ -50,7 +50,10 @@ export async function loadFile(filePath: string): Promise<RunbookRow> {
     title: titleRaw,
     category: VALID_CATEGORY.has(catRaw) ? catRaw : "task",
     status: VALID_STATUS.has(stRaw) ? stRaw : "planned",
-    markdown: fm.content.replace(/^\n+/, ""),
+    // Strip leading/trailing newlines so a save→read→save round-trip is
+    // idempotent. gray-matter's stringify always appends \n, so without
+    // this the file grows a blank line per save.
+    markdown: fm.content.replace(/^\n+|\n+$/g, ""),
     nodeRefs: refsRaw,
   };
 }

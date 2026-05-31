@@ -83,6 +83,22 @@ async function sendJSON<T>(method: "POST" | "PATCH" | "DELETE", url: string, bod
 export const fetchInventory = () =>
   getJSON<{ nodes: ApiNode[]; edges: ApiEdge[] }>("/api/inventory");
 export const fetchRunbooks = () => getJSON<ApiRunbook[]>("/api/runbooks");
+
+export interface RunbookCreatePayload {
+  title: string;
+  category?: ApiRunbook["category"];
+  status?: ApiRunbook["status"];
+  markdown?: string;
+  nodeRefs?: string[];
+}
+export type RunbookUpdatePayload = Partial<RunbookCreatePayload>;
+
+export const createRunbook = (payload: RunbookCreatePayload) =>
+  sendJSON<ApiRunbook>("POST", "/api/runbooks", payload);
+export const updateRunbook = (id: string, patch: RunbookUpdatePayload) =>
+  sendJSON<ApiRunbook>("PATCH", `/api/runbooks/${encodeURIComponent(id)}`, patch);
+export const deleteRunbook = (id: string) =>
+  sendJSON<{ ok: true }>("DELETE", `/api/runbooks/${encodeURIComponent(id)}`);
 export const fetchAlerts = () => getJSON<ApiAlert[]>("/api/alerts");
 
 // ── node mutations (Phase 3B) ────────────────────────────────────────

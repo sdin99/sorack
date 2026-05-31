@@ -1628,6 +1628,56 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-tag { font-family: var(--mono); font-size: 10.5px; color: var(--fg-3); background: var(--surface-2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 3px; }
 .rb-content { line-height: 1.65; color: var(--fg-2); font-size: 15px; }
 
+/* Editor head (above the split): meta row + editable title + delete. */
+.rb-article-head { padding: 18px 18px 8px; border-bottom: 1px solid var(--border); max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+.rb-head-del {
+  margin-left: auto;
+  width: 24px; height: 24px; min-width: 0; min-height: 0;
+  color: var(--fg-3); border-radius: var(--radius-sm);
+  background: transparent;
+  transition: color 0.1s, background 0.1s;
+}
+.rb-head-del:hover { color: var(--err); background: color-mix(in oklab, var(--err) 14%, transparent); }
+.rb-h1--input {
+  font: inherit; font-size: 24px; font-weight: 600; letter-spacing: -0.015em;
+  color: var(--fg-1); background: var(--surface-1);
+  border: 1px solid var(--accent); border-radius: 4px;
+  padding: 2px 8px; outline: none; width: 100%;
+}
+.rb-new-btn {
+  width: 36px; height: 36px; min-width: 0; min-height: 0;
+  color: var(--fg-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+.rb-new-btn:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+
+/* Editor split (CodeMirror | preview) */
+.rb-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.rb-editor-statusbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 16px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--fg-4);
+  border-bottom: 1px solid var(--border); background: var(--surface-1);
+}
+.rb-editor-status { font-weight: 600; }
+.rb-editor-status--dirty  { color: var(--warn); }
+.rb-editor-status--saving { color: var(--fg-3); }
+.rb-editor-status--saved  { color: var(--ok); }
+.rb-editor-hint { margin-left: auto; }
+.rb-editor-split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; overflow: hidden; }
+.rb-editor-pane { min-height: 0; overflow: auto; }
+.rb-editor-pane--edit { border-right: 1px solid var(--border); }
+.rb-editor-pane--edit .cm-editor { height: 100%; background: var(--surface-1); color: var(--fg-1); }
+.rb-editor-pane--edit .cm-editor.cm-focused { outline: none; }
+.rb-editor-pane--edit .cm-scroller { font-family: var(--mono); }
+.rb-editor-pane--edit .cm-content { padding: 14px 18px; caret-color: var(--accent); }
+.rb-editor-pane--edit .cm-cursor { border-left-color: var(--accent); }
+.rb-editor-pane--edit .cm-line { color: var(--fg-1); }
+.rb-editor-pane--edit .cm-selectionBackground { background: color-mix(in oklab, var(--accent) 25%, transparent) !important; }
+.rb-editor-pane--preview { padding: 18px; }
+.rb-editor-pane--preview .rb-content { max-width: 720px; margin: 0 auto; }
+
 /* Markdown */
 .md-h { color: var(--fg-1); font-weight: 600; letter-spacing: -0.01em; margin: 20px 0 10px 0; }
 .md-h1 { font-size: 22px; }
