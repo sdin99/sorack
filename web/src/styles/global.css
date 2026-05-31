@@ -878,7 +878,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .spec:last-child { border: none; }
 .spec-k { font-family: var(--mono); font-size: 11px; color: var(--fg-3); }
 .spec-v { font-family: var(--mono); font-size: 12.5px; color: var(--fg-1); word-break: break-word; }
-.spec-tag { display: flex; justify-content: flex-end; align-items: center; }
+.spec-tag { display: flex; justify-content: center; align-items: center; }
 .spec--auto .spec-k { color: var(--fg-4); }
 .spec--auto .spec-v { color: var(--fg-2); }
 /* Adapter field with no value yet — greyed "(auto)" hint. */
@@ -975,9 +975,18 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .spec-edit { display: none; }
 
 /* Remove (✕) on an editable manual field — hidden until row hover. */
-.spec-del { color: var(--fg-4); font-size: 11px; opacity: 0; transition: opacity 0.1s, color 0.1s; padding: 2px; line-height: 1; min-width: 0; min-height: 0; }
+/* Same hover idiom as .action-menu-item--danger — soft err wash, not just
+   a color flip — so destructive buttons read consistently across the app. */
+.spec-del {
+  color: var(--fg-4); font-size: 11px; opacity: 0;
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  padding: 0; line-height: 1; min-width: 0; min-height: 0;
+  transition: opacity 0.1s, color 0.1s, background 0.1s;
+}
 .spec--editable:hover .spec-del { opacity: 1; }
-.spec-del:hover { color: var(--err); }
+.spec-del:hover { color: var(--err); background: color-mix(in oklab, var(--err) 14%, transparent); }
 
 /* "+ field" add-manual-field affordance under the spec rows. */
 /* "+ software" — full-width dashed (a primary add action), no top margin. */
