@@ -1675,8 +1675,11 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-editor-pane--edit .cm-cursor { border-left-color: var(--accent); }
 .rb-editor-pane--edit .cm-line { color: var(--fg-1); }
 .rb-editor-pane--edit .cm-selectionBackground { background: color-mix(in oklab, var(--accent) 25%, transparent) !important; }
-.rb-editor-pane--preview { padding: 18px; }
+.rb-editor-pane--preview { padding: 14px 18px; }
 .rb-editor-pane--preview .rb-content { max-width: 720px; margin: 0 auto; }
+/* First block in the preview otherwise picks up the inherent top margin of
+   .md-h / .md-p (~20px) and starts visibly lower than the editor caret. */
+.rb-editor-pane--preview .rb-content > :first-child { margin-top: 0; }
 
 /* Markdown */
 .md-h { color: var(--fg-1); font-weight: 600; letter-spacing: -0.01em; margin: 20px 0 10px 0; }
