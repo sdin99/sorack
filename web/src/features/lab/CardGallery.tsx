@@ -28,7 +28,7 @@ import { NodeIcon } from "@/components/icons/NodeIcon";
 import { SoftwareIcon, hasSoftwareIcon } from "@/components/icons/SoftwareIcon";
 import { GearIcon } from "@/components/icons/GearIcon";
 import { iconForType } from "@/lib/icon-map";
-import { isWidget, type DetailEntry } from "./node-detail-schema";
+import { isWidget, loc, type DetailEntry } from "./node-detail-schema";
 
 export type GalleryMode = "infra" | "software";
 
@@ -66,7 +66,7 @@ function CardIcon({ mode, id, size }: { mode: GalleryMode; id: string; size: num
 }
 
 export function CardGallery({ open, mode, title, items, selectedIds, onSelect, onClose, openDetailId, renderDetailExtra }: CardGalleryProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null); // null = grid view
   const inputRef = useRef<HTMLInputElement>(null);
@@ -191,7 +191,9 @@ export function CardGallery({ open, mode, title, items, selectedIds, onSelect, o
                   isWidget(e) ? null : (
                     <div className="gallery-field" key={i}>
                       <span className="gallery-field-label">{(e as any).label}</span>
-                      <span className="gallery-field-src">{(e as any).source}</span>
+                      {(e as any).hint
+                        ? <span className="gallery-field-hint">{loc((e as any).hint, i18n.language)}</span>
+                        : <span className="gallery-field-src">{(e as any).source}</span>}
                     </div>
                   ),
                 )}
