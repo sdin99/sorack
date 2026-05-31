@@ -369,14 +369,21 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: color-mix(in oklab, var(--accent) 14%, transparent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
-/* Maintenance status indicator in the tree — replaces the colored dot with
-   a small ⏸ glyph. Same footprint so the row layout doesn't shift. */
+/* Maintenance status indicator — two CSS bars in the status-dot footprint
+   (7px). Pure-CSS instead of the ⏸ Unicode glyph: the Unicode char's
+   metrics are asymmetric across fonts, so the slot drifted left a hair
+   and pulled adjacent items with it. */
 .tree-dot--maint {
-  width: auto; height: auto; background: transparent;
-  color: var(--fg-3); font-size: 9px; line-height: 1;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 9px;
+  width: 7px; height: 7px;
+  background: transparent; color: transparent; font-size: 0;
+  flex: none; position: relative; display: inline-block;
 }
+.tree-dot--maint::before, .tree-dot--maint::after {
+  content: ''; position: absolute; top: 1px; bottom: 1px;
+  width: 1.5px; background: var(--fg-3); border-radius: 0.5px;
+}
+.tree-dot--maint::before { left: 1.5px; }
+.tree-dot--maint::after  { right: 1.5px; }
 
 /* Hover tip — portal-rendered (see useHoverTip in App.tsx) so it escapes
    the drawer-tree's overflow clipping. Position is set inline by JS
