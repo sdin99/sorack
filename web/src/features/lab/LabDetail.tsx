@@ -1620,7 +1620,7 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
               <button style={{ padding: '6px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--fg-3)', border: '1px solid var(--border)', borderRadius: 3, minWidth: 0, minHeight: 0 }} onClick={() => { setDraft(value); setEditing(false); }}>{t('action.cancel')}</button>
-              <button style={{ padding: '6px 12px', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#04121f', borderRadius: 3, minWidth: 0, minHeight: 0 }} onClick={() => { setOverride(nodeId, 'description', draft); setOv(draft); setEditing(false); }}>{t('action.save')}</button>
+              <button style={{ padding: '6px 12px', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, background: 'var(--primary)', color: 'var(--on-primary)', borderRadius: 3, minWidth: 0, minHeight: 0 }} onClick={() => { setOverride(nodeId, 'description', draft); setOv(draft); setEditing(false); }}>{t('action.save')}</button>
             </div>
           </div>
         ) : (

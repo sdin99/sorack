@@ -25,7 +25,12 @@
 
   --accent:       #58a6ff;
   --accent-soft:  #1b2c44;
-  --on-accent:    #04121f;    /* text/icon on accent / ok / err backgrounds */
+  /* Primary action button (Save / Submit / Finish). Distinct from --accent so
+     text/link accent stays independent of button styling. Stays saturated in
+     both themes — white text reads on it in both. */
+  --primary:      #3b82f6;
+  --primary-soft: color-mix(in oklab, #3b82f6 16%, transparent);
+  --on-primary:   #ffffff;
   --ok:           #00e58e;
   --warn:         #ffcc00;
   --err:          #ff5c5c;
@@ -67,7 +72,7 @@
   --fg-4: #9a9a9a;
   --accent:       #2058c8;
   --accent-soft:  #e0ebff;
-  --on-accent:    #ffffff;
+  /* Same saturated blue as dark — white text still reads on it. */
   --ok:           #1f8a5b;
   --warn:         #c08a2e;
   --err:          #b14a3a;
@@ -948,8 +953,8 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 }
 .nd-setup-finish {
   align-self: flex-end;
-  font-size: 13px; font-weight: 600; color: var(--surface-1);
-  background: var(--accent); border: 1px solid var(--accent);
+  font-size: 13px; font-weight: 600; color: var(--on-primary);
+  background: var(--primary); border: 1px solid var(--primary);
   border-radius: 4px;
   padding: 8px 18px;
   min-height: var(--touch);
@@ -984,12 +989,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nd-addfield-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .nd-addfield-form .spec-v-input { flex: 1 1 90px; min-width: 0; }
 .nd-addfield-btn { font-family: var(--mono); font-size: 11px; color: var(--fg-3); border: 1px solid var(--border); border-radius: 3px; padding: 4px 10px; min-width: 0; min-height: 0; }
-.nd-addfield-btn--save { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); }
+.nd-addfield-btn--save { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: var(--primary); }
 /* Brief post-save state (~1.8s) — button flips to the ok color so the user
    sees the write landed. Disabled while showing so a second click can't
    re-fire the mutation. */
 .nd-addfield-btn--saved,
-.nd-addfield-btn--saved:disabled { background: var(--ok); color: var(--on-accent); border-color: var(--ok); opacity: 1; cursor: default; }
+.nd-addfield-btn--saved:disabled { background: var(--ok); color: var(--on-primary); border-color: var(--ok); opacity: 1; cursor: default; }
 
 /* k8s workload list (meta.observed.k8s.workloads). Own grid so the pod name
    gets the flex column (the .nd-child grid reserves a leading icon slot that
@@ -1143,7 +1148,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 }
 .login-submit {
   width: 100%; min-height: 46px; margin-top: 20px;
-  background: var(--accent); color: var(--on-accent);
+  background: var(--primary); color: var(--on-primary);
   border-radius: var(--radius); font-weight: 700; font-size: 14.5px;
   letter-spacing: 0.01em;
   transition: filter 0.12s, opacity 0.12s;
@@ -1269,7 +1274,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   font-size: 12.5px; color: var(--fg-2);
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1);
 }
-.settings-btn--primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.settings-btn--primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); font-weight: 600; }
 .settings-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
 .settings-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .settings-signout {
@@ -1421,12 +1426,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nf-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--fg-1); }
 .nf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .nf-btn--primary {
-  background: var(--accent); color: var(--on-accent);
+  background: var(--primary); color: var(--on-primary);
   border-color: var(--accent); font-weight: 600;
 }
 .nf-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
 .nf-btn--danger {
-  background: var(--err); color: var(--on-accent);
+  background: var(--err); color: var(--on-primary);
   border-color: var(--err); font-weight: 600;
 }
 .nf-btn--danger:hover:not(:disabled) { filter: brightness(1.1); }
@@ -1865,11 +1870,11 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   padding-bottom: calc(16px + var(--safe-b));
 }
 .gallery-panel {
-  /* Gallery-scoped accent — a friendlier blue than the app accent, used only
-     for the selection cues here (check, chip, selected card). */
-  --g-accent: #3b82f6;
-  --g-accent-soft: color-mix(in oklab, #3b82f6 16%, transparent);
-  --g-on-fg: #ffffff;
+  /* Panel-scoped aliases to the global primary tokens (kept as separate names
+     so existing .probe-* / .gallery-* rules stay readable). */
+  --g-accent: var(--primary);
+  --g-accent-soft: var(--primary-soft);
+  --g-on-fg: var(--on-primary);
   width: min(640px, 100%);
   max-height: min(80vh, 720px);
   background: var(--surface-1);
