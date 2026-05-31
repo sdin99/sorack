@@ -158,6 +158,80 @@ See `api/.env.example` for the full list. Highlights:
 - `SORACK_HEALTH_INTERVAL_MS` — probe sweep cadence (default 30s in code,
   set to 5s in the dev manifest for snappier UI).
 
+## Troubleshooting
+
+### Login succeeds but the next request is 401
+
+Symptoms: you submit the login form, the network tab shows `POST /api/auth/login → 200`, then immediately `GET /api/auth/me → 401`.
+
+Cause: you're reaching the app over plain HTTP (e.g. `http://<ip>:<port>` via `kubectl port-forward`). The session cookie is set with `Secure`, so the browser silently drops it on non-HTTPS origins.
+
+Fix (one of):
+- **Front it with HTTPS** — copy `examples/ingress.yaml`, set your hostname + TLS, apply.
+- **Dev shortcut** — add `SORACK_COOKIE_SECURE: "false"` to the `sorack-app` Secret and restart. **Don't do this in production.**
+
+  ```bash
+  kubectl patch secret sorack-app -n sorack --type=merge \
+    -p '{"stringData":{"SORACK_COOKIE_SECURE":"false"}}'
+  kubectl rollout restart deploy/sorack -n sorack
+  ```
+
+### `relation "auth.users" does not exist`
+
+Drizzle migrations run automatically on api boot (`runMigrations()` in
+`server.ts`). If you see this error, the migration step is failing — check
+the api logs for the underlying error (most often DB connectivity).
+
+To run the migration manually:
+
+```bash
+kubectl exec -n sorack deploy/sorack -c dev -- sh -lc \
+  'export PATH=/workspace/.pnpm-home:$PATH; cd /workspace/api && pnpm db:migrate'
+```
+
+### Where do I find the initial admin password?
+
+If you didn't set `SORACK_ADMIN_PASSWORD` in `sorack-app`, the api generates
+one on first boot and logs it exactly once:
+
+```bash
+kubectl logs -n sorack -l app=sorack -c dev | grep -A5 "Initial admin"
+```
+
+Lost it? Delete the admin row and restart — a new password gets generated:
+
+```bash
+kubectl exec -n sorack sorack-postgres-0 -- sh -lc \
+  'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d sorack -c "delete from auth.users;"'
+kubectl rollout restart deploy/sorack -n sorack
+```
+
+### Everyone got logged out after a pod restart
+
+`SORACK_AUTH_SECRET` isn't set, so the api generates a random one on every
+boot and old session tokens stop validating. Set it in the `sorack-app`
+Secret:
+
+```bash
+openssl rand -base64 48
+# add the output as SORACK_AUTH_SECRET in sorack-app, then:
+kubectl rollout restart deploy/sorack -n sorack
+```
+
+### Pod stays in `ContainerCreating` for a long time
+
+First boot installs ~700 packages via pnpm and starts both Vite and tsx.
+Two minutes is normal; `startupProbe.failureThreshold: 60` gives it five.
+After that, code edits hot-reload (no rebuild).
+
+### `pnpm install` aborts with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`
+
+You ran `pnpm install` on the host before mounting via hostPath, so the
+pod sees a different-libc `node_modules` and pnpm wants to confirm purge.
+The deployment passes `--config.confirmModulesPurge=false` so newer
+checkouts skip this; if you're on an older copy, pull the latest
+`deploy/dev/deployment.yaml`.
+
 ## Production deployment
 
 The included manifests run the app as a dev pod that mounts source via

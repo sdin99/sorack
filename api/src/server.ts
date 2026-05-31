@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { env } from "./lib/env";
 import { ensureAdminUser } from "./lib/bootstrap";
+import { runMigrations } from "./db/migrate";
 import { startCollector, stopCollector } from "./health/collector";
 import { requireAuth } from "./middleware/auth";
 import { authRoutes } from "./routes/auth";
@@ -59,6 +60,11 @@ app.route("/api/inventory", inventoryRoutes);
 
 const port = env.PORT;
 
+// Apply DB migrations BEFORE anything that reads/writes — ensureAdminUser
+// queries auth.users, so without this a fresh DB throws "relation does not
+// exist" and the api crash-loops until the operator runs `pnpm db:migrate`
+// by hand. Drizzle is idempotent: applied migrations are skipped.
+await runMigrations();
 // Create the admin user on first boot before accepting traffic.
 await ensureAdminUser();
 
