@@ -8,11 +8,16 @@
 
 import type { ApiNode, NodeCreatePayload, NodeUpdatePayload } from "./data-source/api";
 
-export type Op =
+// Single mutation captured for inverse application.
+export type AtomicOp =
   | { type: "update"; id: string; before: NodeUpdatePayload; after: NodeUpdatePayload }
   | { type: "create"; payload: NodeCreatePayload }
   // Full node snapshot so we can recreate it on undo with the same fields.
   | { type: "delete"; node: ApiNode };
+
+// Either an atomic op or a batch (bulk action) that should undo/redo as one
+// logical step. Batches don't nest — `ops` is always atomic.
+export type Op = AtomicOp | { type: "batch"; ops: AtomicOp[] };
 
 const MAX = 100;
 
@@ -31,6 +36,18 @@ export const history = {
   push(op: Op) {
     if (suppressed > 0) return;
     undoStack.push(op);
+    redoStack.length = 0;
+    trim(undoStack);
+    notify();
+  },
+  // Push a batch of atomic ops as one logical history entry. A single ⌘Z
+  // undoes them all (in reverse order). Single-op batches are unwrapped to
+  // a plain atomic entry to avoid pointless wrapping.
+  pushBatch(ops: AtomicOp[]) {
+    if (suppressed > 0) return;
+    if (ops.length === 0) return;
+    if (ops.length === 1) undoStack.push(ops[0]);
+    else undoStack.push({ type: "batch", ops });
     redoStack.length = 0;
     trim(undoStack);
     notify();

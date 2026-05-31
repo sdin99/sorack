@@ -4,6 +4,7 @@
 
 import * as React from "react";
 import { useState as useStateA, useEffect as useEffectA, useRef as useRefA, useMemo as useMemoA, useCallback as useCallbackA } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSorack } from "@/lib/data-source/SorackData";
@@ -20,12 +21,12 @@ import { softwareForInfra, softwareIds } from "@/features/lab/node-detail-schema
 import { CardGallery, type CardItem } from "@/features/lab/CardGallery";
 import { SettingsView } from "@/features/settings/SettingsView";
 import { NodeIcon } from "@/components/icons/NodeIcon";
-
-// True when focus is in a text input / select / contenteditable. Global key
-// handlers (Esc-to-close, Delete-to-remove) check this so editing a field
-// doesn't trigger them.
-const isTypingEl = (el) =>
-  !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+import { tagColor } from "@/lib/tag-color";
+import { TagChip } from "@/components/TagChip";
+import { Dropdown } from "@/components/Dropdown";
+import { useKeyboardShortcuts, isTypingEl } from "@/lib/use-keyboard-shortcuts";
+import { slugify, uniqueSlug } from "@/lib/slug";
+import { siblingSort, appendToSiblings } from "@/lib/sort";
 
 // ─── Icons ─────────────────────────────────────────────────────────
 const Ic = {
@@ -87,6 +88,12 @@ const Ic = {
   trash: (
     <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 5h10M7 5V3.5h4V5M5.5 5l.6 9a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-9" />
+    </svg>
+  ),
+  copy: (
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="6" y="6" width="9" height="9" rx="1.5" />
+      <path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12" />
     </svg>
   ),
   up: (
@@ -195,10 +202,12 @@ function TopBar({ onMenu, onSearch, onAlerts, alertsCount, breadcrumb, onCrumb, 
         ))}
       </nav>
       <div className="topbar-actions">
-        <button className="topbar-search-trigger" onClick={onSearch}>
-          {Ic.search}<span>{t('topbar.searchTrigger')}</span><kbd>⌘K</kbd>
-        </button>
-        <button className="topbar-icon-btn topbar-icon-btn--mobile-only" onClick={onSearch} aria-label={t('search.title')}>{Ic.search}</button>
+        <button
+          className="topbar-icon-btn"
+          onClick={onSearch}
+          aria-label={t('search.title')}
+          title={`${t('search.title')} (⌘K)`}
+        >{Ic.search}</button>
         <button className="topbar-icon-btn" onClick={onRunbooks} aria-label={t('runbook.title')}>{Ic.book}</button>
         <button className="topbar-icon-btn" onClick={onAlerts} aria-label={t('alerts.title')}>
           {Ic.bell}
@@ -210,6 +219,183 @@ function TopBar({ onMenu, onSearch, onAlerts, alertsCount, breadcrumb, onCrumb, 
   );
 }
 
+// ─── Filter bar (desktop) ──────────────────────────────────────────
+// Inline search + filter surface that replaces the old top-bar filter strip
+// AND the desktop SearchOverlay modal. Two states:
+//   - collapsed: just the active filter chips (when any) — small, unobtrusive
+//   - expanded: search input + chips + facet picker + runbook results inline
+// The expansion animates down + fades in; sidebar tree narrows live as the
+// user types. Mobile keeps the existing SearchOverlay modal.
+function FilterBar({
+  open, onOpenChange,
+  searchQuery, onSearchQueryChange,
+  activeTags, availableTags, onAddTag, onRemoveTag,
+  onClearAll, hasActiveFilters,
+  runbookResults, onPickRunbook,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  searchQuery: string;
+  onSearchQueryChange: (v: string) => void;
+  activeTags: string[];
+  availableTags: string[];
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+  onClearAll: () => void;
+  hasActiveFilters: boolean;
+  runbookResults: Array<{ id: string; label: string; sub: string }>;
+  onPickRunbook: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const inputRef = useRefA<HTMLInputElement>(null);
+  // Focus the input as soon as the bar expands.
+  useEffectA(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
+  // Bar is hidden entirely only when collapsed AND no active filters AND no
+  // tags in the system at all — nothing to show.
+  if (!open && !hasActiveFilters) return null;
+  const pickable = availableTags.filter((tg) => !activeTags.includes(tg));
+  return (
+    <div className={`filter-bar ${open ? 'filter-bar--open' : 'filter-bar--collapsed'}`}>
+      {/* Always-on chip row + picker — visible whether collapsed or expanded. */}
+      <div className="filter-bar-chips">
+        <span className="filter-bar-lbl">{t('filter.tagsLabel', { defaultValue: 'filter' })}</span>
+        {activeTags.map((tag) => (
+          <TagChip key={tag} value={tag} onRemove={() => onRemoveTag(tag)} active />
+        ))}
+        {pickable.length > 0 && (
+          <Dropdown
+            value=""
+            placeholder={t('filter.addTag', { defaultValue: '+ filter' })}
+            options={pickable.map((tg) => ({ value: tg, label: tg }))}
+            onChange={(v) => v && onAddTag(v)}
+            className="filter-picker"
+            ariaLabel={t('filter.addTag', { defaultValue: '+ filter' })}
+          />
+        )}
+        {hasActiveFilters && (
+          <button type="button" className="filter-row-clear" onClick={onClearAll}>
+            {t('filter.clear', { defaultValue: 'clear' })}
+          </button>
+        )}
+        {open && (
+          <button
+            type="button"
+            className="filter-bar-close"
+            onClick={() => onOpenChange(false)}
+            aria-label={t('action.close', { defaultValue: 'close' })}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Search input + runbook results — expanded only. Search icon prefix
+          matches the mobile modal's search-input-wrap pattern. */}
+      {open && (
+        <>
+          <div className="filter-bar-input-wrap">
+            <span className="filter-bar-input-icon" aria-hidden="true">{Ic.search}</span>
+            <input
+              ref={inputRef}
+              className="filter-bar-input"
+              placeholder={t('search.placeholder', { defaultValue: 'search nodes, runbooks…' })}
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') onOpenChange(false); }}
+            />
+          </div>
+          {runbookResults.length > 0 && (
+            <div className="filter-bar-runbooks">
+              <div className="filter-bar-runbooks-h">
+                {t('search.runbookHits', { defaultValue: 'Runbooks' })}
+              </div>
+              {runbookResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="filter-bar-runbook"
+                  onClick={() => { onPickRunbook(r.id); onOpenChange(false); }}
+                >
+                  <span className="filter-bar-runbook-label">{r.label}</span>
+                  <span className="filter-bar-runbook-sub">{r.sub}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Bulk action bar ──────────────────────────────────────────────
+// Floating toast at the bottom of the map. Visible when ≥2 nodes are
+// selected via Cmd/Shift+click or Cmd+drag (rubber band) on the graph.
+// Actions loop per-node PATCH calls — no dedicated bulk API endpoint in v1
+// (small selections, optimistic cache handles UI updates per call).
+function BulkBar({
+  count,
+  availableTags,
+  reparentTargets,
+  onClear,
+  onAddTag,
+  onReparent,
+  onDelete,
+}: {
+  count: number;
+  availableTags: string[];
+  reparentTargets: Array<{ id: string; name: string }>;
+  onClear: () => void;
+  onAddTag: (tag: string) => void;
+  onReparent: (parentId: string | null) => void;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="bulk-bar" role="region" aria-label={t('bulk.title', { defaultValue: 'bulk actions' })}>
+      <span className="bulk-bar-count">
+        {t('bulk.selected', { count, defaultValue: `${count} selected` })}
+      </span>
+      <button
+        type="button"
+        className="bulk-bar-clear"
+        onClick={onClear}
+        title={t('bulk.clear', { defaultValue: 'clear selection' })}
+        aria-label={t('bulk.clear', { defaultValue: 'clear selection' })}
+      >✕</button>
+      <span className="bulk-bar-sep" />
+      <Dropdown
+        value=""
+        placeholder={t('bulk.addTag', { defaultValue: '+ tag' })}
+        options={availableTags.map((tg) => ({ value: tg, label: tg }))}
+        onChange={(v) => v && onAddTag(v)}
+        className="bulk-bar-picker"
+        ariaLabel={t('bulk.addTag', { defaultValue: '+ tag' })}
+      />
+      <Dropdown
+        value=""
+        placeholder={t('bulk.reparent', { defaultValue: 'reparent' })}
+        options={[
+          { value: '__root__', label: t('bulk.reparentToRoot', { defaultValue: '(make root)' }) },
+          ...reparentTargets.map((n) => ({ value: n.id, label: n.name })),
+        ]}
+        onChange={(v) => v && onReparent(v === '__root__' ? null : v)}
+        className="bulk-bar-picker"
+        ariaLabel={t('bulk.reparent', { defaultValue: 'reparent' })}
+      />
+      <button
+        type="button"
+        className="bulk-bar-btn bulk-bar-btn--danger"
+        onClick={onDelete}
+      >
+        {t('bulk.delete', { defaultValue: 'delete' })}
+      </button>
+    </div>
+  );
+}
+
 // ─── Drawer (left) ─────────────────────────────────────────────────
 
 // One row of the node tree. The node icon doubles as the expand/collapse
@@ -218,48 +404,350 @@ function TopBar({ onMenu, onSearch, onAlerts, alertsCount, breadcrumb, onCrumb, 
 // name selects the node on the map. `lastChain[i]` = whether the ancestor at
 // level i+1 (and finally this node) is its parent's last child — drives the
 // vertical indent guides.
-function TreeItem({ id, depth, lastChain = [], NODES, getChildren, currentId, isCollapsed, onToggle, onJump }) {
+// Indent width for a guide cell at position i (0-indexed). Progressive
+// compression keeps deep subtrees readable: shallow levels stay wide enough
+// for clean visual rhythm, deeper levels tighten so node names retain
+// horizontal room. Tuned for the 240–300px sidebar.
+function guideWidthFor(i: number): number {
+  if (i < 3) return 16;
+  if (i < 6) return 12;
+  return 8;
+}
+
+// Hover tooltip used by tree rows. Portal-renders to document.body so the
+// drawer-tree's overflow clipping doesn't cut it off (overflow-y: auto on
+// the scroller forces horizontal clipping too — CSS spec quirk). 150ms
+// delay before show; clears immediately on leave. Touch devices don't fire
+// mouseenter, so this is implicitly desktop-only — matching the agreement
+// that mobile gets full names via click→detail instead.
+function useHoverTip(text: string) {
+  const [pos, setPos] = useStateA<{ x: number; y: number } | null>(null);
+  const timerRef = useRefA<any>(null);
+  const handlers = {
+    onMouseEnter: (e: React.MouseEvent) => {
+      const target = e.currentTarget as HTMLElement;
+      const rect = target.getBoundingClientRect();
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setPos({ x: rect.right + 4, y: rect.top + rect.height / 2 });
+      }, 150);
+    },
+    onMouseLeave: () => {
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+      setPos(null);
+    },
+  };
+  const portal = pos
+    ? createPortal(
+        <div
+          className="hover-tip"
+          style={{ position: 'fixed', left: pos.x, top: pos.y, transform: 'translateY(-50%)' }}
+        >
+          {text}
+        </div>,
+        document.body,
+      )
+    : null;
+  return { handlers, portal };
+}
+
+function TreeItem({ id, depth, lastChain = [], NODES, getChildren, currentId, isCollapsed, onToggle, onJump, onNodeContextMenu, isDimmed, selectedIds, onSelectedIdsChange, dragInfo, onDragStartRow, onDragOverRow, onDragEndRow, onDropRow }) {
   const node = NODES[id];
+  const tip = useHoverTip(node?.name ?? '');
   if (!node) return null;
-  const children = getChildren(id).slice().sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  const children = getChildren(id).slice().sort(siblingSort);
   const hasChildren = children.length > 0;
   const expanded = !isCollapsed(id);
   const statusColor = node.status === 'err' ? 'var(--err)' : node.status === 'warn' ? 'var(--warn)' : node.status === 'ok' ? 'var(--ok)' : 'var(--fg-4)';
+  // Right-click anywhere on the row opens the same node actions menu the
+  // graph uses (rename / new child / move / delete / etc.). preventDefault
+  // suppresses the native browser menu.
+  const handleContextMenu = onNodeContextMenu
+    ? (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onNodeContextMenu(id, { x: e.clientX, y: e.clientY });
+      }
+    : undefined;
+  // Click semantics mirror the graph: plain click navigates + replaces
+  // selection with this one node; Cmd/Ctrl/Shift+click toggles membership
+  // in the multi-select set without navigating (lets the user assemble a
+  // bulk selection from the sidebar too).
+  const isInMulti = !!(selectedIds && selectedIds.has(id));
+  const handleRowClick = (e: React.MouseEvent) => {
+    const modifier = e.metaKey || e.ctrlKey || e.shiftKey;
+    if (modifier && onSelectedIdsChange) {
+      e.preventDefault();
+      const next = new Set(selectedIds ?? new Set<string>());
+      if (next.has(id)) next.delete(id); else next.add(id);
+      onSelectedIdsChange(next);
+      return;
+    }
+    onJump(id);
+    onSelectedIdsChange?.(new Set([id]));
+  };
+  // Drop-indicator state for THIS row — three zones: before (top 1/3) and
+  // after (bottom 1/3) reorder among siblings, into (middle 1/3) reparents.
+  type DropPos = 'before' | 'after' | 'into';
+  const dropPos: DropPos | null =
+    dragInfo && dragInfo.draggedId !== id && dragInfo.over === id
+      ? (dragInfo.pos as DropPos)
+      : null;
+  // Decide the drop zone from cursor Y inside the row. Edges (top/bottom
+  // 1/3) reorder; middle 1/3 reparents.
+  const classifyZone = (e: React.DragEvent): DropPos => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientY - rect.top) / Math.max(1, rect.height);
+    if (ratio < 1 / 3) return 'before';
+    if (ratio > 2 / 3) return 'after';
+    return 'into';
+  };
+  // Cycle guard: target row must not be a descendant of the dragged node
+  // (would create a parentage loop on reparent).
+  const isDescendantOfDragged = (targetId: string, draggedId: string): boolean => {
+    let cur: string | null = targetId;
+    while (cur) {
+      if (cur === draggedId) return true;
+      cur = NODES[cur]?.parentId ?? null;
+    }
+    return false;
+  };
+  const handleDragStart = (e: React.DragEvent) => {
+    if (!onDragStartRow) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    e.stopPropagation();
+    onDragStartRow(id);
+  };
+  // Resolve drop zone with cross-parent fallback applied. Used by both
+  // dragover (visual indicator) and drop (actual commit) so they agree on
+  // intent — otherwise drop computed a different zone than the user saw,
+  // and cross-parent drops in sibling zones silently no-op'd.
+  const resolveDropPos = (e: React.DragEvent): DropPos | null => {
+    if (!dragInfo) return null;
+    const dragged = NODES[dragInfo.draggedId];
+    if (!dragged) return null;
+    let pos = classifyZone(e);
+    if (pos !== 'into' && (dragged.parentId ?? null) !== (node.parentId ?? null)) {
+      pos = 'into';
+    }
+    return pos;
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!onDragOverRow || !dragInfo) return;
+    if (dragInfo.draggedId === id) return; // can't drop on self
+    if (isDescendantOfDragged(id, dragInfo.draggedId)) return; // cycle gate
+    const pos = resolveDropPos(e);
+    if (!pos) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragInfo.over !== id || dragInfo.pos !== pos) onDragOverRow(id, pos);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    if (!onDropRow || !dragInfo) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const pos = resolveDropPos(e);
+    if (!pos) return;
+    onDropRow(id, pos);
+  };
   return (
     <>
-      <div className={`tree-row ${id === currentId ? 'tree-row--cur' : ''}`}>
+      <div
+        className={
+          `tree-row ${id === currentId ? 'tree-row--cur' : ''}` +
+          ` ${isInMulti ? 'tree-row--multi' : ''}` +
+          ` ${isDimmed && isDimmed(id) ? 'tree-row--dim' : ''}` +
+          ` ${dropPos === 'before' ? 'tree-row--drop-before' : ''}` +
+          ` ${dropPos === 'after' ? 'tree-row--drop-after' : ''}` +
+          ` ${dropPos === 'into' ? 'tree-row--drop-into' : ''}` +
+          ` ${dragInfo?.draggedId === id ? 'tree-row--dragging' : ''}`
+        }
+        draggable={!!onDragStartRow}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onDragEnd={() => onDragEndRow?.()}
+        onClick={handleRowClick}
+        onContextMenu={handleContextMenu}
+        {...tip.handlers}
+      >
         {lastChain.map((isLast, i) => {
           const connector = i === lastChain.length - 1;
           const kind = connector ? (isLast ? 'corner' : 'branch') : (isLast ? 'empty' : 'vertical');
-          return <span key={i} className={`tree-guide tree-guide--${kind}`} />;
+          // --tg-w (cell width) drives the guide column AND its centered
+          // vertical line (left = calc(var(--tg-w) / 2)). Deeper guides are
+          // narrower so deep node names still get usable horizontal room.
+          const w = guideWidthFor(i);
+          return (
+            <span key={i} className={`tree-guide tree-guide--${kind}`}
+              style={{ ['--tg-w' as any]: `${w}px` }} />
+          );
         })}
         {hasChildren ? (
-          <button className="tree-iconbtn" onClick={() => onToggle(id)} aria-label={expanded ? 'collapse' : 'expand'}>
-            <span className="tree-iconbtn-icon"><NodeIcon kind={node.kind || 'svc'} size={15} /></span>
+          <button
+            className="tree-iconbtn"
+            onClick={(e) => { e.stopPropagation(); onToggle(id); }}
+            aria-label={expanded ? 'collapse' : 'expand'}
+          >
+            <span className="tree-iconbtn-icon"><NodeIcon kind={node.kind || 'svc'} size={13} /></span>
             <span className={`tree-iconbtn-caret ${expanded ? 'tree-iconbtn-caret--open' : ''}`}>▸</span>
           </button>
         ) : (
-          <span className="tree-iconbtn tree-iconbtn--leaf"><NodeIcon kind={node.kind || 'svc'} size={15} /></span>
+          <span className="tree-iconbtn tree-iconbtn--leaf"><NodeIcon kind={node.kind || 'svc'} size={13} /></span>
         )}
-        <button className="tree-label" onClick={() => onJump(id)}>
+        <button className="tree-label" onClick={(e) => { e.stopPropagation(); handleRowClick(e); }}>
           <span className="tree-name">{node.name}</span>
-          <span className="tree-dot" style={{ background: statusColor }} />
+          {/* Tag indicators — outlined ring dots in the tag's hash color, up
+              to 2 per row. Outlined ring (not filled) so they read clearly
+              apart from the solid status dot. Tooltip = tag value; full set
+              + edit live in the detail panel. */}
+          {(node.tags ?? []).slice(0, 2).map((tag: string) => {
+            const c = tagColor(tag);
+            return (
+              <span
+                key={tag}
+                className="tag-dot"
+                style={{ borderColor: c.fg, background: c.bg }}
+                title={tag}
+              />
+            );
+          })}
+          {node.meta?.maintenance ? (
+            <span className="tree-dot tree-dot--maint" title="in maintenance" aria-label="in maintenance">⏸</span>
+          ) : (
+            <span className="tree-dot" style={{ background: statusColor }} />
+          )}
         </button>
+        {tip.portal}
       </div>
       {hasChildren && expanded && children.map((c, idx) => (
         <TreeItem key={c.id} id={c.id} depth={depth + 1}
           lastChain={[...lastChain, idx === children.length - 1]}
           NODES={NODES} getChildren={getChildren} currentId={currentId}
-          isCollapsed={isCollapsed} onToggle={onToggle} onJump={onJump} />
+          isCollapsed={isCollapsed} onToggle={onToggle} onJump={onJump}
+          onNodeContextMenu={onNodeContextMenu} isDimmed={isDimmed}
+          selectedIds={selectedIds} onSelectedIdsChange={onSelectedIdsChange}
+          dragInfo={dragInfo} onDragStartRow={onDragStartRow}
+          onDragOverRow={onDragOverRow} onDragEndRow={onDragEndRow}
+          onDropRow={onDropRow} />
       ))}
     </>
   );
 }
 
-function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSettings, onCollapse }) {
+// Flat tree row — used when the sidebar is in search-narrow mode. No indent
+// guides, no expand/collapse: just icon + name + tag dots + status dot. The
+// hierarchy returns as soon as the query is cleared.
+function FlatTreeRow({ node, currentId, onJump, onNodeContextMenu, selectedIds, onSelectedIdsChange }) {
+  const tip = useHoverTip(node?.name ?? '');
+  const statusColor = node.status === 'err' ? 'var(--err)' : node.status === 'warn' ? 'var(--warn)' : node.status === 'ok' ? 'var(--ok)' : 'var(--fg-4)';
+  const handleContextMenu = onNodeContextMenu
+    ? (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onNodeContextMenu(node.id, { x: e.clientX, y: e.clientY });
+      }
+    : undefined;
+  const isInMulti = !!(selectedIds && selectedIds.has(node.id));
+  const handleRowClick = (e: React.MouseEvent) => {
+    const modifier = e.metaKey || e.ctrlKey || e.shiftKey;
+    if (modifier && onSelectedIdsChange) {
+      e.preventDefault();
+      const next = new Set(selectedIds ?? new Set<string>());
+      if (next.has(node.id)) next.delete(node.id); else next.add(node.id);
+      onSelectedIdsChange(next);
+      return;
+    }
+    onJump(node.id);
+    onSelectedIdsChange?.(new Set([node.id]));
+  };
+  return (
+    <div
+      className={`tree-row tree-row--flat ${node.id === currentId ? 'tree-row--cur' : ''} ${isInMulti ? 'tree-row--multi' : ''}`}
+      onClick={handleRowClick}
+      onContextMenu={handleContextMenu}
+      {...tip.handlers}
+    >
+      <span className="tree-iconbtn tree-iconbtn--leaf">
+        <NodeIcon kind={node.kind || 'svc'} size={13} />
+      </span>
+      <button className="tree-label" onClick={(e) => { e.stopPropagation(); handleRowClick(e); }}>
+        <span className="tree-name">{node.name}</span>
+        {(node.tags ?? []).slice(0, 2).map((tag: string) => {
+          const c = tagColor(tag);
+          return (
+            <span key={tag} className="tag-dot"
+              style={{ borderColor: c.fg, background: c.bg }} title={tag} />
+          );
+        })}
+        <span className="tree-dot" style={{ background: statusColor }} />
+      </button>
+      {tip.portal}
+    </div>
+  );
+}
+
+function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSettings, onCollapse, onNodeContextMenu, isDimmed, searchQuery, queryMatchesNode, selectedIds, onSelectedIdsChange }) {
   const { t } = useTranslation();
-  const { NODES, getChildren } = useSorack();
+  const { NODES, getChildren, bulkUpdate } = useSorack();
   const isDesktop = useIsDesktop();
+
+  // Drag-to-reorder state. Drop zone classifies what kind of drop:
+  //   - 'before' / 'after': sibling reorder (same parent, reflow orderIdx)
+  //   - 'into': reparent (target becomes the moved node's new parent;
+  //     moved appends to target's children)
+  // 'over' + 'pos' drives the drop indicator on the target row.
+  type TreeDropPos = 'before' | 'after' | 'into';
+  const [dragInfo, setDragInfo] = useStateA<{ draggedId: string; over: string | null; pos: TreeDropPos } | null>(null);
+  const onTreeDragStart = (id: string) => setDragInfo({ draggedId: id, over: null, pos: 'after' });
+  const onTreeDragOver = (id: string, pos: TreeDropPos) => {
+    setDragInfo((cur) => (cur ? { ...cur, over: id, pos } : cur));
+  };
+  const onTreeDragEnd = () => setDragInfo(null);
+  const onTreeDrop = async (dropOnId: string, pos: TreeDropPos) => {
+    const drag = dragInfo;
+    setDragInfo(null);
+    if (!drag || drag.draggedId === dropOnId) return;
+    const moved = NODES[drag.draggedId];
+    const target = NODES[dropOnId];
+    if (!moved || !target) return;
+
+    if (pos === 'into') {
+      // Reparent: moved becomes child of target. Cycle check + no-op skip.
+      let cur: string | null = dropOnId;
+      while (cur) {
+        if (cur === drag.draggedId) return; // target is descendant of moved
+        cur = NODES[cur]?.parentId ?? null;
+      }
+      if ((moved.parentId ?? null) === dropOnId) return; // already child
+      const targetSibs = (Object.values(NODES) as any[])
+        .filter((n) => (n.parentId ?? null) === dropOnId && n.id !== drag.draggedId);
+      const { reflowItems, newOrderIdx } = appendToSiblings(targetSibs);
+      const items = [
+        ...reflowItems,
+        { id: drag.draggedId, patch: { parentId: dropOnId, meta: { orderIdx: newOrderIdx ?? 1000 } } },
+      ];
+      try { await bulkUpdate(items); }
+      catch (e) { console.error('sidebar reparent failed:', e); }
+      return;
+    }
+
+    // pos === 'before' | 'after' — sibling reorder. Cross-parent drop in
+    // these zones is silently ignored (use 'into' for reparent).
+    if ((moved.parentId ?? null) !== (target.parentId ?? null)) return;
+    const allSibs = (Object.values(NODES) as any[])
+      .filter((n) => (n.parentId ?? null) === (moved.parentId ?? null))
+      .sort(siblingSort);
+    const without = allSibs.filter((n) => n.id !== drag.draggedId);
+    const tIdx = without.findIndex((n) => n.id === dropOnId);
+    if (tIdx === -1) return;
+    const insertIdx = pos === 'before' ? tIdx : tIdx + 1;
+    const reordered = [...without.slice(0, insertIdx), moved, ...without.slice(insertIdx)];
+    const items = reordered.map((n, i) => ({ id: n.id, patch: { meta: { orderIdx: (i + 1) * 1000 } } }));
+    try { await bulkUpdate(items); }
+    catch (e) { console.error('reorder failed:', e); }
+  };
 
   // Health roll-up across all nodes.
   const counts = { ok: 0, warn: 0, err: 0, unknown: 0 };
@@ -272,7 +760,7 @@ function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSe
 
   const roots = (Object.values(NODES) as any[])
     .filter((n) => !n.parentId)
-    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    .sort(siblingSort);
 
   // Track collapsed nodes (default = everything expanded, so new nodes
   // appear without a toggle). Module-free local state — resets on remount.
@@ -329,15 +817,47 @@ function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSe
           )}
         </div>
 
-        {/* Node tree navigator. */}
+        {/* Node tree navigator. Two modes:
+              - searchQuery empty → hierarchical tree (TreeItem recursion).
+                isDimmed (from the filter facets) fades non-matching rows.
+              - searchQuery non-empty → flat list of just the matching nodes.
+                The tree structure is hidden so query-narrowed results read
+                as a simple result list, no indent guides. */}
         <div className="drawer-body drawer-tree" ref={treeRef}>
-          {roots.length === 0 ? (
-            <div className="drawer-tree-empty">{t('drawer.treeEmpty', { defaultValue: 'no nodes yet' })}</div>
-          ) : roots.map((r) => (
-            <TreeItem key={r.id} id={r.id} depth={0}
-              NODES={NODES} getChildren={getChildren} currentId={currentId}
-              isCollapsed={isCollapsed} onToggle={onToggle} onJump={jump} />
-          ))}
+          {(() => {
+            const q = (searchQuery ?? '').trim();
+            if (q) {
+              // Flat list = nodes matching the query AND the active filter
+              // (intersection). isDimmed is the filter predicate from App —
+              // when it returns true the node fails the filter and should
+              // not show in the result list. AND logic with query.
+              const matches = (Object.values(NODES) as any[])
+                .filter((n) => queryMatchesNode?.(n.id))
+                .filter((n) => !isDimmed || !isDimmed(n.id))
+                .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+              if (matches.length === 0) {
+                return <div className="drawer-tree-empty">{t('search.empty', { q, defaultValue: 'no matches' })}</div>;
+              }
+              return matches.map((n) => (
+                <FlatTreeRow key={n.id} node={n} currentId={currentId}
+                  onJump={jump} onNodeContextMenu={onNodeContextMenu}
+                  selectedIds={selectedIds} onSelectedIdsChange={onSelectedIdsChange} />
+              ));
+            }
+            if (roots.length === 0) {
+              return <div className="drawer-tree-empty">{t('drawer.treeEmpty', { defaultValue: 'no nodes yet' })}</div>;
+            }
+            return roots.map((r) => (
+              <TreeItem key={r.id} id={r.id} depth={0}
+                NODES={NODES} getChildren={getChildren} currentId={currentId}
+                isCollapsed={isCollapsed} onToggle={onToggle} onJump={jump}
+                onNodeContextMenu={onNodeContextMenu} isDimmed={isDimmed}
+                selectedIds={selectedIds} onSelectedIdsChange={onSelectedIdsChange}
+                dragInfo={dragInfo} onDragStartRow={onTreeDragStart}
+                onDragOverRow={onTreeDragOver} onDragEndRow={onTreeDragEnd}
+                onDropRow={onTreeDrop} />
+            ));
+          })()}
         </div>
 
         <button
@@ -377,10 +897,6 @@ function BottomSheet({ nodeId, onClose, onJumpNode, onOpenRunbook, onOpenActions
 
   const node = nodeId ? NODES[nodeId] : null;
   if (!node) return null;
-
-  const statusColor = node
-    ? (node.status === 'err' ? 'var(--err)' : node.status === 'warn' ? 'var(--warn)' : 'var(--ok)')
-    : 'var(--fg-3)';
 
   const cycleSnap = () => {
     setSnap((s) => s === 'peek' ? 'expand' : s === 'expand' ? 'full' : 'peek');
@@ -464,8 +980,6 @@ function BottomSheet({ nodeId, onClose, onJumpNode, onOpenRunbook, onOpenActions
     dragState.current = null;
   };
 
-  const showPeekRow = !!node;
-
   return (
     <>
       <div className={`sheet-backdrop ${!isDesktop && snap !== 'peek' ? 'sheet-backdrop--show' : ''}`} onClick={() => setSnap('peek')} />
@@ -495,16 +1009,10 @@ function BottomSheet({ nodeId, onClose, onJumpNode, onOpenRunbook, onOpenActions
             <button className="sheet-close" onClick={onClose} aria-label={t('action.close')}>{Ic.close}</button>
           </div>
         </header>
-        {showPeekRow && (
-          <div className="sheet-peek-row">
-            <span className="sheet-peek-status" style={{ color: statusColor }}>
-              <span className="sheet-peek-dot" style={{ background: statusColor }} />
-              {t(`status.${node.status === 'ok' ? 'ok' : node.status === 'warn' ? 'warn' : 'err'}`)}
-            </span>
-            <span className="sheet-peek-sub">{node.subtitle}</span>
-            <span className="sheet-peek-chev">⌃</span>
-          </div>
-        )}
+        {/* Mobile peek row removed: status used to render here in a redundant
+            band above the NodeDetail's own StatusLine. Status now lives only
+            in StatusLine (same as desktop). The collector is the source of
+            truth — unprobed nodes stay 'unknown', no manual status edit. */}
         <div className="sheet-body" ref={bodyRef}>
           <NodeDetail nodeId={nodeId} onJumpNode={onJumpNode} onOpenRunbook={onOpenRunbook} onIdChange={onIdChange} onOpenInfraGallery={onOpenInfraGallery} onOpenSoftwareGallery={onOpenSoftwareGallery} />
         </div>
@@ -513,15 +1021,45 @@ function BottomSheet({ nodeId, onClose, onJumpNode, onOpenRunbook, onOpenActions
   );
 }
 
-// ─── Full-screen Search ────────────────────────────────────────────
-function SearchOverlay({ open, onClose, onPickNode, onPickRunbook }) {
+// ─── Full-screen Search (mobile path) ──────────────────────────────
+// Mobile path of the unified search+filter surface. Desktop uses the inline
+// FilterBar instead. The filter props let the same active-tags state drive
+// both surfaces; the modal renders a chip strip above its results so users
+// can refine without leaving the search overlay.
+function SearchOverlay({
+  open, onClose, onPickNode, onPickRunbook,
+  activeTags = [], availableTags = [], onAddTag, onRemoveTag,
+  onClearAll, hasActiveFilters,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPickNode: (id: string) => void;
+  onPickRunbook: (id: string) => void;
+  activeTags?: string[];
+  availableTags?: string[];
+  onAddTag?: (tag: string) => void;
+  onRemoveTag?: (tag: string) => void;
+  onClearAll?: () => void;
+  hasActiveFilters?: boolean;
+}) {
   const { t } = useTranslation();
   const { NODES, searchAll } = useSorack();
   const isDesktop = useIsDesktop();
   const [q, setQ] = useStateA('');
   const [cursor, setCursor] = useStateA(0);
   const inputRef = useRefA(null);
-  const results = useMemoA(() => searchAll(q), [q]);
+  const rawResults = useMemoA(() => searchAll(q), [q]);
+  // Compose query results with the active tag filter (AND). Runbooks pass
+  // through untouched — they don't carry tags (yet), so applying the filter
+  // would drop them entirely. Only node-type rows are gated.
+  const results = useMemoA(() => {
+    if (activeTags.length === 0) return rawResults;
+    return (rawResults as any[]).filter((r: any) => {
+      if (r.type !== 'node') return true;
+      const tags = (r.tags ?? []) as string[];
+      return activeTags.every((t) => tags.includes(t));
+    });
+  }, [rawResults, activeTags]);
 
   useEffectA(() => { if (open) setTimeout(() => inputRef.current?.focus(), 50); }, [open]);
   useEffectA(() => { setCursor(0); }, [q]);
@@ -562,6 +1100,35 @@ function SearchOverlay({ open, onClose, onPickNode, onPickRunbook }) {
           }}
         />
       </div>
+      {/* Filter chips inline above the result list — same shape as the
+          desktop FilterBar so the active-tags state is editable from either
+          surface. Rendered only when there are tags in the system or
+          active filters to show. */}
+      {(availableTags.length > 0 || activeTags.length > 0) && onAddTag && onRemoveTag && (
+        <div className="filter-bar-chips fs-filter">
+          <span className="filter-bar-lbl">{t('filter.tagsLabel', { defaultValue: 'filter' })}</span>
+          {activeTags.map((tag) => (
+            <TagChip key={tag} value={tag} onRemove={() => onRemoveTag(tag)} active />
+          ))}
+          {availableTags.filter((tg) => !activeTags.includes(tg)).length > 0 && (
+            <Dropdown
+              value=""
+              placeholder={t('filter.addTag', { defaultValue: '+ filter' })}
+              options={availableTags
+                .filter((tg) => !activeTags.includes(tg))
+                .map((tg) => ({ value: tg, label: tg }))}
+              onChange={(v) => v && onAddTag(v)}
+              className="filter-picker"
+              ariaLabel={t('filter.addTag', { defaultValue: '+ filter' })}
+            />
+          )}
+          {hasActiveFilters && onClearAll && (
+            <button type="button" className="filter-row-clear" onClick={onClearAll}>
+              {t('filter.clear', { defaultValue: 'clear' })}
+            </button>
+          )}
+        </div>
+      )}
       <div className="fs-body search-results">
         {!q && <div className="search-hint">{isDesktop ? <><span><kbd>↑↓</kbd> {t('search.hintNav')}</span><span><kbd>↵</kbd> {t('search.hintOpen')}</span></> : t('search.typeToSearch')}</div>}
         {q && results.length === 0 && <div className="search-empty">{t('search.empty', { q })}</div>}
@@ -578,6 +1145,28 @@ function SearchOverlay({ open, onClose, onPickNode, onPickRunbook }) {
             <span className={`search-row-type search-row-type--${r.type}`}>{t(`searchResultType.${r.type}`)}</span>
             <span className="search-row-label">{r.label}</span>
             <span className="search-row-sub">{r.sub}</span>
+            {/* Node result tags — outlined ring dots, same shape as the
+                sidebar tree. matchedTag (the one that satisfied the query,
+                if any) goes first; the rest follow so the user sees the
+                "why" up front. */}
+            {r.type === 'node' && (r.tags?.length ?? 0) > 0 && (
+              <span className="search-row-tags">
+                {[r.matchedTag, ...(r.tags || []).filter((tg: string) => tg !== r.matchedTag)]
+                  .filter(Boolean)
+                  .slice(0, 3)
+                  .map((tg: string) => {
+                    const c = tagColor(tg);
+                    return (
+                      <span
+                        key={tg}
+                        className="tag-dot"
+                        style={{ borderColor: c.fg, background: c.bg }}
+                        title={tg}
+                      />
+                    );
+                  })}
+              </span>
+            )}
             {r.type === 'node' && r.status && <span className={`search-row-dot search-row-dot--${r.status}`} />}
           </button>
         ))}
@@ -706,7 +1295,7 @@ function RunbookRoute({ onJumpNode, onClose }: { onJumpNode: (id: string) => voi
 export function App() {
   const { t } = useTranslation();
   const { NODES, EDGES, RUNBOOKS, ALERTS, getPath, deleteNode, createNode, updateNode,
-          createEdge, updateEdge, deleteEdge } = useSorack();
+          createEdge, updateEdge, deleteEdge, searchAll, bulkUpdate, bulkDelete } = useSorack();
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const location = useLocation();
@@ -719,7 +1308,44 @@ export function App() {
   const [drawerCollapsed, setDrawerCollapsed] = useStateA(() => localStorage.getItem('sorack-drawer-collapsed') === '1');
   useEffectA(() => { localStorage.setItem('sorack-drawer-collapsed', drawerCollapsed ? '1' : '0'); }, [drawerCollapsed]);
   const [searchOpen, setSearchOpen] = useStateA(false);
+  // Multi-select for bulk operations. Independent of `selectedId` (the URL-
+  // bound "primary" that drives the detail panel) so multi-mode doesn't keep
+  // navigating: single click sets selectedId, cmd/shift+click toggles
+  // membership in selectedIds, cmd+drag = selection box. BulkBar appears
+  // when selectedIds.size >= 2.
+  const [selectedIds, setSelectedIds] = useStateA<Set<string>>(() => new Set());
+  // Lifted from SearchOverlay so the desktop FilterBar can drive sidebar
+  // narrowing live as the user types. On the mobile path the existing
+  // SearchOverlay still owns its own input state (see SearchOverlay below)
+  // — they share `searchOpen` toggle but not the query string. The query
+  // resets to '' when the bar collapses so a stale query doesn't keep
+  // narrowing the sidebar invisibly.
+  const [searchQuery, setSearchQuery] = useStateA('');
+  useEffectA(() => { if (!searchOpen) setSearchQuery(''); }, [searchOpen]);
   const [alertsOpen, setAlertsOpen] = useStateA(false);
+  // Active filter, ephemeral (resets on reload). Generic facet shape so
+  // future facets (types / software / runbook category) can join without a
+  // schema change: { tags: ['env:prod'], types: ['host'], ... }. v1 = tags
+  // only. AND logic across all values within a facet (a node passes when it
+  // has every active tag); cross-facet conjunction follows the same rule
+  // once more facets land.
+  const [activeFilters, setActiveFilters] = useStateA<Record<string, string[]>>({});
+  const addFilter = (facet: string, value: string) =>
+    setActiveFilters((cur) => {
+      const list = cur[facet] ?? [];
+      if (list.includes(value)) return cur;
+      return { ...cur, [facet]: [...list, value] };
+    });
+  const removeFilter = (facet: string, value: string) =>
+    setActiveFilters((cur) => {
+      const list = (cur[facet] ?? []).filter((x) => x !== value);
+      const next = { ...cur };
+      if (list.length === 0) delete next[facet];
+      else next[facet] = list;
+      return next;
+    });
+  const clearAllFilters = () => setActiveFilters({});
+  const hasActiveFilters = Object.values(activeFilters).some((list) => list.length > 0);
 
   // ── Router-derived view state ─────────────────────────────────
   // Single source of truth = the URL. mainView, runbook id, and the
@@ -744,6 +1370,54 @@ export function App() {
   // highlighted in the tree. Done at the call sites (openView / onJumpNode)
   // rather than an effect.
   const expandIfCollapsed = () => { if (isDesktop && drawerCollapsed) setDrawerCollapsed(false); };
+
+  // Tag filter derived state. `availableTags` = every tag currently on at
+  // least one node, sorted — feeds the filter picker. `isDimmed` = the
+  // predicate consumers (map, tree) call to decide if a node should fade
+  // out. AND logic: a node passes only when it has every tag in the filter.
+  const availableTags = useMemoA(() => {
+    const set = new Set<string>();
+    for (const n of Object.values(NODES) as any[]) {
+      for (const t of (n.tags ?? []) as string[]) set.add(t);
+    }
+    return Array.from(set).sort();
+  }, [NODES]);
+  const isDimmed = useCallbackA((id: string) => {
+    if (!hasActiveFilters) return false;
+    const node = NODES[id];
+    if (!node) return false;
+    // Tags facet — every active tag must be present on the node. Future
+    // facets (types/software) check here too with the same AND logic.
+    const wantTags = activeFilters.tags ?? [];
+    if (wantTags.length > 0) {
+      const have = (node.tags ?? []) as string[];
+      if (!wantTags.every((t) => have.includes(t))) return true;
+    }
+    return false;
+  }, [NODES, activeFilters, hasActiveFilters]);
+
+  // Query → node match (sidebar narrowing in query mode). Substring on
+  // name/id/tags. Empty query means "no narrowing by query".
+  const queryMatchesNode = useCallbackA((id: string) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const n = NODES[id];
+    if (!n) return false;
+    if ((n.name ?? '').toLowerCase().includes(q)) return true;
+    if (n.id.toLowerCase().includes(q)) return true;
+    const tags = (n.tags ?? []) as string[];
+    return tags.some((tg) => tg.toLowerCase().includes(q));
+  }, [NODES, searchQuery]);
+
+  // Runbook hits — small inline section in FilterBar. Empty query = no hits.
+  const runbookResults = useMemoA(() => {
+    const q = searchQuery.trim();
+    if (!q) return [];
+    return (searchAll(q) as any[])
+      .filter((r) => r.type === 'runbook')
+      .slice(0, 8)
+      .map((r) => ({ id: r.id, label: r.label, sub: r.sub }));
+  }, [searchQuery, searchAll]);
 
   // actionsCtx kinds: 'node' | 'pane' | 'edge' (existing edge ctx menu)
   //                 | 'edge_picker' (post-drag type chooser)
@@ -788,36 +1462,37 @@ export function App() {
     localStorage.setItem('sorack-theme', theme);
   }, [theme]);
 
-  // ⌘K shortcut (desktop)
-  useEffectA(() => {
-    const h = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchOpen(o => !o);
-      }
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, []);
-
-  // Helper shared by the keyboard handlers below — we suppress global
-  // shortcuts while the user is typing into a field so the native key
-  // (delete-char, browser undo, etc) wins.
-  const isTyping = isTypingEl;
-
   // Undo/redo, defined at component scope so both the keyboard shortcut
-  // (below) and the on-screen buttons (mobile has no Cmd+Z) can call them.
+  // (in useKeyboardShortcuts below) and the on-screen buttons (mobile has
+  // no Cmd+Z) can call them.
+  // Apply the inverse of one atomic op. Used for plain undo, and as the
+  // per-sub-op step inside a batch undo.
+  const undoAtomic = async (op: any) => {
+    if (op.type === 'update') await updateNode(op.id, op.before);
+    else if (op.type === 'create') await deleteNode(op.payload.id);
+    else if (op.type === 'delete') await createNode({
+      id: op.node.id, type: op.node.type, name: op.node.name,
+      parentId: op.node.parentId, status: op.node.status, meta: op.node.meta,
+    });
+  };
+  const redoAtomic = async (op: any) => {
+    if (op.type === 'update') await updateNode(op.id, op.after);
+    else if (op.type === 'create') await createNode(op.payload);
+    else if (op.type === 'delete') await deleteNode(op.node.id);
+  };
+
   const doUndo = useCallbackA(async () => {
     const op = history.popUndo();
     if (!op) return;
     await history.suppress(async () => {
       try {
-        if (op.type === 'update') await updateNode(op.id, op.before);
-        else if (op.type === 'create') await deleteNode(op.payload.id);
-        else if (op.type === 'delete') await createNode({
-          id: op.node.id, type: op.node.type, name: op.node.name,
-          parentId: op.node.parentId, status: op.node.status, meta: op.node.meta,
-        });
+        if (op.type === 'batch') {
+          // Reverse order so sub-ops unwind in the opposite of how they
+          // were applied (matters when later ops depend on earlier ones).
+          for (const sub of [...op.ops].reverse()) await undoAtomic(sub);
+        } else {
+          await undoAtomic(op);
+        }
       } catch (err) { console.error('undo failed:', err); return; }
     });
     history.pushRedo(op);
@@ -828,9 +1503,11 @@ export function App() {
     if (!op) return;
     await history.suppress(async () => {
       try {
-        if (op.type === 'update') await updateNode(op.id, op.after);
-        else if (op.type === 'create') await createNode(op.payload);
-        else if (op.type === 'delete') await deleteNode(op.node.id);
+        if (op.type === 'batch') {
+          for (const sub of op.ops) await redoAtomic(sub);
+        } else {
+          await redoAtomic(op);
+        }
       } catch (err) { console.error('redo failed:', err); return; }
     });
     history.pushUndo(op);
@@ -839,36 +1516,6 @@ export function App() {
   // Live undo/redo availability for the buttons' disabled state.
   const [histAvail, setHistAvail] = useStateA(() => ({ undo: history.canUndo(), redo: history.canRedo() }));
   useEffectA(() => history.subscribe(() => setHistAvail({ undo: history.canUndo(), redo: history.canRedo() })), []);
-
-  // Keyboard: Cmd/Ctrl+Z undo, Cmd+Shift+Z / Cmd+Y redo. Skipped while
-  // typing so the browser's native field-level undo wins.
-  useEffectA(() => {
-    const onKey = (e) => {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      if (isTyping(e.target)) return;
-      const k = e.key.toLowerCase();
-      if (k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
-      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); doRedo(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [doUndo, doRedo]);
-
-  // Delete removes the selected node (with the same confirm dialog the
-  // right-click 'delete' uses). Backspace intentionally skipped — too
-  // easy to fire by accident on macOS where it's also the back-nav key.
-  useEffectA(() => {
-    const onKey = (e) => {
-      if (isTyping(e.target)) return;
-      if (!selectedId) return;
-      if (e.key === 'Delete') {
-        e.preventDefault();
-        setConfirmDeleteId(selectedId);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId]);
 
   const breadcrumb = useMemoA(() => selectedId ? getPath(selectedId) : [], [selectedId]);
 
@@ -891,7 +1538,15 @@ export function App() {
   };
 
   // ── Phase 3B handlers ──────────────────────────────────────────────
-  const openView = (id) => { setSelectedId(id); expandIfCollapsed(); };
+  // Navigating to a single node also collapses the multi-set to that one
+  // node — without this, a leftover multi-set (e.g. after a duplicate or a
+  // breadcrumb jump) keeps showing the old members as still-selected on the
+  // graph and sidebar.
+  const openView = (id) => {
+    setSelectedId(id);
+    setSelectedIds(new Set([id]));
+    expandIfCollapsed();
+  };
   const closeSheet = () => setSelectedId(null);
 
   // Create immediately with an auto-incremented "New" name, then select
@@ -908,12 +1563,19 @@ export function App() {
       if (!NODES[id]) break;
       i++;
     }
+    // Append below existing siblings. If any sibling lacks orderIdx, reflow
+    // them first to multiples of 1000 in their current sorted order so the
+    // new node (max + 1000) cleanly lands at the bottom of the visible list.
+    const siblings = (Object.values(NODES) as any[])
+      .filter((n) => (n.parentId ?? null) === (parentId ?? null));
+    const { reflowItems, newOrderIdx } = appendToSiblings(siblings);
     try {
+      if (reflowItems.length > 0) await bulkUpdate(reflowItems);
       await createNode({
         id, type: 'host', name,
         parentId: parentId || null,
         status: 'unknown',
-        meta: { idAuto: true },
+        meta: { idAuto: true, ...(newOrderIdx !== undefined ? { orderIdx: newOrderIdx } : {}) },
       });
       openView(id);
     } catch (e) { console.error('create failed:', e); }
@@ -922,6 +1584,53 @@ export function App() {
   const openActions = (kind, opts) => setActionsCtx({ kind, ...opts });
   const closeActions = () => setActionsCtx(null);
 
+  // Duplicate a single node — copies identity-ish fields (type, name, parent,
+  // manual meta, tags) but strips per-instance state: probe configs would
+  // re-target the same endpoint by accident, observed/* is collector-owned,
+  // maintenance is a deliberate operational flag. Status resets to 'unknown'
+  // so the collector picks it up fresh once a probe is added.
+  const duplicateNode = async (sourceId: string) => {
+    const src = NODES[sourceId];
+    if (!src) return;
+    const srcMeta = (src.meta ?? {}) as Record<string, unknown>;
+    // Keep manual + software (axis-2 attachments) so the duplicate carries
+    // the user's authored fields and identity. Drop everything else.
+    const meta: Record<string, unknown> = {};
+    if (srcMeta.manual) meta.manual = { ...(srcMeta.manual as Record<string, unknown>) };
+    if (srcMeta.software) meta.software = Array.isArray(srcMeta.software)
+      ? [...(srcMeta.software as string[])]
+      : srcMeta.software;
+    if (srcMeta.iconKind) meta.iconKind = srcMeta.iconKind;
+    if (srcMeta.statusPrimary) meta.statusPrimary = srcMeta.statusPrimary;
+    // Append the copy after existing siblings; auto-reflow if mixed state.
+    const siblings = (Object.values(NODES) as any[])
+      .filter((n: any) => (n.parentId ?? null) === (src.parentId ?? null));
+    const dupResult = appendToSiblings(siblings);
+    if (dupResult.reflowItems.length > 0) {
+      try { await bulkUpdate(dupResult.reflowItems); }
+      catch (e) { console.error('reflow before duplicate failed:', e); }
+    }
+    if (dupResult.newOrderIdx !== undefined) meta.orderIdx = dupResult.newOrderIdx;
+
+    const newName = `${src.name} (copy)`;
+    const taken = new Set(Object.keys(NODES));
+    const slug = slugify(newName) || `${src.id}-copy`;
+    const newId = uniqueSlug(slug, taken);
+
+    try {
+      await createNode({
+        id: newId,
+        type: src.type,
+        name: newName,
+        parentId: src.parentId ?? null,
+        status: 'unknown',
+        meta,
+        tags: [...((src.tags ?? []) as string[])],
+      });
+      openView(newId);
+    } catch (e) { console.error('duplicate failed:', e); }
+  };
+
   const requestDelete = (nodeId) => { setConfirmDeleteId(nodeId); };
   const doDelete = async () => {
     const id = confirmDeleteId; if (!id) return;
@@ -929,6 +1638,87 @@ export function App() {
     setConfirmDeleteId(null);
     if (selectedId === id) closeSheet();
   };
+
+  // Bulk actions for the multi-selected set. Each delegates to SorackData's
+  // bulkUpdate / bulkDelete, which wraps the per-node loop in a single
+  // history.pushBatch — so one ⌘Z undoes the whole bulk action atomically.
+  const bulkClear = () => setSelectedIds(new Set());
+  const bulkAddTag = async (tag: string) => {
+    const items: Array<{ id: string; patch: any }> = [];
+    for (const id of Array.from(selectedIds)) {
+      const n = NODES[id];
+      if (!n) continue;
+      const have = (n.tags ?? []) as string[];
+      if (have.includes(tag)) continue;
+      items.push({ id, patch: { tags: [...have, tag] } });
+    }
+    if (items.length > 0) await bulkUpdate(items);
+  };
+  const bulkReparent = async (parentId: string | null) => {
+    const items = Array.from(selectedIds).map((id) => ({ id, patch: { parentId } }));
+    if (items.length > 0) await bulkUpdate(items);
+  };
+  const [confirmBulkDelete, setConfirmBulkDelete] = useStateA(false);
+  const doBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    setConfirmBulkDelete(false);
+    await bulkDelete(ids);
+    setSelectedIds(new Set());
+    if (selectedId && ids.includes(selectedId)) closeSheet();
+  };
+
+  // Reparent picker targets — every node minus the selected set and any
+  // descendant of a selected node (would create a cycle). The "(make root)"
+  // option is appended by BulkBar. Short-circuit when BulkBar isn't visible
+  // (size < 2) so single-click flows don't trigger the BFS each time.
+  const reparentTargets = useMemoA(() => {
+    if (selectedIds.size < 2) return [];
+    const forbidden = new Set<string>(selectedIds);
+    // BFS descendants of each selected node — mark all reachable as forbidden.
+    const queue = Array.from(selectedIds);
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const n of Object.values(NODES) as any[]) {
+        if (n.parentId === cur && !forbidden.has(n.id)) {
+          forbidden.add(n.id);
+          queue.push(n.id);
+        }
+      }
+    }
+    return (Object.values(NODES) as any[])
+      .filter((n) => !forbidden.has(n.id))
+      .map((n) => ({ id: n.id, name: n.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedIds, NODES]);
+
+  // App-level keyboard shortcuts. Component-local handlers (NodeDetail's Esc,
+  // search overlay's own Cmd+K close) stay where they are — they own the
+  // state they cancel. Everything here is global to the app shell.
+  useKeyboardShortcuts([
+    // Search overlay toggle
+    { key: 'k', cmd: true, handler: () => setSearchOpen((o) => !o) },
+    // Undo / redo. Cmd+Z = undo, Shift+Cmd+Z or Cmd+Y = redo. Skipped while
+    // typing so the browser's native field-level undo wins.
+    { key: 'z', cmd: true, shift: false, handler: () => doUndo() },
+    { key: 'z', cmd: true, shift: true,  handler: () => doRedo() },
+    { key: 'y', cmd: true,               handler: () => doRedo() },
+    // Delete selected node (with the same confirm dialog as the right-click
+    // 'delete' item). Backspace intentionally skipped — too easy to hit by
+    // accident on macOS where it's also the back-nav key.
+    { key: 'Delete', when: () => !!selectedId,
+      handler: () => setConfirmDeleteId(selectedId) },
+    // New node — child of the current selection if any, otherwise root.
+    { key: 'n', cmd: false,
+      handler: () => openCreate(selectedId ?? null) },
+    // Toggle the left drawer on desktop. Cheap escape hatch when the
+    // sidebar gets in the way.
+    { key: '[', cmd: false,
+      handler: () => setDrawerCollapsed((c) => !c) },
+    // Clear selection — closes the detail sheet without touching the rest
+    // of the URL.
+    { key: ']', cmd: false, when: () => !!selectedId,
+      handler: () => setSelectedId(null) },
+  ]);
 
   // Node ctx menu: 'edit' is intentionally gone — editing happens in
   // the detail panel itself. 'make root' only appears for non-root
@@ -966,6 +1756,13 @@ export function App() {
           onClick: () => { const nid = actionsCtx.nodeId; closeActions(); openSoftwareGallery(nid, null); },
         });
       }
+      items.push({
+        key: 'duplicate',
+        label: t('nodeActions.duplicate', { defaultValue: 'Duplicate' }),
+        icon: Ic.copy,
+        divider: true,
+        onClick: () => { const id = actionsCtx.nodeId; closeActions(); duplicateNode(id); },
+      });
       items.push({ key: 'delete', label: t('nodeActions.delete'), icon: Ic.trash, danger: true, divider: true,
         onClick: () => { const id = actionsCtx.nodeId; closeActions(); requestDelete(id); } });
       return items;
@@ -1077,6 +1874,9 @@ export function App() {
             position: { x: e.clientX, y: e.clientY },
           });
         }}
+        isDimmed={hasActiveFilters ? isDimmed : undefined}
+        selectedIds={selectedIds}
+        onSelectedIdsChange={setSelectedIds}
         onUndo={doUndo}
         onRedo={doRedo}
         canUndo={histAvail.undo}
@@ -1084,6 +1884,17 @@ export function App() {
         undoIcon={Ic.undo}
         redoIcon={Ic.redo}
       />
+      {selectedIds.size >= 2 && (
+        <BulkBar
+          count={selectedIds.size}
+          availableTags={availableTags}
+          reparentTargets={reparentTargets}
+          onClear={bulkClear}
+          onAddTag={bulkAddTag}
+          onReparent={bulkReparent}
+          onDelete={() => setConfirmBulkDelete(true)}
+        />
+      )}
       {selectedId && isDesktop && <Splitter side="right" value={colR} onChange={setColR} />}
       {selectedId && (
         <BottomSheet
@@ -1116,6 +1927,23 @@ export function App() {
         mode={isRunbook ? 'runbook' : 'map'}
       />
 
+      {onMap && isDesktop && (
+        <FilterBar
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          activeTags={activeFilters.tags ?? []}
+          availableTags={availableTags}
+          onAddTag={(tag) => addFilter('tags', tag)}
+          onRemoveTag={(tag) => removeFilter('tags', tag)}
+          onClearAll={clearAllFilters}
+          hasActiveFilters={hasActiveFilters}
+          runbookResults={runbookResults}
+          onPickRunbook={(id) => navigate(`/runbooks/${encodeURIComponent(id)}`)}
+        />
+      )}
+
       <div className={`shell ${selectedId ? 'shell--has-detail' : ''} ${isDesktop && drawerCollapsed ? 'shell--drawer-collapsed' : ''}`}>
         {/* When collapsed on desktop, the drawer AND its splitter are not
             rendered at all (not display:none — that would still leave a
@@ -1130,6 +1958,12 @@ export function App() {
             settingsActive={isSettings}
             onOpenSettings={() => { navigate('/settings/appearance'); if (!isDesktop) setDrawerOpen(false); }}
             onCollapse={() => setDrawerCollapsed(true)}
+            onNodeContextMenu={(nodeId, position) => openActions('node', { nodeId, position })}
+            isDimmed={hasActiveFilters ? isDimmed : undefined}
+            searchQuery={searchQuery}
+            queryMatchesNode={queryMatchesNode}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
           />
         )}
         {isDesktop && !drawerCollapsed && <Splitter side="left" value={colL} onChange={setColL} />}
@@ -1151,12 +1985,24 @@ export function App() {
         </Routes>
       </div>
 
-      <SearchOverlay
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onPickNode={onJumpNode}
-        onPickRunbook={onOpenRunbook}
-      />
+      {/* Mobile keeps the modal SearchOverlay; desktop uses the inline
+          FilterBar above so the sidebar can narrow live. The filter props
+          mirror those passed to FilterBar so the mobile modal has the same
+          chip strip + picker UX. */}
+      {!isDesktop && (
+        <SearchOverlay
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          onPickNode={onJumpNode}
+          onPickRunbook={onOpenRunbook}
+          activeTags={activeFilters.tags ?? []}
+          availableTags={availableTags}
+          onAddTag={(tag) => addFilter('tags', tag)}
+          onRemoveTag={(tag) => removeFilter('tags', tag)}
+          onClearAll={clearAllFilters}
+          hasActiveFilters={hasActiveFilters}
+        />
+      )}
 
       <AlertsOverlay
         open={alertsOpen}
@@ -1183,6 +2029,16 @@ export function App() {
         danger
         onCancel={() => setConfirmDeleteId(null)}
         onConfirm={doDelete}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={t('bulk.deleteTitle', { defaultValue: 'Delete selected nodes?' })}
+        message={t('bulk.deleteMessage', { count: selectedIds.size, defaultValue: `Delete ${selectedIds.size} selected nodes? This cannot be undone here (use undo).` })}
+        confirmLabel={t('bulk.delete', { defaultValue: 'delete' })}
+        danger
+        onCancel={() => setConfirmBulkDelete(false)}
+        onConfirm={doBulkDelete}
       />
 
       <CardGallery

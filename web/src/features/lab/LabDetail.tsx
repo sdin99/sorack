@@ -10,7 +10,9 @@ import { useNow } from "@/lib/use-now";
 import { NodeIcon } from "@/components/icons/NodeIcon";
 import { GearIcon } from "@/components/icons/GearIcon";
 import { ALL_ICON_KINDS, iconForNode, iconForType } from "@/lib/icon-map";
-import { INFRA_META, SOFTWARE, TYPE_DETAIL, isWidget, fieldValue, humanizeKey, defaultProbeType as infraProbeType, softwareProbeType, infraEntries, softwareIds, softwareForInfra, keepCompatibleSoftware } from "./node-detail-schema";
+import { INFRA_META, SOFTWARE, TYPE_DETAIL, isWidget, fieldValue, humanizeKey, defaultProbeType as infraProbeType, softwareProbeType, infraEntries, softwareIds, softwareForInfra, keepCompatibleSoftware, PROBE_TYPES, allowedProbeTypesFor } from "./node-detail-schema";
+import { Dropdown } from "@/components/Dropdown";
+import { TagsEditor } from "./TagsEditor";
 import { CardGallery, type CardItem } from "./CardGallery";
 import { testProbe } from "@/lib/data-source/api";
 import { slugify, uniqueSlug } from "@/lib/slug";
@@ -146,17 +148,59 @@ function EditableSpecRow({
   const [editing, setEditing] = useStateD(false);
   const [draft, setDraft] = useStateD(value);
   const [busy, setBusy] = useStateD(false);
+  const editRowRef = useRefD<HTMLDivElement | null>(null);
 
   useEffectD(() => { if (!editing) setDraft(value); }, [value, editing]);
 
-  const commit = async () => {
-    if (draft === value) { setEditing(false); return; }
+  // Optional `override` lets a renderer that picks-and-commits (e.g. a
+  // <select>) bypass the setDraft + setTimeout dance — which had a stale
+  // closure: setTimeout captured the previous render's commit, which read
+  // the previous render's `draft` (still equal to value), so `draft===value`
+  // returned early and the PATCH never ran. Passing the new value directly
+  // sidesteps the closure entirely.
+  const commit = async (override?: any) => {
+    const next = override !== undefined ? override : draft;
+    if (next === value) { setEditing(false); return; }
     setBusy(true);
-    try { await onSave(draft); setEditing(false); }
+    try { await onSave(next); setEditing(false); }
     catch (e) { /* leave editing mode so user can fix */ }
     finally { setBusy(false); }
   };
   const cancel = () => { setDraft(value); setEditing(false); };
+
+  // While the row is in edit mode, exit it when the user clicks outside or
+  // presses Esc. Without this, custom editors that have their own popup
+  // (e.g. our Dropdown for the parent picker) only handled Esc/outside
+  // *while the popup itself was open* — once collapsed back to the trigger,
+  // Esc bubbled up to NodeDetail (closing the whole sheet) and outside
+  // clicks did nothing. Capture phase + stopPropagation keeps Esc from
+  // reaching the sheet's window listener.
+  useEffectD(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      (e as any).stopImmediatePropagation?.();
+      cancel();
+    };
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!editRowRef.current || !t) return;
+      // Inside the editing row stays in edit mode.
+      if (editRowRef.current.contains(t)) return;
+      // The Dropdown menu is portal-rendered to body; clicks on its menu
+      // shouldn't be treated as "outside" the editor.
+      if (t.closest('.sd-dropdown-menu')) return;
+      cancel();
+    };
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onDoc);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onDoc);
+    };
+  }, [editing, value]);
 
   if (editing) {
     const editor = renderEditor
@@ -173,7 +217,7 @@ function EditableSpecRow({
           }}
         />;
     return (
-      <div className="spec spec--curated spec--editing">
+      <div ref={editRowRef} className="spec spec--curated spec--editing">
         <div className="spec-k">{k}</div>
         <div className="spec-v">{editor}</div>
         <div className="spec-tag" />
@@ -869,6 +913,46 @@ function TypeWidgets({ node, only }) {
 function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNode: any; onOpenSettings?: (aspect: string) => void }) {
   const { t } = useTranslation();
 
+  // Maintenance — operator-set pause. While active, collector skips probing
+  // and the status line shows a dedicated "in maintenance" row with the
+  // since-when age + a resume button. Probe configs and last known status
+  // are preserved (just hidden) so resuming returns to the prior baseline.
+  const maintenance = node.meta?.maintenance as { since?: string } | undefined;
+  const toggleMaintenance = () => {
+    const patch = maintenance
+      ? { meta: { maintenance: null } }
+      : { meta: { maintenance: { since: new Date().toISOString() } } };
+    updateNode(node.id, patch).catch((e: any) => console.error('toggle maintenance:', e));
+  };
+
+  if (maintenance) {
+    return (
+      <div className="nd-health nd-health--maint">
+        <span className="nd-health-dot nd-health-dot--maint" aria-hidden="true">
+          <svg width="10" height="10" viewBox="0 0 22 22" fill="currentColor">
+            <rect x="7" y="5" width="3" height="12" rx="0.5" />
+            <rect x="12" y="5" width="3" height="12" rx="0.5" />
+          </svg>
+        </span>
+        <span className="nd-health-status">{t('nd.inMaintenance', { defaultValue: 'in maintenance' })}</span>
+        <span className="nd-health-end">
+          {maintenance.since && <HealthAge iso={maintenance.since} />}
+          <button
+            className="nd-health-add"
+            onClick={(e) => { e.stopPropagation(); toggleMaintenance(); }}
+            title={t('nd.resumeMonitoring', { defaultValue: 'resume monitoring' })}
+            aria-label={t('nd.resumeMonitoring', { defaultValue: 'resume monitoring' })}
+            type="button"
+          >
+            <svg width="10" height="10" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true">
+              <path d="M7 5l11 6-11 6V5z" />
+            </svg>
+          </button>
+        </span>
+      </div>
+    );
+  }
+
   // Gather aspects in a stable order: infra first, then softwares in the order
   // meta.software lists them. Pending = probe set without an observed reading
   // yet (just configured, or between collector ticks).
@@ -910,6 +994,23 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
     </button>
   ) : null;
 
+  // Pause/maintenance entry — sits next to the gear so the operator can flip
+  // a node into maintenance from the same surface they configure monitoring.
+  const MaintenanceBtn = (
+    <button
+      className="nd-health-settings"
+      onClick={(e) => { e.stopPropagation(); toggleMaintenance(); }}
+      title={t('nd.enterMaintenance', { defaultValue: 'enter maintenance' })}
+      aria-label={t('nd.enterMaintenance', { defaultValue: 'enter maintenance' })}
+      type="button"
+    >
+      <svg width="12" height="12" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true">
+        <rect x="7" y="5" width="3" height="12" rx="0.5" />
+        <rect x="12" y="5" width="3" height="12" rx="0.5" />
+      </svg>
+    </button>
+  );
+
   // Pill row under the main line — only when there's more than one aspect.
   // Each pill's color tracks that aspect's observed status (pending = muted).
   const PillRow = aspects.length > 1 ? (
@@ -947,8 +1048,11 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
           <span className="nd-health-status">{h.message || h.status}</span>
           <span className="nd-health-src">{t('nd.healthVia', { source: h.source, defaultValue: `via {{source}}` })}</span>
           {typeof h.latencyMs === 'number' && <span className="nd-health-lat">{h.latencyMs}ms</span>}
-          {h.lastCheckedAt && <HealthAge iso={h.lastCheckedAt} />}
-          {SettingsBtn}
+          <span className="nd-health-end">
+            {h.lastCheckedAt && <HealthAge iso={h.lastCheckedAt} />}
+            {SettingsBtn}
+            {MaintenanceBtn}
+          </span>
         </div>
         {PillRow}
       </>
@@ -961,7 +1065,10 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
           <span className="nd-health-dot" />
           <span className="nd-health-status">{t('nd.awaitingCheck', { defaultValue: 'awaiting first check…' })}</span>
           <span className="nd-health-src">{t('nd.healthVia', { source: primary.pendingType, defaultValue: `via {{source}}` })}</span>
-          {SettingsBtn}
+          <span className="nd-health-end">
+            {SettingsBtn}
+            {MaintenanceBtn}
+          </span>
         </div>
         {PillRow}
       </>
@@ -981,17 +1088,22 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
     >
       <span className="nd-health-dot" />
       <span className="nd-health-status">{t('nd.notMonitored', { defaultValue: 'not monitored' })}</span>
-      {onOpenSettings && (
-        <button
-          className="nd-health-add"
-          onClick={(e) => { e.stopPropagation(); onOpenSettings('infra'); }}
-          title={t('nd.setupMonitoring', { defaultValue: 'set up monitoring' })}
-          aria-label={t('nd.setupMonitoring', { defaultValue: 'set up monitoring' })}
-          type="button"
-        >
-          +
-        </button>
-      )}
+      <span className="nd-health-end">
+        {onOpenSettings && (
+          <button
+            className="nd-health-add"
+            onClick={(e) => { e.stopPropagation(); onOpenSettings('infra'); }}
+            title={t('nd.setupMonitoring', { defaultValue: 'set up monitoring' })}
+            aria-label={t('nd.setupMonitoring', { defaultValue: 'set up monitoring' })}
+            type="button"
+          >
+            <svg width="12" height="12" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M11 5v12M5 11h12" />
+            </svg>
+          </button>
+        )}
+        {MaintenanceBtn}
+      </span>
     </div>
   );
 }
@@ -1007,9 +1119,10 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
 // current type's card) — the "settings" surface. NodeDetail uses
 // MonitoringSummary instead: a read-only status line + CTA that opens the
 // gallery straight into that detail view.
-const PROBE_TYPES = ['tcp', 'http', 'k8s', 'proxmox', 'system'];
-// default probe type comes from the node's infra (INFRA_META.probe), via the
-// schema helper infraProbeType(node).
+// PROBE_TYPES is imported from the schema (single source of truth). Per-card
+// restrictions come from allowedProbeTypesFor(node, aspect). Default probe
+// type comes from the node's infra (INFRA_META.probe), via the schema helper
+// infraProbeType(node).
 
 function buildProbe(type, f) {
   if (type === 'tcp') return { type: 'tcp', host: f.host.trim(), port: Number(f.port) };
@@ -1061,7 +1174,21 @@ function ProbeControl({ node, updateNode, aspect = 'infra' }: { node: any; updat
   const { t } = useTranslation();
   const isInfra = aspect === 'infra';
   const probe = isInfra ? node.meta?.probe : node.meta?.softwareProbes?.[aspect];
-  const type = isInfra ? infraProbeType(node) : softwareProbeType(aspect);
+
+  // Probe type is normally the card's schema default (INFRA_META.probe for an
+  // infra card, SOFTWARE[swId].probe for a software card). But the operator
+  // may want a different transport — e.g. a tcp/22 alive check on a host whose
+  // schema default is 'system'. So the schema picks the default, an existing
+  // saved probe pins it (so opening the form shows the saved type), and the
+  // dropdown below the form lets the operator switch any time. buildProbe
+  // already supports all PROBE_TYPES — no data-model change needed.
+  const defaultType = isInfra ? infraProbeType(node) : softwareProbeType(aspect);
+  const probeType: string = (probe?.type as string) ?? defaultType;
+  const [type, setType] = useStateD<string>(probeType);
+  // Re-sync local state when the saved probe's type changes (e.g. user saves
+  // a new probe of a different type, or navigates between cards). Stays
+  // stable across the React Query 5s refetch since probeType is a primitive.
+  useEffectD(() => { setType(probeType); }, [probeType]);
 
   // CRITICAL: deps must be PRIMITIVE, not the `probe` object. React Query
   // refetches inventory every 5s, returning a new node object reference each
@@ -1169,12 +1296,27 @@ function ProbeControl({ node, updateNode, aspect = 'infra' }: { node: any; updat
   // manual.ip into the host field; explicit beats relying on a placeholder.
   const useNodeIp = (key: 'host') => () => { if (manualIp) setF({ ...f, [key]: manualIp }); };
 
+  // Restrict the type dropdown to what makes sense for this card (e.g. host
+  // → system/tcp/http, postgresql → tcp only). If a saved probe happens to
+  // use a type that's no longer allowed (schema tightened, hand-edited DB
+  // row), keep that type in the list so the operator can see and change it
+  // rather than silently dropping it.
+  const allowed = allowedProbeTypesFor(node, aspect);
+  const typeOptions = (allowed.includes(type) ? allowed : [...allowed, type])
+    .map((p) => ({ value: p, label: p }));
+
   return (
     <div className="probe-form">
-      <div className="probe-form-cap">
-        {t('nd.probeTypeLabel', { type, defaultValue: 'via {{type}}' })}
-      </div>
       <div className="probe-form-grid">
+        <ProbeField label="type">
+          <Dropdown
+            value={type}
+            onChange={setType}
+            options={typeOptions}
+            ariaLabel={t('nd.probeTypeAria', { defaultValue: 'probe type' })}
+            className="probe-type-dropdown"
+          />
+        </ProbeField>
         {type === 'tcp' && (
           <>
             <ProbeField label="host">
@@ -1389,22 +1531,37 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
             value={node.parentId || ''}
             display={node.parentId ? (NODES[node.parentId]?.name || node.parentId) : t('nodeForm.parentNone')}
             onSave={(v) => updateNode(node.id, { parentId: v || null })}
-            renderEditor={(draft, setDraft, commit, cancel) => (
-              <select
-                className="spec-v-input"
-                value={draft ?? ''}
-                autoFocus
-                onChange={(e) => { setDraft(e.target.value); setTimeout(commit, 0); }}
-                onBlur={commit}
-                onKeyDown={(e) => { if (e.key === 'Escape') cancel(); }}
-              >
-                <option value="">{t('nodeForm.parentNone')}</option>
-                {Object.values(NODES)
-                  .filter((n) => n.id !== node.id && !descendantIds.has(n.id))
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
-              </select>
-            )}
+            renderEditor={(draft, _setDraft, commit, cancel) => {
+              // Custom Dropdown (vs native <select>): shows the type icon
+              // alongside each candidate, and the id as a muted secondary
+              // string so same-named nodes are distinguishable. The picker
+              // excludes self + descendants (would form a parent cycle).
+              const opts = [
+                { value: '', label: t('nodeForm.parentNone') as string },
+                ...Object.values(NODES)
+                  .filter((n: any) => n.id !== node.id && !descendantIds.has(n.id))
+                  .sort((a: any, b: any) => (a.name || a.id).localeCompare(b.name || b.id))
+                  .map((n: any) => ({
+                    value: n.id,
+                    label: n.name || n.id,
+                    description: n.id,
+                    icon: <NodeIcon kind={n.kind || n.type || 'svc'} size={14} />,
+                  })),
+              ];
+              return (
+                <Dropdown
+                  value={draft ?? ''}
+                  onChange={(v) => commit(v)}
+                  options={opts}
+                  ariaLabel={t('nodeForm.parent') as string}
+                  className="spec-v-dropdown"
+                  // Dismiss (click outside / Esc) exits edit mode — without
+                  // this the row stayed in editing state even after the
+                  // menu closed, and Esc bubbled up to close the whole sheet.
+                  onClose={cancel}
+                />
+              );
+            }}
           />
           {/* id is auto-generated and immutable — hide from the panel
               entirely. The system uses it for refs; the user doesn't
@@ -1433,11 +1590,10 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
         <div className="nd-section-h">
           <span>{t('nd.notesTags')}</span>
         </div>
-        {(node.tags || []).length > 0 && (
-          <div className="nd-tags">
-            {node.tags.map(t => <span key={t} className="nd-tag">#{t}</span>)}
-          </div>
-        )}
+        {/* Tag editor — chip row + Add input with autocomplete. Lives inside
+            the existing notes·tags section so all node labels (tags + free
+            text notes) are co-located. */}
+        <TagsEditor node={node} updateNode={updateNode} />
         {editing ? (
           <div className="nd-desc">
             <textarea

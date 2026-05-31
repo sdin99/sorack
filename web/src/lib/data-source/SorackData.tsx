@@ -70,6 +70,10 @@ interface SorackData {
   createNode: (payload: NodeCreatePayload) => Promise<any>;
   updateNode: (id: string, patch: NodeUpdatePayload) => Promise<any>;
   deleteNode: (id: string) => Promise<any>;
+  // Bulk variants for multi-select actions. Suspend per-op history.push and
+  // emit a single batch entry at the end so one ⌘Z reverts the whole set.
+  bulkUpdate: (items: Array<{ id: string; patch: NodeUpdatePayload }>) => Promise<void>;
+  bulkDelete: (ids: string[]) => Promise<void>;
 
   // Edge mutations (Phase 3D). Same shape as the node ones.
   createEdge: (payload: EdgeCreatePayload) => Promise<ApiEdge>;
@@ -190,7 +194,10 @@ function DataInner({ children }: { children: ReactNode }) {
         metrics: undefined,
         subtitle: undefined,
         warnings: [],
-        tags: [],
+        // `tags` no longer stubbed — it's a real column on inventory.nodes
+        // now (Stage 1 of the tags feature). The spread above carries the
+        // API value through; an old DB row without the column reads as
+        // undefined, and consumers normalize with `?? []`.
         runbooks: [],
         description: "",
       };
@@ -238,13 +245,22 @@ function DataInner({ children }: { children: ReactNode }) {
       if (!needle) return [];
       const results: any[] = [];
       for (const n of Object.values(NODES) as any[]) {
-        if (n.name?.toLowerCase().includes(needle) || n.id.toLowerCase().includes(needle)) {
+        const tags = (n.tags ?? []) as string[];
+        const nameHit = n.name?.toLowerCase().includes(needle);
+        const idHit = n.id.toLowerCase().includes(needle);
+        // Tags match by substring against the whole stored string ("env:prod"
+        // is matched by "env", "prod", or "env:prod"). The matched tag is
+        // forwarded so the result row can highlight which one hit.
+        const matchedTag = tags.find((tg) => tg.toLowerCase().includes(needle));
+        if (nameHit || idHit || matchedTag) {
           results.push({
             type: "node",
             id: n.id,
             label: n.name,
             sub: `${n.kind || n.type} · ${n.id}`,
             status: n.status,
+            tags,
+            matchedTag,
           });
         }
       }
@@ -300,6 +316,39 @@ function DataInner({ children }: { children: ReactNode }) {
         const res = await deleteNodeM.mutateAsync(id);
         if (node) history.push({ type: "delete", node });
         return res;
+      },
+      bulkUpdate: async (items) => {
+        const ops: any[] = [];
+        await history.suppress(async () => {
+          for (const { id, patch } of items) {
+            const current = apiNodesRef.current.find((n) => n.id === id);
+            const before: NodeUpdatePayload = {};
+            if (current) {
+              for (const k of Object.keys(patch) as (keyof NodeUpdatePayload)[]) {
+                (before as any)[k] = (current as any)[k] ?? null;
+              }
+            }
+            try {
+              await updateNodeM.mutateAsync({ id, patch });
+              ops.push({ type: "update", id, before, after: patch });
+            } catch (e) { console.error("bulkUpdate", id, e); }
+          }
+        });
+        if (ops.length > 0) history.pushBatch(ops);
+      },
+      bulkDelete: async (ids: string[]) => {
+        const ops: any[] = [];
+        await history.suppress(async () => {
+          for (const id of ids) {
+            const node = apiNodesRef.current.find((n) => n.id === id);
+            if (!node) continue;
+            try {
+              await deleteNodeM.mutateAsync(id);
+              ops.push({ type: "delete", node });
+            } catch (e) { console.error("bulkDelete", id, e); }
+          }
+        });
+        if (ops.length > 0) history.pushBatch(ops);
       },
       createEdge: (payload: EdgeCreatePayload) => createEdgeM.mutateAsync(payload),
       updateEdge: (id: string, patch: EdgeUpdatePayload) => updateEdgeM.mutateAsync({ id, patch }),

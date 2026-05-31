@@ -61,7 +61,7 @@ const HANDLE_STYLE = {
 };
 
 export function SorackNode({ data, selected }: NodeProps) {
-  const { name, kind, status, isRoot, isLeaf, isDropTarget, iconKind: iconKindOverride, software } = data as {
+  const { name, kind, status, isRoot, isLeaf, isDropTarget, iconKind: iconKindOverride, software, dimmed, maintenance } = data as {
     name: string;
     kind: string;
     status: string;
@@ -70,6 +70,8 @@ export function SorackNode({ data, selected }: NodeProps) {
     isDropTarget?: boolean;
     iconKind?: string;
     software?: string[];
+    dimmed?: boolean;
+    maintenance?: boolean;
   };
   const iconKind = iconKindOverride ?? ICON_KIND[kind] ?? "svc";
   const kindLabel = KIND_LABEL[kind] ?? kind?.toUpperCase() ?? "?";
@@ -102,10 +104,16 @@ export function SorackNode({ data, selected }: NodeProps) {
         fontFamily: "var(--sans)",
         boxShadow: shadow,
         position: "relative",
-        transition: "background 0.1s, box-shadow 0.1s",
+        // Tag filter applies a low opacity so non-matching nodes recede but
+        // the topology shape is preserved (vs hiding, which would break the
+        // tree visually).
+        opacity: dimmed ? 0.25 : 1,
+        transition: "background 0.1s, box-shadow 0.1s, opacity 0.15s",
       }}
     >
-      {/* status accent stripe on the left */}
+      {/* status accent stripe on the left. Maintenance overrides with a
+          diagonal striped pattern in a neutral grey, signalling that the
+          collector is intentionally paused. */}
       <div
         style={{
           position: "absolute",
@@ -113,7 +121,9 @@ export function SorackNode({ data, selected }: NodeProps) {
           top: 0,
           bottom: 0,
           width: 3,
-          background: statusColor,
+          background: maintenance
+            ? "repeating-linear-gradient(135deg, var(--fg-3) 0 3px, transparent 3px 6px)"
+            : statusColor,
           borderTopLeftRadius: "var(--radius)",
           borderBottomLeftRadius: "var(--radius)",
         }}
@@ -186,15 +196,34 @@ export function SorackNode({ data, selected }: NodeProps) {
             )}
           </span>
         )}
-        <span
-          style={{
-            marginLeft: "auto",
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            background: statusColor,
-          }}
-        />
+        {maintenance ? (
+          <span
+            title="in maintenance"
+            style={{
+              marginLeft: "auto",
+              width: 12,
+              height: 12,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--fg-3)",
+              fontSize: 10,
+              lineHeight: 1,
+            }}
+          >
+            ⏸
+          </span>
+        ) : (
+          <span
+            style={{
+              marginLeft: "auto",
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              background: statusColor,
+            }}
+          />
+        )}
       </div>
       <div
         style={{

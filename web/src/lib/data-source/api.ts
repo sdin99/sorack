@@ -8,6 +8,9 @@ export interface ApiNode {
   name: string;
   status: "ok" | "warn" | "err" | "unknown";
   meta: Record<string, unknown>;
+  // Free-form labels — hybrid format. "wireguard" = bare label, "env:prod" =
+  // key:value (parsed at filter time, stored as-is).
+  tags: string[];
   position: { x: number; y: number } | null;
   createdAt: string;
   updatedAt: string;
@@ -91,6 +94,7 @@ export interface NodeCreatePayload {
   parentId?: string | null;
   status?: ApiNode["status"];
   meta?: Record<string, unknown>;
+  tags?: string[];
   position?: { x: number; y: number } | null;
 }
 export type NodeUpdatePayload = Partial<Omit<NodeCreatePayload, "id">>;

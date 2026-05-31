@@ -164,7 +164,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .alert-badge--warn { background: var(--warn); }
 
 /* Desktop-only header bits hidden on mobile */
-.topbar-crumbs, .topbar-search-trigger { display: none; }
+.topbar-crumbs { display: none; }
 
 /* ───── Map / stage ───── */
 .stage {
@@ -303,7 +303,10 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 /* ── Node tree navigator ── */
 /* flex:1 + min-height:0 so a long tree scrolls WITHIN the drawer; the
    status bar above and settings button below stay pinned. */
-.drawer-tree { flex: 1; min-height: 0; overflow-y: auto; gap: 1px; padding: 8px 6px; }
+/* overflow-x: hidden — overflow-y: auto alone implicitly enables horizontal
+   scrolling per the CSS spec, which would let deep / long rows escape the
+   sidebar bounds rather than truncating cleanly. */
+.drawer-tree { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; gap: 1px; padding: 8px 6px; }
 .drawer-tree-empty { font-family: var(--mono); font-size: 11px; color: var(--fg-4); padding: 12px 8px; }
 .tree-row { display: flex; align-items: stretch; gap: 0; border-radius: var(--radius-sm); min-height: 28px; }
 /* Tree guides — VSCode-style indent guides: just faint vertical lines, no
@@ -312,25 +315,87 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
      branch    full-height line (this node has a following sibling)
      corner    top-half line (last child — line stops at the row middle)
      empty     nothing (ancestor was a last child) */
-/* Guide cell width == icon-button width (20px) and the line is centered, so
-   a parent's icon center lines up exactly with its children's vertical
-   guide — the tree reads as a clean connected column. */
-.tree-guide { flex: none; width: 20px; align-self: stretch; position: relative; }
+/* Guide cell width is set per cell via --tg-w (set inline by the renderer).
+   Progressive compression at deeper levels — see guideWidthFor() in App.tsx.
+   The vertical line stays centered: left = half the cell's width. */
+.tree-guide { flex: none; width: var(--tg-w, 16px); align-self: stretch; position: relative; }
 .tree-guide--vertical::before,
 .tree-guide--branch::before {
-  content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 1px;
+  content: ''; position: absolute; left: calc(var(--tg-w, 16px) / 2); top: 0; bottom: 0; width: 1px;
   background: var(--border);
 }
 .tree-guide--corner::before {
-  content: ''; position: absolute; left: 10px; top: 0; height: 50%; width: 1px;
+  content: ''; position: absolute; left: calc(var(--tg-w, 16px) / 2); top: 0; height: 50%; width: 1px;
   background: var(--border);
 }
-.tree-row--cur { background: var(--accent-soft); }
+.tree-row { transition: background 0.08s, opacity 0.15s; position: relative; cursor: pointer; }
+.tree-row:hover { background: var(--hover-bg); }
+.tree-row--cur,
+.tree-row--cur:hover { background: var(--accent-soft); }
+/* Multi-select highlight — used when the row is in the App's selectedIds
+   set. Slightly different from --cur (the URL-bound detail target) so the
+   user can tell which row drives the detail panel even when several are in
+   the multi-set. Stacks below --cur if the row is both. */
+.tree-row--multi { background: color-mix(in oklab, var(--accent) 8%, transparent); }
+.tree-row--multi:hover { background: color-mix(in oklab, var(--accent) 14%, transparent); }
+.tree-row--cur.tree-row--multi,
+.tree-row--cur.tree-row--multi:hover { background: var(--accent-soft); }
+/* Tag filter dim — non-matching rows fade out but stay in the tree so
+   parents/ancestors still show context. Same intensity as the graph card. */
+.tree-row--dim { opacity: 0.35; }
+
+/* Drag-to-reorder feedback. Three drop zones per row:
+     - before / after  → sibling reorder, marked by a 2px accent line on
+                         the corresponding edge
+     - into            → reparent, marked by a wash + a fatter left rule
+   Lines use ::before/::after so they don't shift sibling positions. */
+.tree-row--dragging { opacity: 0.5; }
+.tree-row--drop-before::before,
+.tree-row--drop-after::after {
+  content: '';
+  position: absolute; left: 4px; right: 4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 5;
+}
+.tree-row--drop-before::before { top: -1px; }
+.tree-row--drop-after::after { bottom: -1px; }
+/* Reparent target — row tint plus a 3px accent rule on the left edge. */
+.tree-row--drop-into {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+/* Maintenance status indicator in the tree — replaces the colored dot with
+   a small ⏸ glyph. Same footprint so the row layout doesn't shift. */
+.tree-dot--maint {
+  width: auto; height: auto; background: transparent;
+  color: var(--fg-3); font-size: 9px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 9px;
+}
+
+/* Hover tip — portal-rendered (see useHoverTip in App.tsx) so it escapes
+   the drawer-tree's overflow clipping. Position is set inline by JS
+   (position: fixed + computed coords); these rules are just visual. */
+.hover-tip {
+  padding: 4px 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--fg-1);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
 /* The icon button doubles as the type-icon AND (for parent nodes) the
    expand toggle: icon by default, chevron on hover. Leaf nodes are just the
    icon (no toggle). */
 .tree-iconbtn {
-  flex: none; width: 20px; height: 28px; min-width: 0; min-height: 0;
+  flex: none; width: 16px; height: 28px; min-width: 0; min-height: 0;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--fg-2); position: relative;
 }
@@ -350,15 +415,19 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 8px;
   padding: 5px 6px; min-height: 28px;
-  border-radius: var(--radius-sm); text-align: left;
+  text-align: left;
   background: transparent; color: var(--fg-1);
 }
-.tree-label:hover { background: var(--hover-bg); }
-/* The selected row already has its own accent wash — don't layer a hover
-   tint on top of it. */
-.tree-row--cur .tree-label:hover { background: transparent; }
+/* Hover wash lives on .tree-row (above) so the icon column shares the
+   highlight with the label — the row is the visual unit. */
 .tree-row--cur .tree-label { color: var(--accent); }
 .tree-name { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Tag indicator — outlined ring in the tag's hash color. Outlined (not
+   filled) so it reads distinctly from the solid status dot beside it; the
+   ring's color identifies the tag value via hash, tooltip carries the
+   full string. Used in the sidebar tree AND search result rows so tags
+   read the same wherever they appear. */
+.tag-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid; background: transparent; box-sizing: border-box; }
 .tree-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
 
 .drawer-section { display: flex; flex-direction: column; gap: 6px; }
@@ -631,7 +700,15 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nd-health--err .nd-health-status { color: var(--err); }
 .nd-health-lat { color: var(--fg-3); }
 .nd-health-src { color: var(--fg-4); }
-.nd-health-age { color: var(--fg-3); margin-left: auto; }
+.nd-health-age { color: var(--fg-3); }
+/* Right-aligned group inside the status line — age + action buttons stay
+   glued together at the row's right edge even when the row wraps. Previous
+   approach (margin-left: auto on individual items) failed under flex-wrap
+   because each wrapped line resets the auto-margin context. */
+.nd-health-end {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+}
 /* Unprobed nodes: the status line is the manual status, click to edit. */
 .nd-health--manual { cursor: pointer; }
 .nd-health--manual:hover { border-color: var(--border-strong); }
@@ -641,14 +718,27 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nd-health--off { cursor: pointer; opacity: 0.85; }
 .nd-health--off:hover { border-color: var(--border-strong); opacity: 1; }
 .nd-health--off .nd-health-dot { background: var(--fg-4); }
+/* Maintenance state — diagonal stripes on the left border + ⏸ glyph in the
+   status dot slot. Reads visually distinct from any health status. */
+.nd-health--maint {
+  background: repeating-linear-gradient(135deg,
+    color-mix(in oklab, var(--fg-3) 18%, transparent) 0 4px,
+    transparent 4px 8px),
+    var(--surface-2);
+}
+.nd-health-dot--maint {
+  background: transparent;
+  color: var(--fg-3);
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 .nd-health--off .nd-health-status { color: var(--fg-3); }
 .nd-health-add {
-  margin-left: auto;
   min-width: 0; min-height: 0;
   width: 22px; height: 22px;
   padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 16px; line-height: 1;
   color: var(--fg-3);
   background: transparent;
   border: 1px dashed var(--border-strong);
@@ -1204,12 +1294,42 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .fs-body { flex: 1; overflow-y: auto; }
 
 /* Search */
-.search-input-wrap { padding: 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; background: var(--surface-1); }
-.search-input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; color: var(--fg-1); font-size: 16px; outline: none; -webkit-appearance: none; }
-.search-input:focus { border-color: var(--accent); }
-.search-icon { font-size: 18px; color: var(--fg-3); padding-left: 4px; }
+/* Mobile search input wrap — mirrors the desktop FilterBar's input wrap so
+   the icon sits inside the visual input box (same surface, border, focus
+   ring). The wrap IS the input box; the inner <input> is transparent. */
+.search-input-wrap {
+  margin: 12px;
+  padding: 10px 14px;
+  display: flex; gap: 8px; align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.1s;
+}
+.search-input-wrap:focus-within { border-color: var(--border-strong); }
+.search-input {
+  flex: 1; min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-1);
+  font-size: 16px;
+  outline: none;
+  -webkit-appearance: none;
+}
+.search-input::placeholder { color: var(--fg-4); }
+.search-icon {
+  display: inline-flex; align-items: center;
+  font-size: 18px; color: var(--fg-3);
+}
 .search-results { display: flex; flex-direction: column; }
-.search-row { display: grid; grid-template-columns: 22px 56px 1fr auto 12px; gap: 10px; align-items: center; padding: 12px; border-bottom: 1px solid var(--border); text-align: left; min-height: var(--touch); }
+.search-row { display: grid; grid-template-columns: 22px 56px 1fr auto auto 12px; gap: 10px; align-items: center; padding: 12px; border-bottom: 1px solid var(--border); text-align: left; min-height: var(--touch); }
+/* Lock the optional tag-dots strip to col 5 and the status dot to col 6 so
+   the status dot stays right-aligned even when a row has no tags (without
+   explicit placement, an absent .search-row-tags lets the dot flow into
+   col 5, pulling it leftward). */
+.search-row-tags { display: inline-flex; align-items: center; gap: 4px; grid-column: 5; }
+.search-row-dot { grid-column: 6; }
 .search-row:hover, .search-row--cur { background: var(--hover-bg); }
 .search-row-icon { color: var(--fg-2); }
 .search-row-type { font-family: var(--mono); font-size: 10px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -1220,6 +1340,8 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .search-row-dot--ok { background: var(--ok); }
 .search-row-dot--warn { background: var(--warn); }
 .search-row-dot--err { background: var(--err); }
+/* unknown — neutral grey, matches the sidebar tree's unknown indicator. */
+.search-row-dot--unknown { background: var(--fg-4); }
 .search-empty, .search-hint { padding: 24px; color: var(--fg-3); font-size: 13px; text-align: center; }
 .search-hint { display: flex; gap: 12px; justify-content: center; }
 
@@ -1505,7 +1627,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    Desktop (>= 1024px) — enhancement
    ───────────────────────────────────────────────────────────── */
 @media (min-width: 1024px) {
-  .app { display: grid; grid-template-rows: var(--topbar-h) 1fr; }
+  /* 3 rows so a conditionally-rendered FilterRow has its own auto row instead
+     of consuming the shell's 1fr (which was stretching it to ~390px when
+     present). Row 2 is `auto` (collapses to 0 when FilterRow isn't rendered);
+     `.shell` is pinned to row 3 below so it always lands in the 1fr slot. */
+  .app { display: grid; grid-template-rows: var(--topbar-h) auto 1fr; }
+  .shell { grid-row: 3; }
 
   /* TopBar: brand column matches the resizable left sidebar so the
      vertical border lines up. Crumbs sit in their own column. The brand
@@ -1556,23 +1683,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   .topbar-crumbs--dragging { cursor: grabbing; }
   .crumb { flex-shrink: 0; }
   .crumb-name { white-space: nowrap; }
-  /* Hide the small mobile search icon button on desktop — the big trigger
-     covers it. */
-  .topbar-icon-btn--mobile-only { display: none; }
   .crumb { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 10px; min-height: 36px; min-width: 0; border-radius: var(--radius-sm); }
   .crumb:hover { background: var(--hover-bg); }
   .crumb-kind { font-family: var(--mono); font-size: 10px; color: var(--fg-4); letter-spacing: 0.06em; text-transform: uppercase; }
   .crumb-name { font-size: 13px; color: var(--fg-2); font-weight: 500; }
   .crumb--cur .crumb-name { color: var(--fg-1); }
   .crumb-sep { color: var(--fg-4); margin: 0 2px; }
-  .topbar-search-trigger {
-    display: flex; align-items: center; gap: var(--touch-min);
-    background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 6px 10px; min-width: 280px;
-    color: var(--fg-3); min-height: 36px; gap: 8px;
-  }
-  .topbar-search-trigger:hover { border-color: var(--border-strong); }
-  .topbar-search-trigger span { flex: 1; text-align: left; font-size: 12.5px; }
 
   /* Shell becomes a grid (drawer | splitter | map [| splitter | sheet]).
      Column widths come from --col-l / --col-r CSS vars set on .app by the
@@ -1926,6 +2042,11 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .probe-input:hover { border-color: var(--border-strong); }
 .probe-input:focus { outline: none; border-color: var(--g-accent); background: var(--surface-2); }
 
+/* The probe-type Dropdown trigger fills the input slot in a ProbeField row,
+   matching how .probe-input fills (flex:1). Without this the .sd-dropdown
+   default inline-flex sizing leaves the trigger at its natural width. */
+.probe-type-dropdown { flex: 1; min-width: 0; }
+
 /* Small "use node IP" chip — sits next to the host input, pastes manual.ip
    into the field when clicked. Only rendered when manual.ip is set. */
 .probe-chip {
@@ -2001,11 +2122,16 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 2px; min-height: var(--touch);
   border-bottom: 1px solid var(--border);
+  gap: 12px; flex-wrap: wrap;
 }
-.gallery-field-label { font-size: 13px; color: var(--fg-1); }
+.gallery-field-label { font-size: 13px; color: var(--fg-1); flex-shrink: 0; }
 .gallery-field-src {
   font-family: var(--mono); font-size: 10px; color: var(--fg-4);
   letter-spacing: 0.04em;
+}
+.gallery-field-hint {
+  font-size: 12px; color: var(--fg-3);
+  text-align: right; min-width: 0;
 }
 .gallery-empty {
   padding: 28px 12px;
@@ -2075,3 +2201,378 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    the language switcher) can sit below 'at a glance' without breaking
    the push-to-bottom behaviour of the stats card. */
 .drawer-body > section:last-of-type { margin-top: auto; }
+
+/* ─── Tag chip — reusable color-by-hash label. Inline color/bg/border come
+   from lib/tag-color so the same value renders the same color everywhere. */
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px;
+  font-family: var(--mono); font-size: 10px;
+  border: 1px solid; border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.4;
+  user-select: none;
+}
+.tag-chip--compact { padding: 0 5px; font-size: 9px; gap: 2px; }
+.tag-chip--clickable { cursor: pointer; transition: filter 0.1s; }
+.tag-chip--clickable:hover { filter: brightness(1.15); }
+.tag-chip--active { outline: 1px solid currentColor; outline-offset: 1px; }
+.tag-chip-lbl { display: inline-block; }
+.tag-chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 12px; height: 12px;
+  /* Base `button` rule sets min-width / min-height to --touch (36px) for
+     finger targets; override here so the chip stays chip-sized. */
+  min-width: 0; min-height: 0;
+  margin-right: -2px;
+  background: transparent; border: none;
+  color: inherit; opacity: 0.5;
+  font-size: 11px; line-height: 1; cursor: pointer;
+  padding: 0;
+}
+.tag-chip-x:hover { opacity: 1; }
+
+/* NodeDetail tag chip row — sits between StatusLine and the spec body so
+   tags are immediately visible and not buried under per-type detail. */
+.nd-tags {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 5px;
+  padding: 6px 0;
+}
+.nd-tags-add {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--fg-3);
+  background: transparent; border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  /* Override the global button min-height/min-width (--touch) so the
+     button hugs its content, matching the chip row's compact scale. */
+  min-width: 0; min-height: 0;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.nd-tags-add:hover { color: var(--fg-1); border-color: var(--border-strong); }
+/* Wrapper holds the input + suggestion dropdown so they share a positioning
+   context (dropdown anchors absolutely beneath the input). */
+.nd-tags-edit { position: relative; display: inline-block; }
+.nd-tags-input {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--fg-1);
+  background: var(--surface-2); border: 1px solid var(--g-accent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  min-width: 130px;
+  outline: none;
+}
+.nd-tags-input::placeholder { color: var(--fg-4); }
+
+/* Autocomplete suggestion list — opens beneath the input with already-used
+   tags (from other nodes) that match the current draft. Click or Enter on a
+   highlighted row commits that tag. Mouse hover updates highlight. */
+.nd-tags-sugs {
+  position: absolute; top: calc(100% + 4px); left: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 4px;
+  max-height: 220px; overflow-y: auto;
+  z-index: 1500;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 100%;
+}
+.nd-tags-sug {
+  display: flex; align-items: center;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  text-align: left;
+  /* Suggestion rows are small chip-sized hits; override the global button
+     min-height/min-width so they don't bloat to --touch. */
+  min-width: 0; min-height: 0;
+}
+.nd-tags-sug--active { background: var(--surface-2); }
+
+/* Filter bar — desktop. Inline expansion replaces the old top-bar
+   FilterRow AND the SearchOverlay modal. Two visual states:
+     .filter-bar--collapsed : compact chip strip when filters active
+     .filter-bar--open      : same chips + search input + runbook hits panel
+   The expansion animates in/out via the --open state. */
+.filter-bar {
+  display: flex; flex-direction: column;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.filter-bar--collapsed { /* collapsed = just the chip row, no input */ }
+.filter-bar--open      { /* expanded = chip row + input + runbooks */ }
+.filter-bar-chips {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  flex-wrap: wrap;
+}
+.filter-bar-lbl {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.filter-bar-close {
+  margin-left: auto;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--fg-3); font-size: 14px;
+  min-width: 0; min-height: 0; padding: 0 4px;
+}
+.filter-bar-close:hover { color: var(--fg-1); }
+.filter-bar-input-wrap {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 12px 8px 12px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  animation: filter-bar-slide-in 0.18s ease-out;
+  transition: border-color 0.1s;
+}
+.filter-bar-input-wrap:focus-within { border-color: var(--border-strong); }
+.filter-bar-input-icon {
+  display: inline-flex; align-items: center;
+  color: var(--fg-3);
+  font-size: 16px;
+}
+.filter-bar-input {
+  flex: 1; min-width: 0;
+  padding: 0;
+  font: inherit; font-size: 14px;
+  color: var(--fg-1);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+.filter-bar-input::placeholder { color: var(--fg-4); }
+.filter-bar-runbooks {
+  display: flex; flex-direction: column;
+  padding: 0 12px 8px 12px;
+  gap: 2px;
+  animation: filter-bar-slide-in 0.18s ease-out;
+}
+.filter-bar-runbooks-h {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 0;
+}
+.filter-bar-runbook {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  background: transparent; border: none; border-radius: 4px;
+  color: var(--fg-1); cursor: pointer;
+  text-align: left;
+  min-width: 0; min-height: 0;
+}
+.filter-bar-runbook:hover { background: var(--surface-2); }
+.filter-bar-runbook-label { font-size: 13px; color: var(--fg-1); }
+.filter-bar-runbook-sub { font-family: var(--mono); font-size: 10.5px; color: var(--fg-3); }
+@keyframes filter-bar-slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.filter-row-clear {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--fg-3);
+  background: transparent; border: none;
+  padding: 0 4px;
+  cursor: pointer;
+  min-width: 0; min-height: 0;
+}
+.filter-row-clear:hover { color: var(--fg-1); }
+
+/* Flat tree row — when the sidebar is in search-narrow mode (query present).
+   No indent guides, no expand toggle: just icon + name + dots. */
+.tree-row--flat { padding-left: 4px; }
+
+/* Rubber-band marquee — overlay drawn during Cmd/Ctrl+drag on the map
+   pane. portal-rendered to body so it isn't clipped by the map container. */
+.rubber-band {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  z-index: 50;
+}
+
+/* Bulk action bar — floats at the bottom of the map area when ≥2 nodes are
+   selected. position: fixed so it stays put as the map pans/zooms; centered
+   horizontally with a max width so it doesn't sprawl on wide screens. */
+.bulk-bar {
+  position: fixed; left: 50%; bottom: 16px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  font-family: var(--sans);
+  font-size: 12px;
+}
+.bulk-bar-count {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--fg-2);
+  padding: 0 4px;
+}
+.bulk-bar-clear {
+  width: 20px; height: 20px;
+  min-width: 0; min-height: 0;
+  padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid transparent;
+  color: var(--fg-3);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px; line-height: 1;
+}
+.bulk-bar-clear:hover { color: var(--fg-1); border-color: var(--border); }
+.bulk-bar-sep {
+  width: 1px; height: 20px; background: var(--border); margin: 0 2px;
+}
+.bulk-bar-picker.sd-dropdown {
+  font-size: 11px;
+  font-family: var(--mono);
+  padding: 2px 8px;
+  min-height: 22px;
+  border-style: dashed;
+  color: var(--fg-2);
+}
+.bulk-bar-picker.sd-dropdown:hover { color: var(--fg-1); border-color: var(--border-strong); }
+.bulk-bar-btn {
+  font-family: var(--mono); font-size: 11px;
+  padding: 4px 10px;
+  min-width: 0; min-height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.bulk-bar-btn:hover { color: var(--fg-1); border-color: var(--border-strong); }
+.bulk-bar-btn--danger { border-color: color-mix(in oklab, var(--err) 40%, var(--border)); color: var(--err); }
+.bulk-bar-btn--danger:hover { background: color-mix(in oklab, var(--err) 12%, var(--surface-2)); border-color: var(--err); }
+
+/* SearchOverlay filter strip — borrows the FilterBar chip styles but lives
+   inside the modal between the input and the results. Border underneath
+   separates it visually. */
+.fs-filter {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Picker trigger in the filter row — dotted border + smaller font to read
+   as a "+ add" rather than a value-bearing dropdown. */
+.filter-picker.sd-dropdown {
+  font-size: 10px;
+  font-family: var(--mono);
+  padding: 2px 8px;
+  min-height: 0;
+  border-style: dashed;
+  border-color: var(--border);
+  color: var(--fg-3);
+}
+.filter-picker.sd-dropdown:hover { color: var(--fg-1); border-color: var(--border-strong); }
+.filter-picker.sd-dropdown--open { border-style: solid; }
+
+/* ─── Dropdown (sd-) — reusable single-select. Trigger styled to fit
+   inline like an input; portal-rendered menu sits in body so it escapes
+   overflow:hidden ancestors. */
+.sd-dropdown {
+  display: inline-flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  min-height: 32px;
+  font: inherit; font-size: 13px;
+  color: var(--fg-1);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  transition: border-color 0.1s, background 0.1s;
+}
+.sd-dropdown:hover:not(:disabled) { border-color: var(--border-strong); }
+.sd-dropdown:focus { outline: none; border-color: var(--g-accent); }
+.sd-dropdown--open { border-color: var(--g-accent); background: var(--surface-2); }
+.sd-dropdown:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sd-dropdown-label {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sd-dropdown-caret {
+  flex: none; color: var(--fg-3);
+  transition: transform 0.12s ease, color 0.1s;
+}
+.sd-dropdown--open .sd-dropdown-caret {
+  color: var(--g-accent);
+  transform: rotate(180deg);
+}
+
+/* Portal-rendered menu — position: fixed set inline by JS. */
+.sd-dropdown-menu {
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  max-height: 280px; overflow-y: auto;
+  z-index: 9999;
+  display: flex; flex-direction: column;
+  outline: none;
+  animation: sd-dropdown-in 0.08s ease-out;
+}
+.sd-dropdown-menu--above { animation-name: sd-dropdown-in-above; }
+@keyframes sd-dropdown-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sd-dropdown-in-above {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sd-dropdown-opt {
+  display: flex; align-items: center;
+  padding: 6px 8px;
+  font: inherit; font-size: 13px;
+  color: var(--fg-1);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  min-height: 28px;
+}
+.sd-dropdown-opt:disabled { opacity: 0.4; cursor: not-allowed; }
+.sd-dropdown-opt--active:not(:disabled) { background: var(--surface-2); }
+.sd-dropdown-opt--selected { color: var(--g-accent); font-weight: 500; }
+.sd-dropdown-opt-lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-dropdown-opt-icon {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; color: var(--fg-2);
+}
+.sd-dropdown-opt-desc {
+  flex: none;
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--fg-3);
+  margin-left: 8px;
+}
+
+/* Dropdown inside an EditableSpecRow's value cell — fill the cell width,
+   match the spec input height. */
+.spec-v-dropdown.sd-dropdown {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+}
