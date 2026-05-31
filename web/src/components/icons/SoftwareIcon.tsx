@@ -8,7 +8,11 @@
 // graph-node badges we leave brand=false so the icon takes currentColor and
 // blends with the node surface.
 
-import { siPostgresql, siJellyfin, siAdguard, siProxmox } from "simple-icons";
+import {
+  siPostgresql, siJellyfin, siAdguard, siProxmox,
+  siTraefikproxy, siNginx, siGrafana, siPrometheus,
+  siArgo, siDocker, siRedis, siNextcloud, siHomeassistant,
+} from "simple-icons";
 
 interface SimpleIconShape { path: string; hex: string; title: string; }
 
@@ -17,6 +21,15 @@ const SOFTWARE_ICON: Record<string, SimpleIconShape> = {
   jellyfin: siJellyfin,
   adguard: siAdguard,
   "proxmox-ve": siProxmox,
+  traefik: siTraefikproxy,
+  nginx: siNginx,
+  grafana: siGrafana,
+  prometheus: siPrometheus,
+  argocd: siArgo,
+  docker: siDocker,
+  redis: siRedis,
+  nextcloud: siNextcloud,
+  homeassistant: siHomeassistant,
 };
 
 export function SoftwareIcon({
