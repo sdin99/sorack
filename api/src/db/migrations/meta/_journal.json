@@ -15,6 +15,13 @@
       "when": 1780059323052,
       "tag": "0001_narrow_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780218610653,
+      "tag": "0002_narrow_thanos",
+      "breakpoints": true
     }
   ]
 }

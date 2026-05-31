@@ -1,0 +1,1 @@
+ALTER TABLE "inventory"."nodes" ADD COLUMN "tags" jsonb DEFAULT '[]'::jsonb NOT NULL;

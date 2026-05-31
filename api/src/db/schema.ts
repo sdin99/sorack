@@ -64,6 +64,10 @@ export const nodes = inventory.table("nodes", {
   name: varchar("name", { length: 256 }).notNull(),
   status: statusEnum("status").notNull().default("unknown"),
   meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+  // Free-form labels for grouping/filtering. Hybrid format: a bare string
+  // ("wireguard") is a label; a string with a colon ("env:prod") is parsed
+  // as key:value at filter/search time. Stored as-is — no parsing on write.
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
   position: jsonb("position").$type<{ x: number; y: number } | null>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
