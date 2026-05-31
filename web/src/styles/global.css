@@ -661,39 +661,37 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    actions, and lets "Configure" deep-link into the software's gallery
    detail without a separate ⚙. */
 .nd-sw-kebab-wrap { position: relative; margin-left: auto; display: inline-block; }
+/* Same hover idiom as .sheet-kebab — transparent → hover-bg wash, no border. */
 .nd-sw-kebab {
   color: var(--fg-3); font-size: 18px; line-height: 1;
   min-width: 0; min-height: 0;
   width: 24px; height: 24px;
   padding: 0;
-  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.1s, background 0.1s, border-color 0.1s;
+  transition: color 0.1s, background 0.1s;
 }
-.nd-sw-kebab:hover { color: var(--fg-1); background: var(--hover-bg); border-color: var(--border); }
+.nd-sw-kebab:hover { color: var(--fg-1); background: var(--hover-bg); }
 .nd-sw-kebab-backdrop { position: fixed; inset: 0; z-index: 100; background: transparent; }
+/* Container + items mirror .action-menu (the right-click / sheet-kebab popover)
+   so the two kebabs open visually identical menus. Positioning stays absolute
+   because this kebab anchors to its section header, not the viewport. */
 .nd-sw-kebab-menu {
   position: absolute; top: 100%; right: 0; margin-top: 4px;
   z-index: 101;
   display: flex; flex-direction: column;
-  min-width: 140px;
-  background: var(--surface-2);
+  min-width: 180px;
+  padding: 4px;
+  background: var(--surface-1);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--fg-1) 6%, transparent) inset,
+    var(--shadow-md);
   overflow: hidden;
 }
-.nd-sw-kebab-menu button {
-  font-family: inherit; font-size: 13px;
-  text-align: left;
-  padding: 8px 14px;
-  min-height: 0;
-  background: transparent; border: 0; color: var(--fg-1);
-  cursor: pointer;
-}
-.nd-sw-kebab-menu button:hover { background: var(--hover-bg); }
-.nd-sw-kebab-menu .nd-sw-kebab-danger { color: var(--err); }
-.nd-sw-kebab-menu .nd-sw-kebab-danger:hover { background: var(--err); color: var(--g-on-fg); }
+/* Item styling comes from .action-menu-item (applied in JSX). No per-button
+   rules here. */
 
 .nd-prov {
   display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
@@ -2050,7 +2048,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .probe-input {
   flex: 1; min-width: 0;
   padding: 6px 10px;
-  font-size: 13px;
+  font-family: var(--mono); font-size: 12.5px;
   color: var(--fg-1);
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -2065,6 +2063,9 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    matching how .probe-input fills (flex:1). Without this the .sd-dropdown
    default inline-flex sizing leaves the trigger at its natural width. */
 .probe-type-dropdown { flex: 1; min-width: 0; }
+/* Match .probe-input mono so trigger text doesn't visually jump between
+   sans (default sd-dropdown) and the rest of the probe form. */
+.probe-form .sd-dropdown { font-family: var(--mono); font-size: 12.5px; }
 
 /* Small "use node IP" chip — sits next to the host input, pastes manual.ip
    into the field when clicked. Only rendered when manual.ip is set. */

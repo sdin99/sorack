@@ -817,19 +817,34 @@ function SoftwareKebab({ onConfigure, onRemove }: { onConfigure: () => void; onR
         title={t('action.more', { defaultValue: 'more actions' })}
         aria-label={t('action.more', { defaultValue: 'more actions' })}
       >
-        ⋮
+        {/* Same SVG as App.tsx Ic.kebab — Unicode ⋮ has asymmetric metrics
+            across fonts, so we render the dots ourselves to stay centered. */}
+        <svg width="18" height="18" viewBox="0 0 22 22" fill="currentColor">
+          <circle cx="11" cy="5" r="1.7" />
+          <circle cx="11" cy="11" r="1.7" />
+          <circle cx="11" cy="17" r="1.7" />
+        </svg>
       </button>
       {open && (
         <>
           {/* Click anywhere outside to dismiss. Fixed so the menu doesn't
               trap pointer events outside the section. */}
           <div className="nd-sw-kebab-backdrop" onClick={() => setOpen(false)} />
+          {/* Items reuse .action-menu-item so they match the right-click /
+              sheet-kebab popover exactly (icon col + label + danger soft
+              hover). Outer .nd-sw-kebab-menu only handles positioning. */}
           <div className="nd-sw-kebab-menu" role="menu">
-            <button type="button" onClick={() => { setOpen(false); onConfigure(); }}>
-              {t('nodeActions.configureThis', { defaultValue: 'Configure…' })}
+            <button type="button" className="action-menu-item" onClick={() => { setOpen(false); onConfigure(); }}>
+              <span className="action-menu-icon"><GearIcon size={14} /></span>
+              <span className="action-menu-label">{t('nodeActions.configureThis', { defaultValue: 'Configure…' })}</span>
             </button>
-            <button type="button" className="nd-sw-kebab-danger" onClick={() => { setOpen(false); onRemove(); }}>
-              {t('nodeActions.remove', { defaultValue: 'Remove' })}
+            <button type="button" className="action-menu-item action-menu-item--danger" onClick={() => { setOpen(false); onRemove(); }}>
+              <span className="action-menu-icon">
+                <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 5h10M7 5V3.5h4V5M5.5 5l.6 9a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-9" />
+                </svg>
+              </span>
+              <span className="action-menu-label">{t('nodeActions.remove', { defaultValue: 'Remove' })}</span>
             </button>
           </div>
         </>
