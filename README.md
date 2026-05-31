@@ -34,7 +34,9 @@ and Prometheus node_exporter.
 - `api/` — Hono + drizzle on top of Postgres. Three schemas:
   `inventory` (nodes/edges), `docs` (runbooks), `monitoring` (alerts),
   plus `auth` for users/sessions.
-- `deploy/` — example Kubernetes manifests for a dev deployment.
+- `deploy/` — Kubernetes manifests ready to `kubectl apply -f`.
+- `examples/` — reference templates (Secrets, Ingress). Copy + fill in real
+  values + apply yourself; not applied by `deploy/`.
 
 ## Self-hosting (Kubernetes, dev pod)
 
@@ -54,17 +56,17 @@ of this repo and runs `pnpm dev` (Vite + tsx watch) inside.
 Two Secrets — concerns kept separate so DB and app config can rotate
 independently:
 
-| Secret      | Source                                  | Consumed by                 |
-| ----------- | --------------------------------------- | --------------------------- |
-| `sorack-db` | `deploy/postgres/secret.example.yaml`   | postgres statefulset + api  |
-| `sorack-app`| `deploy/secret.example.yaml`            | api only                    |
+| Secret       | Source                          | Consumed by                 |
+| ------------ | ------------------------------- | --------------------------- |
+| `sorack-db`  | `examples/secret-db.yaml`       | postgres statefulset + api  |
+| `sorack-app` | `examples/secret-app.yaml`      | api only                    |
 
 ```bash
 kubectl apply -f deploy/dev/namespace.yaml
 
 # Copy + fill in real values (don't commit the filled-in copies)
-cp deploy/postgres/secret.example.yaml /tmp/sorack-db.yaml
-cp deploy/secret.example.yaml          /tmp/sorack-app.yaml
+cp examples/secret-db.yaml  /tmp/sorack-db.yaml
+cp examples/secret-app.yaml /tmp/sorack-app.yaml
 $EDITOR /tmp/sorack-db.yaml /tmp/sorack-app.yaml
 # sorack-db : POSTGRES_USERNAME / POSTGRES_PASSWORD
 # sorack-app: SORACK_AUTH_SECRET (openssl rand -base64 48), optional admin/proxmox/cors
@@ -113,8 +115,7 @@ kubectl port-forward -n sorack svc/sorack 5173:80
 # then open http://localhost:5173
 ```
 
-Or copy `deploy/dev/ingress.example.yaml` to `ingress.yaml`, set your
-hostname + TLS, and apply.
+Or copy `examples/ingress.yaml`, set your hostname + TLS, and apply.
 
 ### 5. Seed (optional, demo data)
 
