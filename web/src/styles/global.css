@@ -1071,9 +1071,9 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nd-rb-title { font-size: 13px; color: var(--fg-1); }
 .nd-rb-state { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border-radius: 3px; }
 .nd-rb-state--planned     { background: var(--surface-3); color: var(--fg-2); }
-.nd-rb-state--in-progress { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); }
+.nd-rb-state--in_progress { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); }
 .nd-rb-state--completed   { background: color-mix(in oklab, var(--ok) 18%, transparent); color: var(--ok); }
-.nd-rb-state--rollback    { background: color-mix(in oklab, var(--err) 20%, transparent); color: var(--err); }
+.nd-rb-state--rolled_back { background: color-mix(in oklab, var(--err) 20%, transparent); color: var(--err); }
 .nd-runbooks { display: flex; flex-direction: column; gap: 6px; }
 
 /* ───── Full-screen overlays (search / alerts / runbook) ───── */

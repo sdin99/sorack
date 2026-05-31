@@ -237,6 +237,14 @@ function DataInner({ children }: { children: ReactNode }) {
         updated: r.updatedAt ? String(r.updatedAt).slice(0, 10) : "",
       };
     }
+    // Reverse-link: a runbook in its `nodeRefs` is shown on each referenced
+    // node's detail panel. Computed here so consumers can read node.runbooks
+    // without scanning the runbook list every render.
+    for (const r of Object.values(RUNBOOKS) as any[]) {
+      for (const nid of (r.nodeRefs ?? []) as string[]) {
+        if (NODES[nid]) NODES[nid].runbooks.push(r.id);
+      }
+    }
     const ALERTS = (als.data ?? []).map((a) => ({
       ...a,
       nodeId: a.nodeId,

@@ -9,19 +9,90 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
+import { autocompletion, completionKeymap, acceptCompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import { keymap, type EditorView as CMEditorView } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
 
 const SAVE_DEBOUNCE_MS = 1500;
+
+export interface MentionItem { id: string; label: string; }
+export interface MentionSources {
+  nodes: MentionItem[];
+  runbooks: MentionItem[];
+}
 
 export interface RunbookEditorProps {
   runbookId: string;
   initialContent: string;
   previewRender: (md: string) => ReactNode;
   onSave: (markdown: string) => Promise<unknown>;
+  mentions: MentionSources;
+}
+
+// Builds the autocomplete source consumed by @codemirror/autocomplete. The
+// regex captures everything from `[[` to the cursor; we re-parse to know
+// whether the user picked a kind yet, then suggest from the matching list.
+function makeMentionSource(mentionsRef: { current: MentionSources }) {
+  return (context: CompletionContext): CompletionResult | null => {
+    const m = context.matchBefore(/\[\[[\w:-]*/);
+    if (!m) return null;
+    const text = m.text; // includes leading "[["
+    const inner = text.slice(2); // after "[["
+    const colonAt = inner.indexOf(":");
+    const kind = colonAt >= 0 ? inner.slice(0, colonAt) : "";
+    const prefix = colonAt >= 0 ? inner.slice(colonAt + 1) : inner;
+
+    const { nodes, runbooks } = mentionsRef.current;
+    const candidates: Array<{ kind: "node" | "runbook"; item: MentionItem }> = [];
+    if (!kind || kind === "node") {
+      for (const it of nodes) candidates.push({ kind: "node", item: it });
+    }
+    if (!kind || kind === "runbook") {
+      for (const it of runbooks) candidates.push({ kind: "runbook", item: it });
+    }
+    const lower = prefix.toLowerCase();
+    const filtered = candidates
+      .filter(({ item }) => item.id.toLowerCase().includes(lower) || item.label.toLowerCase().includes(lower))
+      .slice(0, 40);
+    if (filtered.length === 0 && !context.explicit) return null;
+
+    return {
+      from: m.from,
+      to: m.to,
+      // We already filtered by id AND label above; CodeMirror's built-in
+      // re-filter would then match the user's prefix against `label`
+      // (= `[[node:id]]`) and miss anything found via the human name.
+      filter: false,
+      options: filtered.map(({ kind: k, item }) => {
+        const insert = `[[${k}:${item.id}]]`;
+        return {
+          label: insert,
+          displayLabel: item.id,
+          detail: `${k} · ${item.label}`,
+          // Skip a trailing `]]` if the user already typed one; without this
+          // accepting after `[[node:k|]]` left `[[node:k8s-cluster]]]]`.
+          apply: (view: CMEditorView, _c: unknown, from: number, to: number) => {
+            const after = view.state.doc.sliceString(to, to + 2);
+            const finalTo = after === "]]" ? to + 2 : to;
+            view.dispatch({
+              changes: { from, to: finalTo, insert },
+              selection: { anchor: from + insert.length },
+            });
+          },
+        };
+      }),
+    };
+  };
 }
 
 type SaveState = "idle" | "dirty" | "saving" | "saved";
 
-export function RunbookEditor({ runbookId, initialContent, previewRender, onSave }: RunbookEditorProps) {
+export function RunbookEditor({ runbookId, initialContent, previewRender, onSave, mentions }: RunbookEditorProps) {
+  // Keep mention sources in a ref so the completion source (built once) reads
+  // the latest list each invocation without us recreating the extension.
+  const mentionsRef = useRef(mentions);
+  mentionsRef.current = mentions;
+
   const [content, setContent] = useState(initialContent);
   const [state, setState] = useState<SaveState>("idle");
   const timerRef = useRef<number | null>(null);
@@ -86,6 +157,17 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   const extensions = useMemo(() => [
     markdown(),
     EditorView.lineWrapping,
+    autocompletion({
+      override: [makeMentionSource(mentionsRef)],
+      activateOnTyping: true,
+      closeOnBlur: true,
+    }),
+    // Tab also accepts a completion (default is Enter only). High precedence
+    // so it wins over markdown's Tab indent binding (otherwise Tab would just
+    // shift text right while the completion popup stays open).
+    Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
+    keymap.of(completionKeymap),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ], []);
 
   return (

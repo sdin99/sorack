@@ -24,17 +24,22 @@ function renderMarkdown(md, onNodeJump, onRunbookJump, NODES, RUNBOOKS) {
   const out = []; let i = 0, key = 0;
   const renderInline = (text) => {
     let s = text;
-    s = s.replace(/\[\[([\w-]+)\]\]/g, (_, id) => `\u0000M:${id}\u0000`);
+    // [[node:xxx]] / [[runbook:xxx]] (Phase 2 autocomplete output). Legacy
+    // [[xxx]] still accepted - kind inferred (rb- prefix -> runbook).
+    s = s.replace(/\[\[(?:(node|runbook):)?([\w-]+)\]\]/g, (_, kind, id) => `\u0000M:${kind || ""}:${id}\u0000`);
     s = s.replace(/`([^`]+)`/g, '\u0000C:$1\u0000');
     s = s.replace(/\*\*([^*]+)\*\*/g, '\u0000B:$1\u0000');
     s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '\u0000I:$1\u0000');
     const tokens = s.split('\u0000');
     return tokens.map((tok, j) => {
       if (tok.startsWith('M:')) {
-        const id = tok.slice(2);
-        const isRb = id.startsWith('rb-');
+        const rest = tok.slice(2);
+        const sep = rest.indexOf(':');
+        const explicitKind = sep >= 0 ? rest.slice(0, sep) : '';
+        const id = sep >= 0 ? rest.slice(sep + 1) : rest;
+        const isRb = explicitKind === 'runbook' || (!explicitKind && id.startsWith('rb-'));
         const target = isRb ? RUNBOOKS[id] : NODES[id];
-        if (!target) return <span key={j} className="md-mention">[[{id}]]</span>;
+        if (!target) return <span key={j} className="md-mention">[[{explicitKind ? `${explicitKind}:` : ''}{id}]]</span>;
         return (
           <button key={j} className={`md-mention md-mention--${isRb ? 'rb' : 'node'}`}
             onClick={() => isRb ? onRunbookJump(id) : onNodeJump(id)}>
@@ -1440,7 +1445,7 @@ export function MonitoringSlot({ node, updateNode, aspect = 'infra' }: { node: a
 
 export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOpenInfraGallery, onOpenSoftwareGallery }) {
   const { t } = useTranslation();
-  const { NODES, EDGES, getOverride, setOverride, updateNode, renameNode, deleteEdge } = useSorack();
+  const { NODES, RUNBOOKS, EDGES, getOverride, setOverride, updateNode, renameNode, deleteEdge } = useSorack();
   const node = NODES[nodeId];
 
   // ★ All hooks must run unconditionally before any early return — otherwise
@@ -1856,6 +1861,10 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
             initialContent={rb.md ?? ''}
             previewRender={(md) => renderMarkdown(md, (id) => { onJumpNode(id); }, onJumpRunbook, NODES, RUNBOOKS)}
             onSave={(md) => updateRunbook(rb.id, { markdown: md })}
+            mentions={{
+              nodes: Object.values(NODES).map((n: any) => ({ id: n.id, label: n.name ?? n.id })),
+              runbooks: Object.values(RUNBOOKS).filter((r: any) => r.id !== rb.id).map((r: any) => ({ id: r.id, label: r.title ?? r.id })),
+            }}
           />
         </div>
       )}
