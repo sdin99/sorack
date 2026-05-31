@@ -107,5 +107,5 @@ spec:
         - name: src
           hostPath:
             # CHANGE THIS to where you cloned the repo on the cluster node.
-            path: /home/sdin99/projects/sorack
+            path: /home/youruser/projects/sorack
             type: Directory
