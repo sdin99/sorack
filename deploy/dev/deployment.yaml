@@ -63,6 +63,12 @@ spec:
               value: /workspace/.corepack
             - name: PATH
               value: /workspace/.pnpm-home:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            # Non-interactive marker. Without it, if `pnpm install` was ever
+            # run on the host (different libc → incompatible node_modules
+            # binaries), pnpm asks for confirmation before purging them and
+            # aborts in a TTY-less pod ("ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY").
+            - name: CI
+              value: "true"
             # Health probe cadence — matches the frontend inventory poll (5s)
             # so "checked Ns ago" stays small instead of climbing to ~30s.
             - name: SORACK_HEALTH_INTERVAL_MS
