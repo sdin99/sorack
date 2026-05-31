@@ -68,14 +68,17 @@ spec:
             - name: SORACK_HEALTH_INTERVAL_MS
               value: "5000"
           envFrom:
-            # Inject credentials and any optional adapter env (SORACK_*) from
-            # a Secret named `sorack-postgres-credentials`. Create it with
-            # whatever method you prefer (plain Secret / sealed-secrets /
-            # external-secrets / Infisical / etc) — see deploy/postgres/
-            # secret.example.yaml for the expected keys. Optional so the dev
-            # pod can start even before credentials land.
+            # Two Secrets, two concerns:
+            #   - sorack-db  : POSTGRES_USERNAME / POSTGRES_PASSWORD
+            #   - sorack-app : SORACK_AUTH_SECRET + optional adapter env
+            # See deploy/postgres/secret.example.yaml and
+            # deploy/secret.example.yaml for the expected keys. Both are
+            # optional so the pod can boot before credentials land.
             - secretRef:
-                name: sorack-postgres-credentials
+                name: sorack-db
+                optional: true
+            - secretRef:
+                name: sorack-app
                 optional: true
           resources:
             requests:

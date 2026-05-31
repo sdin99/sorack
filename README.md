@@ -49,34 +49,33 @@ of this repo and runs `pnpm dev` (Vite + tsx watch) inside.
 - Optional: ingress controller + cert-manager if you want HTTPS via an
   Ingress; otherwise port-forward works fine.
 
-### 1. Create the Secret
+### 1. Create the Secrets
 
-The api pod reads its config from a Kubernetes Secret named
-`sorack-postgres-credentials`. Copy the example and fill in real values:
+Two Secrets — concerns kept separate so DB and app config can rotate
+independently:
 
-```bash
-cp deploy/postgres/secret.example.yaml /tmp/sorack-secret.yaml
-$EDITOR /tmp/sorack-secret.yaml
-# minimum keys: POSTGRES_USERNAME, POSTGRES_PASSWORD, SORACK_AUTH_SECRET
-```
-
-Generate `SORACK_AUTH_SECRET` with:
-
-```bash
-openssl rand -base64 48
-```
-
-Create the namespace and apply the Secret (don't commit the filled-in
-version):
+| Secret      | Source                                  | Consumed by                 |
+| ----------- | --------------------------------------- | --------------------------- |
+| `sorack-db` | `deploy/postgres/secret.example.yaml`   | postgres statefulset + api  |
+| `sorack-app`| `deploy/secret.example.yaml`            | api only                    |
 
 ```bash
 kubectl apply -f deploy/dev/namespace.yaml
-kubectl apply -f /tmp/sorack-secret.yaml
+
+# Copy + fill in real values (don't commit the filled-in copies)
+cp deploy/postgres/secret.example.yaml /tmp/sorack-db.yaml
+cp deploy/secret.example.yaml          /tmp/sorack-app.yaml
+$EDITOR /tmp/sorack-db.yaml /tmp/sorack-app.yaml
+# sorack-db : POSTGRES_USERNAME / POSTGRES_PASSWORD
+# sorack-app: SORACK_AUTH_SECRET (openssl rand -base64 48), optional admin/proxmox/cors
+
+kubectl apply -f /tmp/sorack-db.yaml
+kubectl apply -f /tmp/sorack-app.yaml
 ```
 
-(Use sealed-secrets / external-secrets / Infisical instead of plain Secrets
-if you prefer — the pod just expects a Secret of that name in that
-namespace.)
+Use sealed-secrets / external-secrets / Infisical instead of plain Secrets
+if you prefer — the pod just expects Secrets of those names in that
+namespace.
 
 ### 2. Edit the deployment for your host
 

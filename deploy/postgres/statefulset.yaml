@@ -33,12 +33,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: sorack-postgres-credentials
+                  name: sorack-db
                   key: POSTGRES_USERNAME
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: sorack-postgres-credentials
+                  name: sorack-db
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: sorack
