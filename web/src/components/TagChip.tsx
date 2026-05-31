@@ -7,7 +7,7 @@
 // toggle the tag in/out of the active filter. Stage 1 doesn't pass onClick.
 
 import * as React from "react";
-import { tagColor } from "@/lib/tag-color";
+import { tagHue } from "@/lib/tag-color";
 
 export interface TagChipProps {
   value: string;
@@ -24,12 +24,8 @@ export interface TagChipProps {
 }
 
 export function TagChip({ value, onRemove, onClick, compact, active, className, title }: TagChipProps) {
-  const c = tagColor(value);
-  const style: React.CSSProperties = {
-    color: c.fg,
-    background: c.bg,
-    borderColor: c.border,
-  };
+  // CSS reads --tg-h and constructs HSL with theme-aware lightness.
+  const style = { "--tg-h": tagHue(value) } as React.CSSProperties;
   const cn = [
     "tag-chip",
     compact ? "tag-chip--compact" : "",

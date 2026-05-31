@@ -21,7 +21,7 @@ import { softwareForInfra, softwareIds } from "@/features/lab/node-detail-schema
 import { CardGallery, type CardItem } from "@/features/lab/CardGallery";
 import { SettingsView } from "@/features/settings/SettingsView";
 import { NodeIcon } from "@/components/icons/NodeIcon";
-import { tagColor } from "@/lib/tag-color";
+import { tagHue } from "@/lib/tag-color";
 import { TagChip } from "@/components/TagChip";
 import { Dropdown } from "@/components/Dropdown";
 import { useKeyboardShortcuts, isTypingEl } from "@/lib/use-keyboard-shortcuts";
@@ -602,17 +602,14 @@ function TreeItem({ id, depth, lastChain = [], NODES, getChildren, currentId, is
               to 2 per row. Outlined ring (not filled) so they read clearly
               apart from the solid status dot. Tooltip = tag value; full set
               + edit live in the detail panel. */}
-          {(node.tags ?? []).slice(0, 2).map((tag: string) => {
-            const c = tagColor(tag);
-            return (
-              <span
-                key={tag}
-                className="tag-dot"
-                style={{ borderColor: c.fg, background: c.bg }}
-                title={tag}
-              />
-            );
-          })}
+          {(node.tags ?? []).slice(0, 2).map((tag: string) => (
+            <span
+              key={tag}
+              className="tag-dot"
+              style={{ "--tg-h": tagHue(tag) } as React.CSSProperties}
+              title={tag}
+            />
+          ))}
           {node.meta?.maintenance ? (
             <span className="tree-dot tree-dot--maint" title="in maintenance" aria-label="in maintenance">⏸</span>
           ) : (
@@ -674,13 +671,10 @@ function FlatTreeRow({ node, currentId, onJump, onNodeContextMenu, selectedIds, 
       </span>
       <button className="tree-label" onClick={(e) => { e.stopPropagation(); handleRowClick(e); }}>
         <span className="tree-name">{node.name}</span>
-        {(node.tags ?? []).slice(0, 2).map((tag: string) => {
-          const c = tagColor(tag);
-          return (
-            <span key={tag} className="tag-dot"
-              style={{ borderColor: c.fg, background: c.bg }} title={tag} />
-          );
-        })}
+        {(node.tags ?? []).slice(0, 2).map((tag: string) => (
+          <span key={tag} className="tag-dot"
+            style={{ "--tg-h": tagHue(tag) } as React.CSSProperties} title={tag} />
+        ))}
         <span className="tree-dot" style={{ background: statusColor }} />
       </button>
       {tip.portal}
@@ -1155,12 +1149,11 @@ function SearchOverlay({
                   .filter(Boolean)
                   .slice(0, 3)
                   .map((tg: string) => {
-                    const c = tagColor(tg);
                     return (
                       <span
                         key={tg}
                         className="tag-dot"
-                        style={{ borderColor: c.fg, background: c.bg }}
+                        style={{ "--tg-h": tagHue(tg) } as React.CSSProperties}
                         title={tg}
                       />
                     );

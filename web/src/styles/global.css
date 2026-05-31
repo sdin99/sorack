@@ -429,7 +429,18 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    ring's color identifies the tag value via hash, tooltip carries the
    full string. Used in the sidebar tree AND search result rows so tags
    read the same wherever they appear. */
-.tag-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid; background: transparent; box-sizing: border-box; }
+/* Hue comes from the inline --tg-h CSS var (set by callers from lib/tag-color.tagHue).
+   Lightness/saturation here are tuned for dark; overridden in light mode below. */
+.tag-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  border: 1.5px solid hsl(var(--tg-h) 60% 72%);
+  background: hsla(var(--tg-h) 50% 50% / 0.14);
+  box-sizing: border-box;
+}
+:root[data-theme="light"] .tag-dot {
+  border-color: hsl(var(--tg-h) 55% 38%);
+  background: hsla(var(--tg-h) 60% 50% / 0.18);
+}
 .tree-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
 
 .drawer-section { display: flex; flex-direction: column; gap: 6px; }
@@ -2203,16 +2214,27 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    the push-to-bottom behaviour of the stats card. */
 .drawer-body > section:last-of-type { margin-top: auto; }
 
-/* ─── Tag chip — reusable color-by-hash label. Inline color/bg/border come
-   from lib/tag-color so the same value renders the same color everywhere. */
+/* ─── Tag chip — reusable color-by-hash label. Hue comes from inline --tg-h
+   (set by TagChip from lib/tag-color.tagHue). Theme picks its own
+   saturation/lightness here so the same hue stays legible in dark+light. */
 .tag-chip {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 1px 6px;
   font-family: var(--mono); font-size: 10px;
-  border: 1px solid; border-radius: 999px;
+  border: 1px solid hsla(var(--tg-h) 50% 60% / 0.38);
+  border-radius: 999px;
+  background: hsla(var(--tg-h) 50% 50% / 0.14);
+  color: hsl(var(--tg-h) 60% 72%);
   white-space: nowrap;
   line-height: 1.4;
   user-select: none;
+}
+:root[data-theme="light"] .tag-chip {
+  /* Darker text + slightly stronger fill/border so chips read clearly on
+     near-white surfaces. */
+  color: hsl(var(--tg-h) 65% 28%);
+  background: hsla(var(--tg-h) 65% 50% / 0.12);
+  border-color: hsla(var(--tg-h) 55% 40% / 0.50);
 }
 .tag-chip--compact { padding: 0 5px; font-size: 9px; gap: 2px; }
 .tag-chip--clickable { cursor: pointer; transition: filter 0.1s; }

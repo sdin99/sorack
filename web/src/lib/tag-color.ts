@@ -1,10 +1,12 @@
-// Deterministic per-tag color. Hashes the entire string (so "env:prod" stays
-// the same color across every node it appears on) into an HSL hue, then locks
-// saturation/lightness for legibility. Caller spreads the returned values as
-// inline styles on the chip.
+// Deterministic per-tag hue. Hashes the entire string (so "env:prod" stays
+// the same color across every node it appears on) into an HSL hue.
 //
-// Same value → same color. Different values → different hues, evenly spread
+// Same value → same hue. Different values → different hues, evenly spread
 // since the hash is well-distributed. No palette table to maintain.
+//
+// Caller passes the hue as a CSS variable (`--tg-h`) on the chip/dot element;
+// the actual fg/bg/border come from CSS so each theme picks its own
+// saturation/lightness tuning. See `.tag-chip` / `.tag-dot` in global.css.
 
 const HASH_INIT = 5381;
 
@@ -17,23 +19,8 @@ function djb2(s: string): number {
   return Math.abs(h);
 }
 
-export interface TagColor {
-  fg: string;
-  bg: string;
-  border: string;
-}
-
-// Tuned for dark mode (sorack's default). On light mode the bg+border alphas
-// still read okay; fg loses some contrast but stays legible since chip text
-// is short. If light-mode contrast becomes a complaint, swap to a
-// CSS light-dark() variant.
-export function tagColor(value: string): TagColor {
-  const hue = djb2(value) % 360;
-  return {
-    fg: `hsl(${hue}, 60%, 72%)`,
-    bg: `hsla(${hue}, 50%, 50%, 0.14)`,
-    border: `hsla(${hue}, 50%, 60%, 0.38)`,
-  };
+export function tagHue(value: string): number {
+  return djb2(value) % 360;
 }
 
 // Parse a hybrid tag into its key/value parts. Bare label ("wireguard") →
