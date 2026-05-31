@@ -95,6 +95,11 @@ async function runProbe(node: NodeRow, cfg: ProbeConfig): Promise<{ record: Heal
 // observed.* atomic per node.
 async function probeNode(node: NodeRow): Promise<void> {
   const meta = (node.meta as Record<string, unknown>) ?? {};
+  // Maintenance flag — operator-set pause. Skip probing entirely so
+  // observed.health and node.status reflect the last known state and don't
+  // accumulate misleading "err" readings while a host is intentionally
+  // down. Resuming maintenance lets the next collector tick refresh.
+  if (meta.maintenance) return;
   const swProbes = (meta.softwareProbes ?? {}) as Record<string, unknown>;
 
   const infraTask = isProbeConfig(meta.probe)

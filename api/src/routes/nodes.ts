@@ -80,18 +80,29 @@ nodesRoutes.patch("/:id", async (c) => {
     }
     // Removing the probe (probe: null) means "stop monitoring this node" —
     // also clear its collected data so stale health/k8s don't linger on a node
-    // the collector no longer touches.
+    // the collector no longer touches. BUT preserve observed.software: the
+    // infra probe and the per-software probes are independent aspects, and
+    // stopping infra monitoring shouldn't wipe the software readings the
+    // collector is still updating. (Previously this wiped everything.)
     const removingProbe = "probe" in incRest && incRest.probe == null;
-    // B-3: if a software probe was just removed, also clear its observed bag
-    // (parallel to removingProbe) so the StatusLine doesn't keep showing a
-    // stale reading from a software the operator just unmonitored.
-    let mergedObserved: Record<string, unknown> = removingProbe
-      ? {}
-      : ((cur.observed ?? {}) as Record<string, unknown>);
-    if (!removingProbe && removedSwIds.length > 0 && mergedObserved.software) {
+    let mergedObserved: Record<string, unknown> = (cur.observed ?? {}) as Record<string, unknown>;
+    if (removingProbe) {
+      const sw = mergedObserved.software;
+      mergedObserved = sw ? { software: sw } : {};
+    }
+    // B-3: if software probes were just removed, drop their per-software
+    // observed bags too so the StatusLine doesn't keep showing a stale
+    // reading from a software the operator just unmonitored. Also drop the
+    // empty `observed.software` key if no software bag survives.
+    if (removedSwIds.length > 0 && mergedObserved.software) {
       const obsSw = { ...(mergedObserved.software as Record<string, unknown>) };
       for (const sid of removedSwIds) delete obsSw[sid];
-      mergedObserved = { ...mergedObserved, software: obsSw };
+      if (Object.keys(obsSw).length === 0) {
+        mergedObserved = { ...mergedObserved };
+        delete mergedObserved.software;
+      } else {
+        mergedObserved = { ...mergedObserved, software: obsSw };
+      }
     }
     const mergedMeta: Record<string, unknown> = {
       ...cur, // carries the fresh observed bag

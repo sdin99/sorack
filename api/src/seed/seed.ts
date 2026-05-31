@@ -17,7 +17,7 @@ const seedNodes = [
     id: "router",
     type: "router",
     name: "Edge Router",
-    status: "ok" as const,
+    status: "unknown" as const,
     meta: {
       manual: {
         vendor: "Sample Vendor",
@@ -31,7 +31,7 @@ const seedNodes = [
     type: "host",
     parentId: "router",
     name: "Hypervisor Host",
-    status: "ok" as const,
+    status: "unknown" as const,
     meta: { manual: { hostname: "hv-01", ip: "10.1.1.10", role: "hypervisor" } },
   },
   {
@@ -39,7 +39,7 @@ const seedNodes = [
     type: "host",
     parentId: "router",
     name: "Storage NAS",
-    status: "ok" as const,
+    status: "unknown" as const,
     meta: { manual: { ip: "10.1.1.20", role: "storage" } },
   },
   {
@@ -47,7 +47,7 @@ const seedNodes = [
     type: "vm",
     parentId: "hypervisor",
     name: "control-plane",
-    status: "ok" as const,
+    status: "unknown" as const,
     meta: { manual: { vmId: 100, ip: "10.1.1.30" } },
   },
   {
@@ -55,7 +55,7 @@ const seedNodes = [
     type: "k8s_cluster",
     parentId: "vm-control-plane",
     name: "K8s Cluster",
-    status: "ok" as const,
+    status: "unknown" as const,
     meta: {
       manual: {
         cni: "Calico",
@@ -64,8 +64,8 @@ const seedNodes = [
       },
     },
   },
-  { id: "ns-app",        type: "k8s_namespace", parentId: "k8s-cluster", name: "app",        status: "ok" as const, meta: {} },
-  { id: "ns-monitoring", type: "k8s_namespace", parentId: "k8s-cluster", name: "monitoring", status: "ok" as const, meta: {} },
+  { id: "ns-app",        type: "k8s_namespace", parentId: "k8s-cluster", name: "app",        status: "unknown" as const, meta: {} },
+  { id: "ns-monitoring", type: "k8s_namespace", parentId: "k8s-cluster", name: "monitoring", status: "unknown" as const, meta: {} },
 ];
 
 const seedRunbooks = [
