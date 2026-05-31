@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.0",
+    "chokidar": "^5.0.0",
     "drizzle-orm": "^0.44.0",
+    "gray-matter": "^4.0.3",
     "hono": "^4.10.0",
     "postgres": "^3.4.5"
   },

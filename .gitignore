@@ -38,3 +38,9 @@ Thumbs.db
 
 design/
 docs/
+
+# user-data: runbook .md files (SORACK_RUNBOOKS_DIR default in dev pod).
+# Content is operator-owned, not part of the codebase. Leading slash so the
+# pattern only matches the repo-root `runbooks/`, not the `api/src/runbooks/`
+# code module.
+/runbooks/

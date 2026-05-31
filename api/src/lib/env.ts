@@ -40,6 +40,11 @@ export const env = {
   HEALTH_ENABLED: (process.env.SORACK_HEALTH_ENABLED ?? "true") !== "false",
   HEALTH_INTERVAL_MS: Number(process.env.SORACK_HEALTH_INTERVAL_MS ?? 30_000),
   HEALTH_TIMEOUT_MS: Number(process.env.SORACK_HEALTH_TIMEOUT_MS ?? 5_000),
+
+  // ── runbooks ── file is the source of truth for content, DB is meta cache.
+  // Created at startup if absent. Override per deployment (k8s PV mount,
+  // docker -v, or local dir bind).
+  RUNBOOKS_DIR: process.env.SORACK_RUNBOOKS_DIR ?? "/runbooks",
 };
 
 export const DATABASE_URL = `postgres://${env.POSTGRES_USERNAME}:${encodeURIComponent(

@@ -6,6 +6,7 @@ import { env } from "./lib/env";
 import { ensureAdminUser } from "./lib/bootstrap";
 import { runMigrations } from "./db/migrate";
 import { startCollector, stopCollector } from "./health/collector";
+import { initialScan, startWatcher, stopWatcher } from "./runbooks/sync";
 import { requireAuth } from "./middleware/auth";
 import { authRoutes } from "./routes/auth";
 import { nodesRoutes } from "./routes/nodes";
@@ -67,17 +68,22 @@ const port = env.PORT;
 await runMigrations();
 // Create the admin user on first boot before accepting traffic.
 await ensureAdminUser();
+// Reconcile runbook files ↔ DB before traffic so GET /api/runbooks reflects
+// disk state from the first request (skipped silently if the dir is empty).
+await initialScan().catch((e) => console.warn("[runbooks] initial scan failed:", e));
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`[api] listening on :${info.port}`);
   startCollector(); // begin health polling; no-op if SORACK_HEALTH_ENABLED=false
+  startWatcher(); // chokidar — external edits to RUNBOOKS_DIR flow into DB
 });
 
 // Graceful shutdown: stop the interval so a tsx-watch restart or a k8s pod
 // termination doesn't leave a dangling timer / in-flight sweep.
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.once(sig, () => {
+  process.once(sig, async () => {
     stopCollector();
+    await stopWatcher();
     process.exit(0);
   });
 }

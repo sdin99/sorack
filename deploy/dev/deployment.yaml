@@ -70,6 +70,11 @@ spec:
             # so "checked Ns ago" stays small instead of climbing to ~30s.
             - name: SORACK_HEALTH_INTERVAL_MS
               value: "5000"
+            # Runbook .md files live under the hostPath so they show up in the
+            # operator's IDE and any AI agent can drop new ones in. Switch to
+            # a PV mount path for production.
+            - name: SORACK_RUNBOOKS_DIR
+              value: "/workspace/runbooks"
           envFrom:
             # Two Secrets, two concerns:
             #   - sorack-db  : POSTGRES_USERNAME / POSTGRES_PASSWORD
