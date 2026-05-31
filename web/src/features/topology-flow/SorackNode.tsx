@@ -3,8 +3,7 @@
 //   │ [icon]  KIND          •    │  <- kind label + status dot
 //   │ Name                       │
 //   └────────────────────────────┘
-// Tokens come from styles.css so any theme (dark-modern/brutal-mono/light-engineer)
-// stays consistent.
+// Tokens come from styles.css so any theme (dark/light) stays consistent.
 // @ts-nocheck — Phase 3 POC.
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";

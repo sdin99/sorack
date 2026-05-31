@@ -25,15 +25,16 @@
 
   --accent:       #58a6ff;
   --accent-soft:  #1b2c44;
+  --on-accent:    #04121f;    /* text/icon on accent / ok / err backgrounds */
   --ok:           #00e58e;
   --warn:         #ffcc00;
   --err:          #ff5c5c;
 
-  --vlan-core-fg: #aab4c0; --vlan-core-bg: rgba(170,180,192,0.10); --vlan-core-bd: rgba(170,180,192,0.30);
-  --vlan-mgmt-fg: #5ea0e6; --vlan-mgmt-bg: rgba(94,160,230,0.12);  --vlan-mgmt-bd: rgba(94,160,230,0.36);
-  --vlan-srv-fg:  #00e58e; --vlan-srv-bg:  rgba(0,229,142,0.12);   --vlan-srv-bd:  rgba(0,229,142,0.36);
-  --vlan-iot-fg:  #ffcc00; --vlan-iot-bg:  rgba(255,204,0,0.12);   --vlan-iot-bd:  rgba(255,204,0,0.36);
-  --vlan-stor-fg: #b58cff; --vlan-stor-bg: rgba(181,140,255,0.12); --vlan-stor-bd: rgba(181,140,255,0.36);
+  /* Elevation. Theme-aware so light mode can swap to a softer neutral. */
+  --scrim:      rgba(0,0,0,0.55);
+  --shadow-sm:  0 4px 12px rgba(0,0,0,0.25);
+  --shadow-md:  0 16px 40px rgba(0,0,0,0.40);
+  --shadow-lg:  0 30px 80px rgba(0,0,0,0.55);
 
   --radius-sm: 4px;
   --radius:    8px;
@@ -51,7 +52,7 @@
   --safe-r: env(safe-area-inset-right, 0px);
 }
 
-:root[data-mood="light-engineer"] {
+:root[data-theme="light"] {
   --bg:           #f7f7f4;
   --surface-1:    #ffffff;
   --surface-2:    #ffffff;
@@ -66,14 +67,15 @@
   --fg-4: #9a9a9a;
   --accent:       #2058c8;
   --accent-soft:  #e0ebff;
+  --on-accent:    #ffffff;
   --ok:           #1f8a5b;
   --warn:         #c08a2e;
   --err:          #b14a3a;
-  --vlan-core-fg: #4a4a4a; --vlan-core-bg: rgba(74,74,74,0.08);   --vlan-core-bd: rgba(74,74,74,0.30);
-  --vlan-mgmt-fg: #2058c8; --vlan-mgmt-bg: rgba(32,88,200,0.08);  --vlan-mgmt-bd: rgba(32,88,200,0.35);
-  --vlan-srv-fg:  #1f8a5b; --vlan-srv-bg:  rgba(31,138,91,0.10);  --vlan-srv-bd:  rgba(31,138,91,0.40);
-  --vlan-iot-fg:  #b1741c; --vlan-iot-bg:  rgba(192,138,46,0.10); --vlan-iot-bd:  rgba(192,138,46,0.40);
-  --vlan-stor-fg: #7a4eb3; --vlan-stor-bg: rgba(122,78,179,0.10); --vlan-stor-bd: rgba(122,78,179,0.38);
+  /* Lighter, less inky shadows for the paper-like light surface. */
+  --scrim:      rgba(30,30,30,0.32);
+  --shadow-sm:  0 4px 12px rgba(20,20,20,0.10);
+  --shadow-md:  0 12px 32px rgba(20,20,20,0.14);
+  --shadow-lg:  0 24px 64px rgba(20,20,20,0.18);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -255,7 +257,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 
 /* ───── Drawer (left, mobile) ───── */
 .drawer-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  position: fixed; inset: 0; background: var(--scrim);
   z-index: 50; opacity: 0; pointer-events: none; transition: opacity 0.2s;
 }
 .drawer-backdrop--open { opacity: 1; pointer-events: auto; }
@@ -389,7 +391,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   white-space: nowrap;
   pointer-events: none;
   z-index: 10000;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-md);
 }
 /* The icon button doubles as the type-icon AND (for parent nodes) the
    expand toggle: icon by default, chevron on hover. Leaf nodes are just the
@@ -462,7 +464,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 
 /* ───── Bottom Sheet (mobile, transforms to side panel on desktop) ───── */
 .sheet-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  position: fixed; inset: 0; background: var(--scrim);
   z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.2s;
 }
 .sheet-backdrop--show { opacity: 1; pointer-events: auto; }
@@ -476,7 +478,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   transform: translateY(100%);
   transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
   display: flex; flex-direction: column;
-  box-shadow: 0 -20px 50px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-md);
   /* Sheet always occupies full viewport height so 'full' snap reaches the
      top regardless of how tall the content actually is. Short content
      leaves the bottom blank inside the scrollable body. dvh tracks the
@@ -563,7 +565,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-md);
   padding: 8px;
   min-width: 220px;
 }
@@ -660,7 +662,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 .nd-sw-kebab-menu button {
@@ -966,12 +968,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nd-addfield-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .nd-addfield-form .spec-v-input { flex: 1 1 90px; min-width: 0; }
 .nd-addfield-btn { font-family: var(--mono); font-size: 11px; color: var(--fg-3); border: 1px solid var(--border); border-radius: 3px; padding: 4px 10px; min-width: 0; min-height: 0; }
-.nd-addfield-btn--save { background: var(--accent); color: #04121f; font-weight: 600; border-color: var(--accent); }
+.nd-addfield-btn--save { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); }
 /* Brief post-save state (~1.8s) — button flips to the ok color so the user
    sees the write landed. Disabled while showing so a second click can't
    re-fire the mutation. */
 .nd-addfield-btn--saved,
-.nd-addfield-btn--saved:disabled { background: var(--ok); color: #04121f; border-color: var(--ok); opacity: 1; cursor: default; }
+.nd-addfield-btn--saved:disabled { background: var(--ok); color: var(--on-accent); border-color: var(--ok); opacity: 1; cursor: default; }
 
 /* k8s workload list (meta.observed.k8s.workloads). Own grid so the pod name
    gets the flex column (the .nd-child grid reserves a leading icon slot that
@@ -1083,7 +1085,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   padding: 32px 28px 28px;
-  box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 1px 0 color-mix(in oklab, var(--fg-1) 6%, transparent) inset;
+  box-shadow: var(--shadow-lg), 0 1px 0 color-mix(in oklab, var(--fg-1) 6%, transparent) inset;
 }
 
 .login-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 26px; }
@@ -1125,7 +1127,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 }
 .login-submit {
   width: 100%; min-height: 46px; margin-top: 20px;
-  background: var(--accent); color: #04121f;
+  background: var(--accent); color: var(--on-accent);
   border-radius: var(--radius); font-weight: 700; font-size: 14.5px;
   letter-spacing: 0.01em;
   transition: filter 0.12s, opacity 0.12s;
@@ -1251,7 +1253,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   font-size: 12.5px; color: var(--fg-2);
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1);
 }
-.settings-btn--primary { background: var(--accent); color: #04121f; border-color: var(--accent); font-weight: 600; }
+.settings-btn--primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 .settings-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
 .settings-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .settings-signout {
@@ -1403,12 +1405,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .nf-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--fg-1); }
 .nf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .nf-btn--primary {
-  background: var(--accent); color: #04121f;
+  background: var(--accent); color: var(--on-accent);
   border-color: var(--accent); font-weight: 600;
 }
 .nf-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
 .nf-btn--danger {
-  background: var(--err); color: #04121f;
+  background: var(--err); color: var(--on-accent);
   border-color: var(--err); font-weight: 600;
 }
 .nf-btn--danger:hover:not(:disabled) { filter: brightness(1.1); }
@@ -1444,7 +1446,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 }
 
 /* ───── Action menu (right-click / sheet kebab) ───────────────────── */
-.action-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,0.35); }
+.action-backdrop { position: fixed; inset: 0; z-index: 70; background: var(--scrim); }
 /* A positioned menu (right-click / kebab) is a popover, not a modal — don't
    dim the map behind it, so the node being acted on stays visible. The
    centered variant (mobile, no anchor) keeps the dim for modal emphasis. */
@@ -1455,8 +1457,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   border-radius: var(--radius);
   box-shadow:
     0 1px 0 color-mix(in oklab, var(--fg-1) 6%, transparent) inset,
-    0 16px 40px rgba(0,0,0,0.55),
-    0 4px 12px rgba(0,0,0,0.35);
+    var(--shadow-md);
   display: flex; flex-direction: column;
   z-index: 71;
   min-width: 220px;
@@ -1523,7 +1524,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   border: 1px solid var(--border-strong);
   color: var(--fg-2);
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  box-shadow: var(--shadow-sm);
 }
 .sorack-edge-label--depends { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 45%, var(--border-strong)); }
 .sorack-edge-label--mounts  { color: var(--ok);     border-color: color-mix(in oklab, var(--ok) 45%, var(--border-strong)); }
@@ -1544,7 +1545,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 /* ───── Confirm dialog ─────────────────────────────────────────────── */
 .confirm-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--scrim);
   display: flex; align-items: center; justify-content: center;
   z-index: 80;
   padding: 16px;
@@ -1555,7 +1556,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-lg);
   padding: 20px 22px;
   display: flex; flex-direction: column; gap: 12px;
 }
@@ -1798,7 +1799,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 
   /* Search modal: centered, smaller */
   .fs-overlay--search {
-    background: rgba(0,0,0,0.55);
+    background: var(--scrim);
     align-items: flex-start; justify-content: center;
     padding: 100px 0 0 0; display: flex; flex-direction: column;
     pointer-events: auto;
@@ -1821,7 +1822,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
     inset: var(--topbar-h) 12px auto auto;
     width: 420px; height: fit-content; max-height: 70vh;
     background: var(--surface-1); border: 1px solid var(--border-strong);
-    border-radius: var(--radius); box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    border-radius: var(--radius); box-shadow: var(--shadow-lg);
   }
   .fs-overlay--alerts .fs-head { background: var(--surface-1); border-radius: var(--radius) var(--radius) 0 0; }
 
@@ -1841,7 +1842,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
    (multi-toggle, stays open — P1b-2). */
 .gallery-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--scrim);
   display: flex; align-items: center; justify-content: center;
   z-index: 80;
   padding: 16px;
@@ -1858,7 +1859,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -2274,7 +2275,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  box-shadow: var(--shadow-sm);
   padding: 4px;
   max-height: 220px; overflow-y: auto;
   z-index: 1500;
@@ -2412,7 +2413,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-md);
   z-index: 200;
   font-family: var(--sans);
   font-size: 12px;
@@ -2522,7 +2523,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-sm);
   padding: 4px;
   max-height: 280px; overflow-y: auto;
   z-index: 9999;

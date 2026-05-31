@@ -1458,7 +1458,7 @@ export function App() {
   useEffectA(() => { localStorage.setItem('sorack-col-r', String(colR)); }, [colR]);
 
   useEffectA(() => {
-    document.documentElement.setAttribute('data-mood', theme === 'light' ? 'light-engineer' : 'dark-modern');
+    document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('sorack-theme', theme);
   }, [theme]);
 
