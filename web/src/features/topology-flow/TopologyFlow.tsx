@@ -350,17 +350,27 @@ export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, o
 
   const edges = useMemo(() => [...treeEdges, ...dbEdges], [treeEdges, dbEdges]);
 
-  // While dragging a node, hide ONLY its parent tree edge — the reparent
-  // gesture is "find a new parent", so the old parent link trailing the
-  // cursor is noise. Everything else stays:
-  //   - child tree edges (source === draggingId) move with the subtree,
-  //   - relationship edges (depends/mounts/routes) are logical, not
-  //     positional, so they follow the node like any other connection.
-  // (The earlier `source !== draggingId` filter was the bug that made a
-  //  dragged node's child links vanish.)
+  // While dragging, hide parent tree edges of every "top-level" node in the
+  // drag — i.e. members whose parent isn't also being dragged. For a single
+  // drag that's just the dragged node. For a multi-selection drag it's each
+  // selected node whose parent isn't in the selection; selection-internal
+  // parent edges stay visible because they move with the group.
+  // Everything else stays: child tree edges (source in group) move with the
+  // subtree; relationship edges (depends/mounts/routes) are logical, not
+  // positional.
+  const hiddenParentTargets = useMemo(() => {
+    if (!draggingId) return null;
+    const group = selectedIds?.has(draggingId) ? selectedIds : new Set([draggingId]);
+    const tops = new Set<string>();
+    for (const id of group) {
+      const pid = (NODES as any)[id]?.parentId ?? null;
+      if (!pid || !group.has(pid)) tops.add(id);
+    }
+    return tops;
+  }, [draggingId, selectedIds, NODES]);
   const visibleEdges = useMemo(() => {
-    const base = draggingId
-      ? edges.filter((e) => !((e.data as any)?.sorackType === "contains" && e.target === draggingId))
+    const base = hiddenParentTargets
+      ? edges.filter((e) => !((e.data as any)?.sorackType === "contains" && hiddenParentTargets.has(e.target as string)))
       : edges;
     if (!isDimmed) return base;
     // Dim edges whose either endpoint is dimmed by the tag filter. Caps the
@@ -373,7 +383,7 @@ export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, o
       const curOpacity = typeof curStyle.opacity === "number" ? curStyle.opacity : 1;
       return { ...e, style: { ...curStyle, opacity: Math.min(curOpacity, 0.12) } };
     });
-  }, [edges, draggingId, isDimmed]);
+  }, [edges, hiddenParentTargets, isDimmed]);
 
   // Local position state (RF v12 controlled nodes need onNodesChange to
   // move visually). Resets only when layoutKey changes — i.e. when a
