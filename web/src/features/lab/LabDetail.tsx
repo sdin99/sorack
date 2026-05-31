@@ -1778,13 +1778,13 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
 
       <div className={`rb-filters-wrap ${showTree || !rb ? '' : 'rb-filters-wrap--hidden-on-mobile'}`} style={showTree || !rb ? {} : { display: undefined }}>
         <div className="rb-filters">
-          {['all', 'SOP', '작업계획서'].map(c => (
+          {['all', 'task', 'sop'].map(c => (
             <button key={c} className={`rb-filter-btn ${filterCat === c ? 'rb-filter-btn--on' : ''}`} onClick={() => setFilterCat(c)}>
               {c === 'all' ? t('runbook.filter.all') : c}
             </button>
           ))}
           <span style={{ width: 8 }} />
-          {['planned', 'in-progress', 'completed'].map(s => (
+          {['planned', 'in_progress', 'completed', 'rolled_back'].map(s => (
             <button key={s} className={`rb-filter-btn ${filterState === s ? 'rb-filter-btn--on' : ''}`} onClick={() => setFilterState(filterState === s ? 'all' : s)}>
               {t(`runbook.state.${s}`, { defaultValue: s })}
             </button>
@@ -1812,7 +1812,7 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
                   className={`rb-tree-item ${r.id === runbookId ? 'rb-tree-item--active' : ''}`}
                   onClick={() => { onJumpRunbook(r.id); setShowTree(false); }}
                 >
-                  <span className="rb-tree-dot" style={{ background: r.state === 'in-progress' ? 'var(--warn)' : r.state === 'completed' ? 'var(--ok)' : r.state === 'rollback' ? 'var(--err)' : 'var(--fg-4)' }} />
+                  <span className="rb-tree-dot" style={{ background: r.state === 'in_progress' ? 'var(--warn)' : r.state === 'completed' ? 'var(--ok)' : r.state === 'rolled_back' ? 'var(--err)' : 'var(--fg-4)' }} />
                   <span className="rb-tree-title">{r.title}</span>
                   <span className="rb-tree-date">{r.updated.slice(5)}</span>
                 </button>

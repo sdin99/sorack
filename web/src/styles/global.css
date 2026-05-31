@@ -1619,9 +1619,9 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-meta-cat { font-family: var(--mono); font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.1em; }
 .rb-meta-state { font-family: var(--mono); font-size: 10.5px; padding: 2px 6px; border-radius: 3px; }
 .rb-meta-state--planned     { background: var(--surface-3); color: var(--fg-2); }
-.rb-meta-state--in-progress { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); }
+.rb-meta-state--in_progress { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); }
 .rb-meta-state--completed   { background: color-mix(in oklab, var(--ok) 18%, transparent); color: var(--ok); }
-.rb-meta-state--rollback    { background: color-mix(in oklab, var(--err) 20%, transparent); color: var(--err); }
+.rb-meta-state--rolled_back { background: color-mix(in oklab, var(--err) 20%, transparent); color: var(--err); }
 .rb-meta-date { font-family: var(--mono); font-size: 11px; color: var(--fg-3); }
 .rb-h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 12px 0; line-height: 1.2; }
 .rb-tags { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
