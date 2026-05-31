@@ -10,6 +10,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { NodeIcon } from "@/components/icons/NodeIcon";
 import { SoftwareIcon, hasSoftwareIcon } from "@/components/icons/SoftwareIcon";
 import { SOFTWARE } from "@/features/lab/node-detail-schema";
+import { tagHue } from "@/lib/tag-color";
 
 // Schema `type` → NodeIcon `kind`. New schema types map onto the closest
 // existing icon for now; bespoke icons can be added later.
@@ -60,7 +61,7 @@ const HANDLE_STYLE = {
 };
 
 export function SorackNode({ data, selected }: NodeProps) {
-  const { name, kind, status, isRoot, isLeaf, isDropTarget, iconKind: iconKindOverride, software, dimmed, maintenance } = data as {
+  const { name, kind, status, isRoot, isLeaf, isDropTarget, iconKind: iconKindOverride, software, tags, dimmed, maintenance } = data as {
     name: string;
     kind: string;
     status: string;
@@ -69,6 +70,7 @@ export function SorackNode({ data, selected }: NodeProps) {
     isDropTarget?: boolean;
     iconKind?: string;
     software?: string[];
+    tags?: string[];
     dimmed?: boolean;
     maintenance?: boolean;
   };
@@ -195,33 +197,21 @@ export function SorackNode({ data, selected }: NodeProps) {
             )}
           </span>
         )}
-        {maintenance ? (
-          <span
-            title="in maintenance"
-            style={{
-              marginLeft: "auto",
-              width: 12,
-              height: 12,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--fg-3)",
-              fontSize: 10,
-              lineHeight: 1,
-            }}
-          >
-            ⏸
+        {/* Tag dots — right-aligned, up to 3. Status info already lives on
+            the left stripe (and maintenance overrides it with a diagonal
+            pattern), so this slot is purely for tags. Empty when the node
+            has none. */}
+        {tags && tags.length > 0 && (
+          <span style={{ marginLeft: "auto", display: "inline-flex", gap: 3, alignItems: "center" }}>
+            {tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="tag-dot"
+                style={{ ["--tg-h" as any]: tagHue(tag) }}
+                title={tag}
+              />
+            ))}
           </span>
-        ) : (
-          <span
-            style={{
-              marginLeft: "auto",
-              width: 6,
-              height: 6,
-              borderRadius: 3,
-              background: statusColor,
-            }}
-          />
         )}
       </div>
       <div

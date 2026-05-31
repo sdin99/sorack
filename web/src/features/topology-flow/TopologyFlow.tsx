@@ -416,6 +416,7 @@ export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, o
           kind: live?.kind ?? live?.type ?? n.data.kind,
           iconKind: live ? iconForNode(live) : n.data.iconKind,
           software: live ? softwareIds(live) : n.data.software,
+          tags: (live?.tags as string[] | undefined) ?? n.data.tags ?? [],
           isDropTarget: n.id === dropTargetId,
           dimmed: isDimmed ? isDimmed(n.id) : false,
           maintenance: !!live?.meta?.maintenance,
