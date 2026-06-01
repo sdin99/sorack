@@ -14,6 +14,7 @@ import { edgesRoutes } from "./routes/edges";
 import { runbooksRoutes } from "./routes/runbooks";
 import { alertsRoutes } from "./routes/alerts";
 import { inventoryRoutes } from "./routes/inventory";
+import { eventsRoutes } from "./routes/events";
 
 const app = new Hono();
 
@@ -58,6 +59,7 @@ app.route("/api/edges", edgesRoutes);
 app.route("/api/runbooks", runbooksRoutes);
 app.route("/api/alerts", alertsRoutes);
 app.route("/api/inventory", inventoryRoutes);
+app.route("/api/events", eventsRoutes);
 
 const port = env.PORT;
 

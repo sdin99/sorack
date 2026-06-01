@@ -16,6 +16,7 @@ import { runbooks } from "../db/schema";
 import { env } from "../lib/env";
 import { loadFile, idFromPath, defaultMeta, type RunbookRow, type RunbookMeta } from "./loader";
 import { writeRow, pathForId } from "./writer";
+import { emitEvent } from "../events";
 
 let watcher: FSWatcher | null = null;
 
@@ -51,6 +52,7 @@ async function loadAndUpsert(filePath: string): Promise<void> {
   try {
     const row = await loadFile(filePath);
     await upsertRow(row);
+    emitEvent({ type: "runbook.changed", id: row.id });
   } catch (e) {
     console.warn(`[runbooks] failed to sync ${filePath}:`, (e as Error).message);
   }
@@ -58,6 +60,7 @@ async function loadAndUpsert(filePath: string): Promise<void> {
 
 async function deleteById(id: string): Promise<void> {
   await db.delete(runbooks).where(eq(runbooks.id, id));
+  emitEvent({ type: "runbook.deleted", id });
 }
 
 async function fileExists(p: string): Promise<boolean> {
@@ -115,14 +118,30 @@ export function startWatcher(): void {
     ignoreInitial: true,
     persistent: true,
     depth: 0,
+    // inotify on k8s hostPath / NFS is unreliable (events drop silently),
+    // so fall back to polling. 500ms is the sweet spot — fast enough that
+    // AI / external edits feel live, cheap enough for ~hundreds of files.
+    usePolling: true,
+    interval: 500,
+    binaryInterval: 1000,
+    // awaitWriteFinish off: runbook files are small text and our writer
+    // already uses an atomic tmp→rename, so chunked-write reads aren't a
+    // realistic risk; the extra 200ms it adds is the bulk of perceived lag.
   });
-  watcher.on("add", (p) => p.endsWith(".md") && loadAndUpsert(p));
-  watcher.on("change", (p) => p.endsWith(".md") && loadAndUpsert(p));
+  watcher.on("add", (p) => {
+    console.log("[runbooks] add:", p);
+    if (p.endsWith(".md")) loadAndUpsert(p);
+  });
+  watcher.on("change", (p) => {
+    console.log("[runbooks] change:", p);
+    if (p.endsWith(".md")) loadAndUpsert(p);
+  });
   watcher.on("unlink", (p) => {
+    console.log("[runbooks] unlink:", p);
     if (p.endsWith(".md")) deleteById(idFromPath(p));
   });
   watcher.on("error", (e) => console.warn("[runbooks] watcher error:", e));
-  console.log(`[runbooks] watching ${dir}`);
+  console.log(`[runbooks] watching ${dir} (polling)`);
 }
 
 export async function stopWatcher(): Promise<void> {

@@ -2,7 +2,7 @@
 // React Query handles fetching / caching / refetching; description overrides
 // are kept client-side (localStorage) via data.tsx.
 // @ts-nocheck — same scope as the design components it serves.
-import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   useQuery,
   useMutation,
@@ -192,6 +192,27 @@ function DataInner({ children }: { children: ReactNode }) {
     onSuccess: invalidateRunbooks,
   });
   const deleteRunbookM = useMutation({ mutationFn: deleteRunbook, onSuccess: invalidateRunbooks });
+
+  // SSE — one long-lived EventSource per tab. Browser handles auto-reconnect
+  // with exponential backoff; on each (re)connect the server emits a
+  // `connected` event and we invalidate everything to catch up on anything
+  // missed during the disconnect window. Subsequent events route to the
+  // matching queryKey invalidation.
+  useEffect(() => {
+    const es = new EventSource("/api/events");
+    const invalidateRb = () => qc.invalidateQueries({ queryKey: ["runbooks"] });
+    es.addEventListener("connected", () => {
+      qc.invalidateQueries({ queryKey: ["runbooks"] });
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+    });
+    es.addEventListener("runbook.changed", invalidateRb);
+    es.addEventListener("runbook.deleted", invalidateRb);
+    es.addEventListener("ping", () => {}); // heartbeat, ignored
+    es.onerror = () => {/* browser auto-reconnects; suppress console noise */};
+    return () => es.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ref to the latest server-shape nodes so the history wrappers can
   // snapshot "before" state without re-rendering on every NODES change.

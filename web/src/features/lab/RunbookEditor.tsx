@@ -106,16 +106,58 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   const contentRef = useRef(initialContent);
   const savedRef = useRef(initialContent);
   contentRef.current = content;
+  // The pending save closure — captured at handleChange time with the
+  // then-current `onSave` (= the runbook the user was editing). On runbook
+  // switch we invoke this immediately so the draft commits to the OLD
+  // runbook before we reset state. Without this, a pending setTimeout would
+  // fire AFTER the switch, into a world where the captured onSave still
+  // points at the previous runbook — visible to the user as "I edited X
+  // but Y got modified" when the autosave races with the navigation.
+  const pendingFlushRef = useRef<(() => void) | null>(null);
 
   // Reset only when switching to a different runbook. We intentionally don't
-  // depend on initialContent — react-query refetches after every save and
-  // would otherwise stomp on the user's in-progress draft.
+  // depend on initialContent here — react-query refetches after every save
+  // and would stomp on the user's in-progress draft.
+  //
+  // Cleanup commits any pending draft to the PREVIOUS runbook *before* the
+  // next effect's reset runs (React runs cleanup → next effect in that
+  // order). The pending closure was captured under the previous render's
+  // `onSave`, so the save lands on the right target.
   useEffect(() => {
     setContent(initialContent);
     savedRef.current = initialContent;
     setState("idle");
+    return () => {
+      if (pendingFlushRef.current) {
+        pendingFlushRef.current();
+        pendingFlushRef.current = null;
+      }
+      if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runbookId]);
+
+  // Track latest state via ref so the initialContent effect below reads the
+  // current value (the effect runs once per initialContent change; state
+  // captured at that moment would be stale by the time the user types).
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // External-edit auto-accept. SSE-triggered refetch updates `initialContent`
+  // here. If the editor is at rest (no draft, no in-flight save), absorb
+  // the new content so AI / vim / another tab's edits show up without a
+  // manual reload. Mid-edit (`dirty`/`saving`) → keep the user's draft.
+  useEffect(() => {
+    const s = stateRef.current;
+    if ((s === "idle" || s === "saved") && initialContent !== contentRef.current) {
+      setContent(initialContent);
+      savedRef.current = initialContent;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialContent]);
 
   const flush = async (md: string) => {
     if (timerRef.current != null) {
@@ -134,28 +176,39 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
       setState("dirty");
     }
   };
+  // Mirror the latest flush so the keydown listener (registered once on
+  // mount with empty deps) sees the current render's closures. Without
+  // this, Cmd+S always invoked the mount-time flush — which still pointed
+  // at the runbook that was open when the editor first mounted. Switching
+  // runbooks afterwards routed every Cmd+S to the original target.
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
-  // Cmd+S / Ctrl+S flushes the debounce immediately using the latest content
-  // from the ref (the closure captured at listener-mount would be empty).
+  // Cmd+S / Ctrl+S flushes the debounce immediately.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
-        flush(contentRef.current);
+        flushRef.current(contentRef.current);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (v: string) => {
     setContent(v);
     setState("dirty");
     if (timerRef.current != null) window.clearTimeout(timerRef.current);
-    // Pass the new value into the timer — closure-captured `content` would be
-    // stale by the time the 1.5s fires.
-    timerRef.current = window.setTimeout(() => { flush(v); }, SAVE_DEBOUNCE_MS);
+    // Capture the flush call in a ref so the runbookId-change useEffect can
+    // invoke it synchronously to commit the draft to the CURRENT runbook
+    // (whose onSave is closed over `flush` here) before swapping props.
+    const doFlush = () => flush(v);
+    pendingFlushRef.current = doFlush;
+    timerRef.current = window.setTimeout(() => {
+      pendingFlushRef.current = null;
+      doFlush();
+    }, SAVE_DEBOUNCE_MS);
   };
 
   // View mode + split ratio. Persisted so the user's layout sticks across
