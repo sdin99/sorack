@@ -15,6 +15,7 @@ import { Dropdown } from "@/components/Dropdown";
 import { TagsEditor } from "./TagsEditor";
 import { CardGallery, type CardItem } from "./CardGallery";
 import { RunbookEditor } from "./RunbookEditor";
+import { RunbookList } from "./RunbookList";
 import { testProbe } from "@/lib/data-source/api";
 import { slugify, uniqueSlug } from "@/lib/slug";
 
@@ -1720,9 +1721,6 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
 export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook }) {
   const { t } = useTranslation();
   const { NODES, RUNBOOKS, createRunbook, updateRunbook, deleteRunbook } = useSorack();
-  const [filterCat, setFilterCat] = useStateD('all');
-  const [filterState, setFilterState] = useStateD('all');
-  const [query, setQuery] = useStateD('');
   const [showTree, setShowTree] = useStateD(!runbookId);
   const [editingTitle, setEditingTitle] = useStateD(false);
   const [titleDraft, setTitleDraft] = useStateD('');
@@ -1764,24 +1762,6 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
     await updateRunbook(rb.id, { summary: next });
   };
 
-  const filtered = useMemoD(() => Object.values(RUNBOOKS).filter(r => {
-    if (filterCat !== 'all' && r.category !== filterCat) return false;
-    if (filterState !== 'all' && r.state !== filterState) return false;
-    if (query) {
-      const q = query.toLowerCase();
-      // Title + summary + body + tags so a single search box covers headers,
-      // descriptions, and the markdown content itself.
-      if (!`${r.title} ${r.summary ?? ''} ${r.md} ${(r.tags || []).join(' ')}`.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  }).sort((a, b) => (a.updated < b.updated ? 1 : -1)), [filterCat, filterState, query]);
-
-  const grouped = useMemoD(() => {
-    const g = {};
-    for (const r of filtered) (g[r.category] = g[r.category] || []).push(r);
-    return g;
-  }, [filtered]);
-
   return (
     <div className="fs-overlay rb-fs">
       <header className="fs-head">
@@ -1793,53 +1773,13 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
         <div className="fs-title">{rb && !showTree ? rb.title : t('runbook.title')}</div>
       </header>
 
-      <div className={`rb-filters-wrap ${showTree || !rb ? '' : 'rb-filters-wrap--hidden-on-mobile'}`} style={showTree || !rb ? {} : { display: undefined }}>
-        <div className="rb-filters">
-          {['all', 'task', 'sop'].map(c => (
-            <button key={c} className={`rb-filter-btn ${filterCat === c ? 'rb-filter-btn--on' : ''}`} onClick={() => setFilterCat(c)}>
-              {c === 'all' ? t('runbook.filter.all') : c}
-            </button>
-          ))}
-          <span style={{ width: 8 }} />
-          {['planned', 'in_progress', 'completed', 'rolled_back'].map(s => (
-            <button key={s} className={`rb-filter-btn ${filterState === s ? 'rb-filter-btn--on' : ''}`} onClick={() => setFilterState(filterState === s ? 'all' : s)}>
-              {t(`runbook.state.${s}`, { defaultValue: s })}
-            </button>
-          ))}
-        </div>
-        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'var(--surface-1)', display: 'flex', gap: 8 }}>
-          <input
-            className="search-input"
-            style={{ flex: 1 }}
-            placeholder={t('runbook.searchPlaceholder')}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button className="rb-new-btn" onClick={handleCreate} title={t('runbook.new', { defaultValue: 'New runbook' })}>
-            <svg width="14" height="14" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M11 4v14M4 11h14" /></svg>
-          </button>
-        </div>
-        <div className="rb-tree-list" style={{ flex: 1, overflowY: 'auto' }}>
-          {Object.entries(grouped).map(([cat, items]) => (
-            <div key={cat} className="rb-tree-group">
-              <div className="rb-tree-group-h">{cat} <span className="rb-tree-group-c">{items.length}</span></div>
-              {items.map(r => (
-                <button
-                  key={r.id}
-                  className={`rb-tree-item ${r.id === runbookId ? 'rb-tree-item--active' : ''}`}
-                  onClick={() => { onJumpRunbook(r.id); setShowTree(false); }}
-                >
-                  <span className="rb-tree-dot" style={{ background: r.state === 'in_progress' ? 'var(--warn)' : r.state === 'completed' ? 'var(--ok)' : r.state === 'rolled_back' ? 'var(--err)' : 'var(--fg-4)' }} />
-                  <span className="rb-tree-text">
-                    <span className="rb-tree-title">{r.title}</span>
-                    {r.summary && <span className="rb-tree-summary">{r.summary}</span>}
-                  </span>
-                  <span className="rb-tree-date">{r.updated.slice(5)}</span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+      <div className={`rb-list-wrap ${showTree || !rb ? '' : 'rb-list-wrap--hidden-on-mobile'}`}>
+        <RunbookList
+          runbookId={runbookId ?? null}
+          runbooks={RUNBOOKS}
+          onJumpRunbook={(id) => { onJumpRunbook(id); setShowTree(false); }}
+          onCreate={handleCreate}
+        />
       </div>
 
       {rb && !showTree && (
