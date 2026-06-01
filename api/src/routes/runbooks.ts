@@ -11,7 +11,7 @@ import { db } from "../db";
 import { runbooks } from "../db/schema";
 import { env } from "../lib/env";
 import { writeRow } from "../runbooks/writer";
-import type { RunbookRow } from "../runbooks/loader";
+import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader";
 
 export const runbooksRoutes = new Hono();
 
@@ -49,6 +49,13 @@ async function uniqueId(base: string): Promise<string> {
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
+// Merge any patch-supplied meta keys over the current row's meta, preserving
+// the rest. Used by both POST (cur = defaults) and PATCH (cur = existing).
+function mergeMeta(cur: RunbookMeta, patch: Partial<RunbookMeta> | undefined): RunbookMeta {
+  if (!patch) return cur;
+  return { ...cur, ...patch };
+}
+
 runbooksRoutes.post("/", async (c) => {
   const body = await c.req.json().catch(() => ({})) as Partial<RunbookRow>;
   if (!body.title || typeof body.title !== "string") {
@@ -60,8 +67,10 @@ runbooksRoutes.post("/", async (c) => {
     title: body.title.trim(),
     category: (body.category ?? "task") as RunbookRow["category"],
     status: (body.status ?? "planned") as RunbookRow["status"],
+    summary: typeof body.summary === "string" ? body.summary : "",
     markdown: typeof body.markdown === "string" ? body.markdown : "",
     nodeRefs: Array.isArray(body.nodeRefs) ? body.nodeRefs.filter((v) => typeof v === "string") : [],
+    meta: mergeMeta(defaultMeta(), body.meta as Partial<RunbookMeta> | undefined),
   };
   await writeRow(env.RUNBOOKS_DIR, row);
   await db.insert(runbooks).values(row).onConflictDoNothing();
@@ -74,15 +83,18 @@ runbooksRoutes.patch("/:id", async (c) => {
   const [cur] = await db.select().from(runbooks).where(eq(runbooks.id, id));
   if (!cur) return c.json({ error: "not found" }, 404);
   const patch = await c.req.json().catch(() => ({})) as Partial<RunbookRow>;
+  const curMeta = (cur.meta as RunbookMeta) ?? defaultMeta();
   const next: RunbookRow = {
     id: cur.id,
     title: typeof patch.title === "string" ? patch.title.trim() : cur.title,
     category: (typeof patch.category === "string" ? patch.category : cur.category) as RunbookRow["category"],
     status: (typeof patch.status === "string" ? patch.status : cur.status) as RunbookRow["status"],
+    summary: typeof patch.summary === "string" ? patch.summary : cur.summary,
     markdown: typeof patch.markdown === "string" ? patch.markdown : cur.markdown,
     nodeRefs: Array.isArray(patch.nodeRefs)
       ? patch.nodeRefs.filter((v) => typeof v === "string")
-      : cur.nodeRefs,
+      : (cur.nodeRefs as string[]),
+    meta: mergeMeta(curMeta, patch.meta as Partial<RunbookMeta> | undefined),
   };
   await writeRow(env.RUNBOOKS_DIR, next);
   await db.update(runbooks).set({ ...next, updatedAt: new Date() }).where(eq(runbooks.id, id));

@@ -14,7 +14,7 @@ import { eq, notInArray } from "drizzle-orm";
 import { db } from "../db";
 import { runbooks } from "../db/schema";
 import { env } from "../lib/env";
-import { loadFile, idFromPath, type RunbookRow } from "./loader";
+import { loadFile, idFromPath, defaultMeta, type RunbookRow, type RunbookMeta } from "./loader";
 import { writeRow, pathForId } from "./writer";
 
 let watcher: FSWatcher | null = null;
@@ -27,8 +27,10 @@ async function upsertRow(row: RunbookRow): Promise<void> {
       title: row.title,
       category: row.category,
       status: row.status,
+      summary: row.summary,
       markdown: row.markdown,
       nodeRefs: row.nodeRefs,
+      meta: row.meta,
     })
     .onConflictDoUpdate({
       target: runbooks.id,
@@ -36,8 +38,10 @@ async function upsertRow(row: RunbookRow): Promise<void> {
         title: row.title,
         category: row.category,
         status: row.status,
+        summary: row.summary,
         markdown: row.markdown,
         nodeRefs: row.nodeRefs,
+        meta: row.meta,
         updatedAt: new Date(),
       },
     });
@@ -74,9 +78,12 @@ export async function initialScan(): Promise<void> {
   for (const r of dbRows) {
     if (await fileExists(pathForId(dir, r.id))) continue;
     try {
+      const meta: RunbookMeta = { ...defaultMeta(), ...((r.meta ?? {}) as Record<string, unknown>) };
       await writeRow(dir, {
         id: r.id, title: r.title, category: r.category, status: r.status,
+        summary: r.summary ?? "",
         markdown: r.markdown, nodeRefs: (r.nodeRefs as string[]) ?? [],
+        meta,
       });
       migrated += 1;
     } catch (e) {

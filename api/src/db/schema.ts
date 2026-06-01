@@ -40,6 +40,9 @@ export const statusEnum = inventory.enum("status", [
 export const runbookCategoryEnum = docs.enum("runbook_category", [
   "task",
   "sop",
+  "incident",
+  "postmortem",
+  "design_doc",
 ]);
 export const runbookStatusEnum = docs.enum("runbook_status", [
   "planned",
@@ -87,14 +90,25 @@ export const edges = inventory.table("edges", {
 
 // ── docs.runbooks ────────────────────────────────────────────────────
 
+// Canonical RunbookMeta type lives in api/src/runbooks/loader.ts (where the
+// loader/writer normalize it). The DB column just stores the blob as jsonb;
+// `as unknown as` keeps drizzle happy without dragging that import in here.
 export const runbooks = docs.table("runbooks", {
   id: varchar("id", { length: 256 }).primaryKey(),
   title: varchar("title", { length: 512 }).notNull(),
   category: runbookCategoryEnum("category").notNull().default("task"),
   status: runbookStatusEnum("status").notNull().default("planned"),
+  // Shown in list view so the user picks the right runbook without opening it.
+  summary: text("summary").notNull().default(""),
   markdown: text("markdown").notNull().default(""),
   // ["nodeId1", "nodeId2"] — inline references for click-to-jump
   nodeRefs: jsonb("node_refs").$type<string[]>().notNull().default([]),
+  // Catch-all for everything else in frontmatter (see RunbookMeta in
+  // runbooks/loader.ts). Loose Record so the index-signature shape passes
+  // through; the loader normalizes typed fields on read.
+  meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({
+    tags: [], runbookRefs: [], severity: "", author: "", template: null, schema: 1,
+  }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

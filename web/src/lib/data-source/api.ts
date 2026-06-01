@@ -25,13 +25,26 @@ export interface ApiEdge {
   createdAt: string;
 }
 
+export interface RunbookTemplateRef {
+  source: string; id: string; version: string; derivedAt: string;
+}
+export interface RunbookMeta {
+  tags: string[];
+  runbookRefs: string[];
+  severity: string;
+  author: string;
+  template: RunbookTemplateRef | null;
+  schema: number;
+}
 export interface ApiRunbook {
   id: string;
   title: string;
-  category: "task" | "sop";
+  category: "task" | "sop" | "incident" | "postmortem" | "design_doc";
   status: "planned" | "in_progress" | "completed" | "rolled_back";
+  summary: string;
   markdown: string;
   nodeRefs: string[];
+  meta: RunbookMeta;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,8 +101,10 @@ export interface RunbookCreatePayload {
   title: string;
   category?: ApiRunbook["category"];
   status?: ApiRunbook["status"];
+  summary?: string;
   markdown?: string;
   nodeRefs?: string[];
+  meta?: Partial<RunbookMeta>;
 }
 export type RunbookUpdatePayload = Partial<RunbookCreatePayload>;
 

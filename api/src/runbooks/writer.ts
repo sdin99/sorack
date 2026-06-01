@@ -11,14 +11,26 @@ export function pathForId(dir: string, id: string): string {
   return path.join(dir, `${id}.md`);
 }
 
-// Only persist non-default frontmatter keys to keep .md files clean. A bare
-// runbook with the defaults has an empty frontmatter block.
+// Emit known fields, strip default/empty values, and pass unknown keys
+// (collected by the loader via RunbookMeta's index signature) through
+// untouched so templates / future plugins can stash custom frontmatter.
+// `schema` is always emitted so the file is self-describing.
 function buildFrontmatter(row: RunbookRow): Record<string, unknown> {
-  const fm: Record<string, unknown> = {};
+  // Start with the full meta blob (preserves unknown keys), then layer
+  // known fields and row-level fields, stripping empty defaults at the end.
+  const fm: Record<string, unknown> = { ...row.meta };
+  fm.schema = row.meta.schema || 1;
   if (row.title && row.title !== row.id) fm.title = row.title;
   if (row.category !== "task") fm.category = row.category;
   if (row.status !== "planned") fm.status = row.status;
+  if (row.summary) fm.summary = row.summary;
   if (row.nodeRefs.length > 0) fm.nodeRefs = row.nodeRefs;
+  // Strip empty/default known meta keys so the file stays tidy.
+  if (!Array.isArray(fm.tags) || (fm.tags as string[]).length === 0) delete fm.tags;
+  if (!Array.isArray(fm.runbookRefs) || (fm.runbookRefs as string[]).length === 0) delete fm.runbookRefs;
+  if (!fm.severity) delete fm.severity;
+  if (!fm.author) delete fm.author;
+  if (!fm.template) delete fm.template;
   return fm;
 }
 

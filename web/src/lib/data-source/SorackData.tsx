@@ -229,12 +229,15 @@ function DataInner({ children }: { children: ReactNode }) {
     }
     const RUNBOOKS: Record<string, any> = {};
     for (const r of rbs.data ?? []) {
-      // alias schema fields → lab mockup expectations
+      // alias schema fields → lab mockup expectations. New meta fields
+      // (tags/runbookRefs/severity/author/template/schema) come through as
+      // `r.meta.*` — consumers read them by full path.
       RUNBOOKS[r.id] = {
         ...r,
         state: r.status,
         md: r.markdown,
         updated: r.updatedAt ? String(r.updatedAt).slice(0, 10) : "",
+        tags: r.meta?.tags ?? [],
       };
     }
     // Reverse-link: a runbook in its `nodeRefs` is shown on each referenced
