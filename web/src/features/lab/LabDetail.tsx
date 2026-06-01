@@ -1848,16 +1848,22 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
                 }))}
                 onChange={(v) => updateRunbook(rb.id, { category: v as any })}
               />
-              <Dropdown
-                className={`rb-meta-pick rb-meta-state rb-meta-state--${rb.state}`}
-                ariaLabel={t('runbook.state.label', { defaultValue: 'status' })}
-                value={rb.state}
-                options={['planned','in_progress','completed','rolled_back'].map(s => ({
-                  value: s,
-                  label: t(`runbook.state.${s}`, { defaultValue: s }),
-                }))}
-                onChange={(v) => updateRunbook(rb.id, { status: v as any })}
-              />
+              {/* Evergreen reference categories (sop / design_doc) don't have
+                  an execution lifecycle; hide the status pick to avoid
+                  forcing a meaningless state. DB still carries the default
+                  value, so changing the category back re-exposes it. */}
+              {rb.category !== 'sop' && rb.category !== 'design_doc' && (
+                <Dropdown
+                  className={`rb-meta-pick rb-meta-state rb-meta-state--${rb.state}`}
+                  ariaLabel={t('runbook.state.label', { defaultValue: 'status' })}
+                  value={rb.state}
+                  options={['planned','in_progress','completed','rolled_back'].map(s => ({
+                    value: s,
+                    label: t(`runbook.state.${s}`, { defaultValue: s }),
+                  }))}
+                  onChange={(v) => updateRunbook(rb.id, { status: v as any })}
+                />
+              )}
               <span className="rb-meta-date">{t('runbook.updated', { date: rb.updated })}</span>
               <button className="rb-head-del" onClick={() => setDeleteOpen(true)} title={t('action.delete', { defaultValue: 'Delete' })} aria-label="delete">
                 <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

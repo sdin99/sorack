@@ -157,11 +157,16 @@ export function RunbookList({ runbookId, runbooks, templates, onJumpRunbook, onC
   }, [flatIds, runbookId, onJumpRunbook]);
 
   const hasActiveFilters = cats.size > 0 || states.size > 0 || tags.size > 0 || query.length > 0;
+  // Evergreen reference categories don't have an execution lifecycle, so
+  // a colored dot (even if status happens to be set in DB from a prior
+  // category) would mislead. Force grey for those.
+  const categoryHasStatus = (c: string) => c !== "sop" && c !== "design_doc";
   const dotColor = (s: string) =>
     s === "in_progress" ? "var(--warn)"
     : s === "completed" ? "var(--ok)"
     : s === "rolled_back" ? "var(--err)"
     : "var(--fg-4)";
+  const itemDotColor = (r: any) => categoryHasStatus(r.category) ? dotColor(r.state) : "var(--fg-4)";
 
   return (
     <div className="rb-list" ref={listRef}>
@@ -311,7 +316,7 @@ export function RunbookList({ runbookId, runbooks, templates, onJumpRunbook, onC
                   className={`rb-item ${r.id === runbookId ? "rb-item--active" : ""}`}
                   onClick={() => onJumpRunbook(r.id)}
                 >
-                  <span className="rb-item-dot" style={{ background: dotColor(r.state) }} title={t(`runbook.state.${r.state}`, { defaultValue: r.state })} />
+                  <span className="rb-item-dot" style={{ background: itemDotColor(r) }} title={categoryHasStatus(r.category) ? t(`runbook.state.${r.state}`, { defaultValue: r.state }) : t(`runbook.category.${r.category}`, { defaultValue: r.category })} />
                   <span className="rb-item-text">
                     <span className="rb-item-line1">
                       <span className="rb-item-title">{r.title}</span>
