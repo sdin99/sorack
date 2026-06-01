@@ -1891,6 +1891,9 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-editor-viewbtn:only-child { border-radius: 3px; border-right: 1px solid var(--border); }
 .rb-editor-viewbtn:hover { color: var(--fg-1); background: var(--hover-bg); }
 .rb-editor-viewbtn--on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+/* `:last-child { border-right: ... }` shorthand wins over the --on rule's
+   border-color for the rightmost button — restore accent explicitly. */
+.rb-editor-viewbtn--on:last-child { border-right-color: var(--accent); }
 .rb-editor-viewbtn--on + .rb-editor-viewbtn { border-left-color: var(--accent); }
 .rb-editor-pane--edit .cm-editor { height: 100%; background: var(--surface-1); color: var(--fg-1); }
 .rb-editor-pane--edit .cm-editor.cm-focused { outline: none; }
@@ -1913,7 +1916,13 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .md-h4 { font-size: 13px; color: var(--fg-2); }
 .md-p { margin: 10px 0; }
 .md-code { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; color: var(--fg-1); }
-.md-pre { font-family: var(--mono); font-size: 12.5px; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; overflow-x: auto; margin: 12px 0; -webkit-overflow-scrolling: touch; }
+.md-pre { font-family: var(--mono); font-size: 12.5px; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; overflow-x: auto; margin: 12px 0; -webkit-overflow-scrolling: touch; position: relative; }
+.md-pre-lang {
+  position: absolute; top: 4px; right: 8px;
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.08em;
+  pointer-events: none;
+}
 .md-quote { border-left: 2px solid var(--accent); padding: 4px 12px; margin: 12px 0; color: var(--fg-2); background: color-mix(in oklab, var(--accent) 6%, transparent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .md-ul, .md-ol { padding-left: 22px; margin: 10px 0; }
 .md-ul li, .md-ol li { margin: 4px 0; }
@@ -1972,6 +1981,21 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .hljs-addition { color: var(--ok); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
+
+/* Mermaid diagrams — lazy-loaded via dynamic import. The svg fills its
+   container; cap it so big flowcharts don't blow out the preview pane. */
+.md-mermaid {
+  margin: 12px 0; padding: 12px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+.md-mermaid-svg { display: flex; justify-content: center; }
+.md-mermaid-svg svg { max-width: 100%; height: auto; }
+.md-mermaid-loading { font-family: var(--mono); font-size: 11px; color: var(--fg-3); text-align: center; padding: 12px; }
+.md-mermaid--err { border-color: color-mix(in oklab, var(--err) 40%, var(--border)); background: color-mix(in oklab, var(--err) 6%, var(--surface-1)); }
+.md-mermaid-err-h { font-family: var(--mono); font-size: 11px; color: var(--err); margin-bottom: 6px; }
+.md-mermaid-err-msg, .md-mermaid-src { font-family: var(--mono); font-size: 11px; color: var(--fg-2); white-space: pre-wrap; margin: 4px 0; }
+.md-mermaid-src { color: var(--fg-3); border-top: 1px solid var(--border); padding-top: 6px; }
 .md-mention--rb .md-mention-kind { color: var(--accent); }
 
 /* Scrollbars */

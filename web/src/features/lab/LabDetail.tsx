@@ -30,6 +30,7 @@ import { slugify, uniqueSlug } from "@/lib/slug";
 import ReactMarkdownLib from "react-markdown";
 import remarkGfmLib from "remark-gfm";
 import rehypeHighlightLib from "rehype-highlight";
+import { MermaidBlock } from "@/components/MermaidBlock";
 
 function preprocessMentions(md: string): string {
   return md.replace(/\[\[(?:(node|runbook):)?([\w-]+)\]\]/g, (_, kind: string, id: string) => {
@@ -75,8 +76,29 @@ function renderMarkdown(md: string, onNodeJump: (id: string) => void, onRunbookJ
         },
         blockquote: ({ children }) => <blockquote className="md-quote">{children}</blockquote>,
         // rehype-highlight tags <code class="language-foo hljs"> inside <pre>;
-        // we wrap with .md-pre so existing styling applies.
-        pre: ({ children }) => <pre className="md-pre">{children}</pre>,
+        // we wrap with .md-pre so existing styling applies. ```mermaid blocks
+        // route to MermaidBlock instead (lazy-loaded ~500KB runtime).
+        pre: ({ children }: any) => {
+          // Check if the inner code is a mermaid block — if so, hoist out of
+          // the <pre> so MermaidBlock can render the diagram directly.
+          const inner = Array.isArray(children) ? children[0] : children;
+          const cls = inner?.props?.className ?? "";
+          if (typeof cls === "string" && cls.split(/\s+/).includes("language-mermaid")) {
+            const raw = inner?.props?.children;
+            const text = Array.isArray(raw) ? raw.join("") : String(raw ?? "");
+            return <MermaidBlock content={text} />;
+          }
+          // Pull out the `language-foo` token so the corner label reads the
+          // language name (skip the noisy hljs/auto detection class).
+          const langMatch = typeof cls === "string" ? cls.match(/language-([\w+#-]+)/) : null;
+          const lang = langMatch ? langMatch[1] : "";
+          return (
+            <pre className="md-pre">
+              {lang && <span className="md-pre-lang">{lang}</span>}
+              {children}
+            </pre>
+          );
+        },
         code: ({ children, className }: any) => {
           // Fenced blocks get `language-foo` / `hljs` from rehype-highlight;
           // inline code has neither. .md-code (border + bg) would double-box

@@ -23,4 +23,10 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: true,
   },
+  optimizeDeps: {
+    // Pre-bundle big lazy-loaded deps so the first dynamic import doesn't
+    // trip the mid-session optimizer reload that 404s for the browser's
+    // stale cached chunk URL.
+    include: ["mermaid"],
+  },
 });
