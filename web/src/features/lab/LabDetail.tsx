@@ -1726,6 +1726,8 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
   const [showTree, setShowTree] = useStateD(!runbookId);
   const [editingTitle, setEditingTitle] = useStateD(false);
   const [titleDraft, setTitleDraft] = useStateD('');
+  const [editingSummary, setEditingSummary] = useStateD(false);
+  const [summaryDraft, setSummaryDraft] = useStateD('');
 
   const rb = runbookId ? RUNBOOKS[runbookId] : null;
 
@@ -1753,13 +1755,23 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
     if (!next || next === rb.title) return;
     await updateRunbook(rb.id, { title: next });
   };
+  const startSummaryEdit = () => { if (rb) { setSummaryDraft(rb.summary ?? ''); setEditingSummary(true); } };
+  const commitSummary = async () => {
+    if (!rb) return;
+    const next = summaryDraft.trim();
+    setEditingSummary(false);
+    if (next === (rb.summary ?? '')) return;
+    await updateRunbook(rb.id, { summary: next });
+  };
 
   const filtered = useMemoD(() => Object.values(RUNBOOKS).filter(r => {
     if (filterCat !== 'all' && r.category !== filterCat) return false;
     if (filterState !== 'all' && r.state !== filterState) return false;
     if (query) {
       const q = query.toLowerCase();
-      if (!`${r.title} ${r.md} ${(r.tags || []).join(' ')}`.toLowerCase().includes(q)) return false;
+      // Title + summary + body + tags so a single search box covers headers,
+      // descriptions, and the markdown content itself.
+      if (!`${r.title} ${r.summary ?? ''} ${r.md} ${(r.tags || []).join(' ')}`.toLowerCase().includes(q)) return false;
     }
     return true;
   }).sort((a, b) => (a.updated < b.updated ? 1 : -1)), [filterCat, filterState, query]);
@@ -1818,7 +1830,10 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
                   onClick={() => { onJumpRunbook(r.id); setShowTree(false); }}
                 >
                   <span className="rb-tree-dot" style={{ background: r.state === 'in_progress' ? 'var(--warn)' : r.state === 'completed' ? 'var(--ok)' : r.state === 'rolled_back' ? 'var(--err)' : 'var(--fg-4)' }} />
-                  <span className="rb-tree-title">{r.title}</span>
+                  <span className="rb-tree-text">
+                    <span className="rb-tree-title">{r.title}</span>
+                    {r.summary && <span className="rb-tree-summary">{r.summary}</span>}
+                  </span>
                   <span className="rb-tree-date">{r.updated.slice(5)}</span>
                 </button>
               ))}
@@ -1854,6 +1869,28 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
               />
             ) : (
               <h1 className="rb-h1" onDoubleClick={startTitleEdit} title="double-click to edit">{rb.title}</h1>
+            )}
+            {editingSummary ? (
+              <input
+                className="rb-summary rb-summary--input"
+                value={summaryDraft}
+                onChange={(e) => setSummaryDraft(e.target.value)}
+                onBlur={commitSummary}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitSummary(); }
+                  else if (e.key === 'Escape') { setEditingSummary(false); }
+                }}
+                placeholder={t('runbook.summaryPlaceholder', { defaultValue: 'one-line summary…' })}
+                autoFocus
+              />
+            ) : (
+              <div
+                className={`rb-summary ${!rb.summary ? 'rb-summary--empty' : ''}`}
+                onDoubleClick={startSummaryEdit}
+                title="double-click to edit"
+              >
+                {rb.summary || t('runbook.summaryEmpty', { defaultValue: '(no summary)' })}
+              </div>
             )}
           </div>
           <RunbookEditor

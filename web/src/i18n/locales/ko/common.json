@@ -139,9 +139,16 @@
     },
     "state": {
       "planned": "계획됨",
-      "in-progress": "진행중",
       "completed": "완료",
-      "rollback": "롤백"
+      "in_progress": "진행중",
+      "rolled_back": "롤백"
+    },
+    "category": {
+      "task": "작업",
+      "sop": "SOP",
+      "incident": "인시던트",
+      "postmortem": "사후 분석",
+      "design_doc": "설계 문서"
     }
   },
   "nd": {

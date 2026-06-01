@@ -139,9 +139,16 @@
     },
     "state": {
       "planned": "planned",
-      "in-progress": "in-progress",
       "completed": "completed",
-      "rollback": "rollback"
+      "in_progress": "in-progress",
+      "rolled_back": "rollback"
+    },
+    "category": {
+      "task": "task",
+      "sop": "SOP",
+      "incident": "incident",
+      "postmortem": "postmortem",
+      "design_doc": "design doc"
     }
   },
   "nd": {

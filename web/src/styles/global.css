@@ -1607,10 +1607,15 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-tree-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; min-height: var(--touch); text-align: left; }
 .rb-tree-item--active { background: var(--accent-soft); }
 .rb-tree-dot { width: 8px; height: 8px; border-radius: 50%; }
+.rb-tree-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .rb-tree-title {
   font-size: 13.5px; color: var(--fg-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   min-width: 0;
+}
+.rb-tree-summary {
+  font-size: 11.5px; color: var(--fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rb-tree-date  { font-family: var(--mono); font-size: 10px; color: var(--fg-4); flex-shrink: 0; }
 
@@ -1643,6 +1648,19 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   color: var(--fg-1); background: var(--surface-1);
   border: 1px solid var(--accent); border-radius: 4px;
   padding: 2px 8px; outline: none; width: 100%;
+}
+.rb-summary {
+  font-size: 13.5px; color: var(--fg-2); margin-top: 4px;
+  padding: 2px 4px; margin-left: -4px; margin-right: -4px;
+  border-radius: 3px; cursor: text; transition: background 0.1s;
+}
+.rb-summary:hover { background: color-mix(in oklab, var(--accent) 6%, transparent); }
+.rb-summary--empty { color: var(--fg-4); font-style: italic; }
+.rb-summary--input {
+  font: inherit; font-size: 13.5px;
+  color: var(--fg-1); background: var(--surface-1);
+  border: 1px solid var(--accent); border-radius: 4px;
+  padding: 2px 8px; margin: 4px -4px 0; outline: none; width: calc(100% + 8px);
 }
 .rb-new-btn {
   width: 36px; height: 36px; min-width: 0; min-height: 0;
