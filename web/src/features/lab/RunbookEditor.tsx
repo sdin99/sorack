@@ -12,8 +12,12 @@ import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, completionKeymap, acceptCompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { keymap, type EditorView as CMEditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
+import { useIsDesktop } from "@/lib/use-is-desktop";
 
 const SAVE_DEBOUNCE_MS = 1500;
+const PCT_LS_KEY = "sorack-rb-editor-pct";
+const VIEW_LS_KEY = "sorack-rb-editor-view";
+type ViewMode = "split" | "edit" | "preview";
 
 export interface MentionItem { id: string; label: string; }
 export interface MentionSources {
@@ -154,6 +158,57 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     timerRef.current = window.setTimeout(() => { flush(v); }, SAVE_DEBOUNCE_MS);
   };
 
+  // View mode + split ratio. Persisted so the user's layout sticks across
+  // sessions. On mobile, `split` collapses to `edit` (Preview takes the full
+  // pane in its own mode); the desktop 3-state toggle is hidden.
+  const isDesktop = useIsDesktop();
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const v = localStorage.getItem(VIEW_LS_KEY);
+    return v === "edit" || v === "preview" || v === "split" ? v : "split";
+  });
+  const [editPct, setEditPct] = useState<number>(() => {
+    const v = Number(localStorage.getItem(PCT_LS_KEY));
+    return Number.isFinite(v) && v >= 20 && v <= 80 ? v : 50;
+  });
+  useEffect(() => { localStorage.setItem(VIEW_LS_KEY, viewMode); }, [viewMode]);
+  useEffect(() => { localStorage.setItem(PCT_LS_KEY, String(editPct)); }, [editPct]);
+
+  // Drag the splitter to resize. Capture pointer + compute ratio against the
+  // split element's bounding rect each move.
+  const splitRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startPct: number; rectW: number } | null>(null);
+  const onSplitterDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!splitRef.current) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.classList.add("rb-editor-divider--dragging");
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    dragRef.current = { startX: e.clientX, startPct: editPct, rectW: splitRef.current.getBoundingClientRect().width };
+  };
+  const onSplitterMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const pct = dragRef.current.startPct + (dx / dragRef.current.rectW) * 100;
+    setEditPct(Math.max(20, Math.min(80, pct)));
+  };
+  const onSplitterUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    e.currentTarget.classList.remove("rb-editor-divider--dragging");
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    dragRef.current = null;
+  };
+
+  // Mobile uses Edit / Preview tabs only. Force a non-split mode and coerce
+  // any persisted `split` to `edit` so the layout makes sense in one column.
+  const effectiveMode: ViewMode = !isDesktop && viewMode === "split" ? "edit" : viewMode;
+  const showEdit = effectiveMode === "edit" || effectiveMode === "split";
+  const showPreview = effectiveMode === "preview" || effectiveMode === "split";
+  const gridCols = effectiveMode === "split"
+    ? `${editPct}% 6px ${100 - editPct}%`
+    : showEdit ? "1fr 0 0" : "0 0 1fr";
+
   const extensions = useMemo(() => [
     markdown(),
     EditorView.lineWrapping,
@@ -176,10 +231,41 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
         <span className={`rb-editor-status rb-editor-status--${state}`}>
           {state === "saving" ? "saving…" : state === "saved" ? "saved" : state === "dirty" ? "unsaved" : "—"}
         </span>
-        <span className="rb-editor-hint">⌘S to save</span>
+        <div className="rb-editor-viewbtns" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={effectiveMode === "edit"}
+            className={`rb-editor-viewbtn ${effectiveMode === "edit" ? "rb-editor-viewbtn--on" : ""}`}
+            onClick={() => setViewMode("edit")}
+            title="Edit only"
+          >edit</button>
+          {isDesktop && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={effectiveMode === "split"}
+              className={`rb-editor-viewbtn ${effectiveMode === "split" ? "rb-editor-viewbtn--on" : ""}`}
+              onClick={() => setViewMode("split")}
+              title="Split view"
+            >split</button>
+          )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={effectiveMode === "preview"}
+            className={`rb-editor-viewbtn ${effectiveMode === "preview" ? "rb-editor-viewbtn--on" : ""}`}
+            onClick={() => setViewMode("preview")}
+            title="Preview only"
+          >preview</button>
+        </div>
+        <span className="rb-editor-hint">⌘S</span>
       </div>
-      <div className="rb-editor-split">
-        <div className="rb-editor-pane rb-editor-pane--edit">
+      <div className="rb-editor-split" ref={splitRef} style={{ gridTemplateColumns: gridCols }}>
+        <div
+          className="rb-editor-pane rb-editor-pane--edit"
+          style={{ gridColumn: 1, display: showEdit ? undefined : "none" }}
+        >
           <CodeMirror
             value={content}
             onChange={handleChange}
@@ -193,7 +279,20 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
             style={{ height: "100%", fontSize: 13 }}
           />
         </div>
-        <div className="rb-editor-pane rb-editor-pane--preview">
+        <div
+          className="rb-editor-divider"
+          style={{ gridColumn: 2, display: effectiveMode === "split" ? undefined : "none" }}
+          onPointerDown={onSplitterDown}
+          onPointerMove={onSplitterMove}
+          onPointerUp={onSplitterUp}
+          onPointerCancel={onSplitterUp}
+          role="separator"
+          aria-orientation="vertical"
+        />
+        <div
+          className="rb-editor-pane rb-editor-pane--preview"
+          style={{ gridColumn: 3, display: showPreview ? undefined : "none" }}
+        >
           <div className="rb-content">{previewRender(content)}</div>
         </div>
       </div>

@@ -1860,9 +1860,38 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-editor-status--saving { color: var(--fg-3); }
 .rb-editor-status--saved  { color: var(--ok); }
 .rb-editor-hint { margin-left: auto; }
-.rb-editor-split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; overflow: hidden; }
+/* grid-template-columns is set inline by the component (`<editPct>% 6px
+   <100-editPct>%` in split mode; `1fr 0 0` or `0 0 1fr` for solo modes). */
+.rb-editor-split { flex: 1; display: grid; min-height: 0; overflow: hidden; }
 .rb-editor-pane { min-height: 0; overflow: auto; }
-.rb-editor-pane--edit { border-right: 1px solid var(--border); }
+.rb-editor-divider {
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.1s;
+  position: relative;
+}
+.rb-editor-divider::before {
+  /* Visible hit-strip wider than the rendered 6px so the pointer doesn't
+     have to be pixel-perfect. */
+  content: ""; position: absolute; top: 0; bottom: 0; left: -4px; right: -4px;
+}
+.rb-editor-divider:hover, .rb-editor-divider--dragging { background: var(--primary); }
+
+/* View-mode toggle in the statusbar — edit / split / preview tablist. */
+.rb-editor-viewbtns { display: inline-flex; align-items: center; gap: 0; margin-left: 16px; }
+.rb-editor-viewbtn {
+  font: inherit; font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 8px; min-height: 0; min-width: 0;
+  color: var(--fg-3); background: transparent; border: 1px solid var(--border); border-right: none;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
+.rb-editor-viewbtn:first-child { border-radius: 3px 0 0 3px; }
+.rb-editor-viewbtn:last-child { border-radius: 0 3px 3px 0; border-right: 1px solid var(--border); }
+.rb-editor-viewbtn:only-child { border-radius: 3px; border-right: 1px solid var(--border); }
+.rb-editor-viewbtn:hover { color: var(--fg-1); background: var(--hover-bg); }
+.rb-editor-viewbtn--on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.rb-editor-viewbtn--on + .rb-editor-viewbtn { border-left-color: var(--accent); }
 .rb-editor-pane--edit .cm-editor { height: 100%; background: var(--surface-1); color: var(--fg-1); }
 .rb-editor-pane--edit .cm-editor.cm-focused { outline: none; }
 .rb-editor-pane--edit .cm-scroller { font-family: var(--mono); }
