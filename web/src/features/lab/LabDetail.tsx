@@ -22,92 +22,113 @@ import { useQuery as useQueryD } from "@tanstack/react-query";
 import { testProbe } from "@/lib/data-source/api";
 import { slugify, uniqueSlug } from "@/lib/slug";
 
-// ─── tiny markdown renderer (same as desktop) ──────────────────────
-function renderMarkdown(md, onNodeJump, onRunbookJump, NODES, RUNBOOKS) {
-  const lines = md.split('\n');
-  const out = []; let i = 0, key = 0;
-  const renderInline = (text) => {
-    let s = text;
-    // [[node:xxx]] / [[runbook:xxx]] (Phase 2 autocomplete output). Legacy
-    // [[xxx]] still accepted - kind inferred (rb- prefix -> runbook).
-    s = s.replace(/\[\[(?:(node|runbook):)?([\w-]+)\]\]/g, (_, kind, id) => `\u0000M:${kind || ""}:${id}\u0000`);
-    s = s.replace(/`([^`]+)`/g, '\u0000C:$1\u0000');
-    s = s.replace(/\*\*([^*]+)\*\*/g, '\u0000B:$1\u0000');
-    s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '\u0000I:$1\u0000');
-    const tokens = s.split('\u0000');
-    return tokens.map((tok, j) => {
-      if (tok.startsWith('M:')) {
-        const rest = tok.slice(2);
-        const sep = rest.indexOf(':');
-        const explicitKind = sep >= 0 ? rest.slice(0, sep) : '';
-        const id = sep >= 0 ? rest.slice(sep + 1) : rest;
-        const isRb = explicitKind === 'runbook' || (!explicitKind && id.startsWith('rb-'));
-        const target = isRb ? RUNBOOKS[id] : NODES[id];
-        if (!target) return <span key={j} className="md-mention">[[{explicitKind ? `${explicitKind}:` : ''}{id}]]</span>;
-        return (
-          <button key={j} className={`md-mention md-mention--${isRb ? 'rb' : 'node'}`}
-            onClick={() => isRb ? onRunbookJump(id) : onNodeJump(id)}>
-            <span className="md-mention-kind">{isRb ? 'runbook' : target.kind}</span>
-            <span className="md-mention-name">{isRb ? target.title : target.name}</span>
-          </button>
-        );
-      }
-      if (tok.startsWith('C:')) return <code key={j} className="md-code">{tok.slice(2)}</code>;
-      if (tok.startsWith('B:')) return <strong key={j}>{tok.slice(2)}</strong>;
-      if (tok.startsWith('I:')) return <em key={j}>{tok.slice(2)}</em>;
-      return <React.Fragment key={j}>{tok}</React.Fragment>;
-    });
-  };
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.trim().startsWith('```')) {
-      const buf = []; i++;
-      while (i < lines.length && !lines[i].trim().startsWith('```')) { buf.push(lines[i]); i++; }
-      i++;
-      out.push(<pre key={key++} className="md-pre"><code>{buf.join('\n')}</code></pre>);
-      continue;
-    }
-    const h = line.match(/^(#{1,4})\s+(.*)/);
-    if (h) {
-      const lvl = h[1].length; const Tag = `h${lvl}`;
-      out.push(<Tag key={key++} className={`md-h md-h${lvl}`}>{renderInline(h[2])}</Tag>);
-      i++; continue;
-    }
-    if (line.startsWith('>')) {
-      const buf = [];
-      while (i < lines.length && lines[i].startsWith('>')) { buf.push(lines[i].replace(/^>\s?/, '')); i++; }
-      out.push(<blockquote key={key++} className="md-quote">{buf.map((b, k) => <div key={k}>{renderInline(b)}</div>)}</blockquote>);
-      continue;
-    }
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-        const m = lines[i].match(/^\s*[-*]\s+(\[[ x]\]\s+)?(.*)$/);
-        const isCheck = !!m[1]; const checked = isCheck && m[1].includes('x');
-        items.push({ isCheck, checked, text: m[2] }); i++;
-      }
-      out.push(<ul key={key++} className="md-ul">
-        {items.map((it, k) => (
-          <li key={k} className={it.isCheck ? 'md-li-check' : 'md-li'}>
-            {it.isCheck && <span className={`md-check ${it.checked ? 'md-check--on' : ''}`}>{it.checked ? '✓' : ''}</span>}
-            {renderInline(it.text)}
-          </li>
-        ))}
-      </ul>);
-      continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*\d+\.\s+/, '')); i++; }
-      out.push(<ol key={key++} className="md-ol">{items.map((t, k) => <li key={k}>{renderInline(t)}</li>)}</ol>);
-      continue;
-    }
-    if (!line.trim()) { i++; continue; }
-    const buf = [line]; i++;
-    while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|>|\s*[-*]\s|\s*\d+\.\s|```)/.test(lines[i])) { buf.push(lines[i]); i++; }
-    out.push(<p key={key++} className="md-p">{renderInline(buf.join(' '))}</p>);
-  }
-  return out;
+// ─── markdown renderer (react-markdown + GFM + syntax highlight) ────
+// Mentions: pre-process `[[node:xxx]]` / `[[runbook:xxx]]` (and legacy
+// `[[xxx]]`) into markdown links with a custom scheme; the components.a
+// override below detects the scheme and renders a jumpable chip. Real
+// markdown links pass through unchanged.
+import ReactMarkdownLib from "react-markdown";
+import remarkGfmLib from "remark-gfm";
+import rehypeHighlightLib from "rehype-highlight";
+
+function preprocessMentions(md: string): string {
+  return md.replace(/\[\[(?:(node|runbook):)?([\w-]+)\]\]/g, (_, kind: string, id: string) => {
+    const k = kind || (id.startsWith("rb-") ? "runbook" : "node"); // legacy inference
+    return `[${id}](sorack-${k}:${id})`;
+  });
+}
+
+function renderMarkdown(md: string, onNodeJump: (id: string) => void, onRunbookJump: (id: string) => void, NODES: any, RUNBOOKS: any) {
+  return (
+    <ReactMarkdownLib
+      remarkPlugins={[remarkGfmLib]}
+      rehypePlugins={[[rehypeHighlightLib, { detect: true, ignoreMissing: true }]]}
+      // Default url-sanitizer rejects custom schemes, so `sorack-node:foo`
+      // never reaches our components.a (the chip becomes a bare hyperlink).
+      // Pass through unchanged — markdown source is authenticated-user
+      // content, low XSS surface.
+      urlTransform={(url) => url}
+      components={{
+        h1: ({ children }) => <h1 className="md-h md-h1">{children}</h1>,
+        h2: ({ children }) => <h2 className="md-h md-h2">{children}</h2>,
+        h3: ({ children }) => <h3 className="md-h md-h3">{children}</h3>,
+        h4: ({ children }) => <h4 className="md-h md-h4">{children}</h4>,
+        p: ({ children }) => <p className="md-p">{children}</p>,
+        ul: ({ children }) => <ul className="md-ul">{children}</ul>,
+        ol: ({ children }) => <ol className="md-ol">{children}</ol>,
+        li: ({ children, ...props }: any) => {
+          // GFM task list items inject a checkbox <input>; pull it out so we
+          // can render our own glyph and keep the row layout tidy.
+          const arr = Array.isArray(children) ? children : [children];
+          const cb = arr.find((c: any) => c && typeof c === "object" && c.type === "input");
+          if (cb) {
+            const rest = arr.filter((c: any) => c !== cb);
+            const checked = (cb as any).props?.checked;
+            return (
+              <li className="md-li-check" {...props}>
+                <span className={`md-check ${checked ? "md-check--on" : ""}`}>{checked ? "✓" : ""}</span>
+                {rest}
+              </li>
+            );
+          }
+          return <li className="md-li" {...props}>{children}</li>;
+        },
+        blockquote: ({ children }) => <blockquote className="md-quote">{children}</blockquote>,
+        // rehype-highlight tags <code class="language-foo hljs"> inside <pre>;
+        // we wrap with .md-pre so existing styling applies.
+        pre: ({ children }) => <pre className="md-pre">{children}</pre>,
+        code: ({ children, className }: any) => {
+          // Fenced blocks get `language-foo` / `hljs` from rehype-highlight;
+          // inline code has neither. .md-code (border + bg) would double-box
+          // a fenced block (already inside .md-pre), so only apply inline
+          // styling to true inline code.
+          const isBlock = typeof className === "string" && (className.startsWith("language-") || className.includes("hljs"));
+          if (isBlock) return <code className={className}>{children}</code>;
+          return <code className="md-code">{children}</code>;
+        },
+        table: ({ children }) => <table className="md-table">{children}</table>,
+        a: ({ href, children }) => {
+          if (typeof href === "string" && href.startsWith("sorack-node:")) {
+            const id = href.slice("sorack-node:".length);
+            const target = NODES[id];
+            if (!target) return <span className="md-mention">[[node:{id}]]</span>;
+            return (
+              <button className="md-mention md-mention--node" onClick={() => onNodeJump(id)} type="button">
+                <span className="md-mention-kind">{target.kind}</span>
+                <span className="md-mention-name">{target.name}</span>
+              </button>
+            );
+          }
+          if (typeof href === "string" && href.startsWith("sorack-runbook:")) {
+            const id = href.slice("sorack-runbook:".length);
+            const target = RUNBOOKS[id];
+            if (!target) return <span className="md-mention">[[runbook:{id}]]</span>;
+            return (
+              <button className="md-mention md-mention--rb" onClick={() => onRunbookJump(id)} type="button">
+                <span className="md-mention-kind">runbook</span>
+                <span className="md-mention-name">{target.title}</span>
+              </button>
+            );
+          }
+          // External link — Notion-flavored inline pill: colored, lightly
+          // underlined, with a trailing ↗ glyph + hostname hint on hover.
+          let host = "";
+          try { host = new URL(href || "").hostname.replace(/^www\./, ""); } catch {/* ignore */}
+          return (
+            <a className="md-link" href={href} target="_blank" rel="noreferrer noopener" title={host || undefined}>
+              {children}
+              <svg className="md-link-ext" width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 2H2v10h10V9" />
+                <path d="M8 2h4v4M12 2L7 7" />
+              </svg>
+            </a>
+          );
+        },
+      }}
+    >
+      {preprocessMentions(md)}
+    </ReactMarkdownLib>
+  );
 }
 
 // ─── NodeDetail body ───────────────────────────────────────────────
