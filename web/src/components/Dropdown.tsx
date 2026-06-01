@@ -222,6 +222,7 @@ export function Dropdown({
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onKey}
       >
+        {selected?.icon && <span className="sd-dropdown-trigger-icon" aria-hidden="true">{selected.icon}</span>}
         <span className="sd-dropdown-label">{triggerLabel}</span>
         <svg
           className="sd-dropdown-caret"

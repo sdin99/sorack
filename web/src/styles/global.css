@@ -1706,6 +1706,23 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-article { padding: 24px 18px 60px; max-width: 760px; margin: 0 auto; }
 .rb-meta-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .rb-meta-cat { font-family: var(--mono); font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.1em; }
+/* Category / status dropdowns in the detail head — compact, badge-sized,
+   so the row still scans like meta even though each chip is now editable. */
+.rb-meta-pick.sd-dropdown {
+  font-family: var(--mono); font-size: 10.5px;
+  padding: 2px 8px; gap: 4px;
+  min-height: 0; min-width: 0;
+  border-radius: 3px;
+}
+.rb-meta-pick.sd-dropdown .sd-dropdown-caret { transform: scale(0.85); }
+.rb-meta-pick.sd-dropdown .sd-dropdown-trigger-icon { display: inline-flex; flex: none; color: var(--fg-3); }
+.rb-meta-pick--cat.sd-dropdown { text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); }
+/* State-colored variants — two-class specificity beats `.sd-dropdown`'s base
+   background/color, which otherwise wins by ordering. */
+.rb-meta-pick.rb-meta-state--planned     { background: var(--surface-3); color: var(--fg-2); border-color: var(--border); }
+.rb-meta-pick.rb-meta-state--in_progress { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); border-color: color-mix(in oklab, var(--warn) 40%, transparent); }
+.rb-meta-pick.rb-meta-state--completed   { background: color-mix(in oklab, var(--ok) 18%, transparent); color: var(--ok); border-color: color-mix(in oklab, var(--ok) 40%, transparent); }
+.rb-meta-pick.rb-meta-state--rolled_back { background: color-mix(in oklab, var(--err) 20%, transparent); color: var(--err); border-color: color-mix(in oklab, var(--err) 40%, transparent); }
 .rb-meta-state { font-family: var(--mono); font-size: 10.5px; padding: 2px 6px; border-radius: 3px; }
 .rb-meta-state--planned     { background: var(--surface-3); color: var(--fg-2); }
 .rb-meta-state--in_progress { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); }
@@ -1746,6 +1763,51 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   border: 1px solid var(--accent); border-radius: 4px;
   padding: 2px 8px; margin: 4px -4px 0; outline: none; width: calc(100% + 8px);
 }
+
+/* Headline relationship rows — nodeRefs / runbookRefs chips under the
+   summary. Clickable to jump; × on hover removes. + opens a small picker. */
+.rb-refs-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px; min-height: 24px;
+}
+.rb-refs-label {
+  font-family: var(--mono); font-size: 10px; color: var(--fg-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  flex: none; min-width: 56px;
+}
+.rb-refs-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.rb-ref-chip {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid var(--border); border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.rb-ref-chip-jump {
+  font: inherit; font-size: 11.5px; color: var(--fg-1);
+  padding: 2px 8px;
+  min-height: 0; min-width: 0;
+  background: transparent; border: none;
+}
+.rb-ref-chip-jump:hover { color: var(--accent); }
+.rb-ref-chip-x {
+  font: inherit; font-size: 12px; color: var(--fg-4);
+  padding: 0 6px;
+  min-height: 0; min-width: 0;
+  background: transparent; border: none; border-left: 1px solid var(--border);
+  opacity: 0; transition: opacity 0.1s, color 0.1s, background 0.1s;
+}
+.rb-ref-chip:hover .rb-ref-chip-x { opacity: 1; }
+.rb-ref-chip-x:hover { color: var(--err); background: color-mix(in oklab, var(--err) 14%, transparent); }
+
+.rb-ref-add.sd-dropdown {
+  font-family: var(--mono); font-size: 11px; color: var(--fg-3);
+  padding: 1px 6px; gap: 0;
+  min-height: 0; min-width: 0;
+  border: 1px dashed var(--border-strong); border-radius: 3px;
+  background: transparent;
+}
+.rb-ref-add.sd-dropdown:hover { color: var(--accent); border-color: var(--accent); }
+.rb-ref-add.sd-dropdown .sd-dropdown-caret { display: none; }
 /* Editor split (CodeMirror | preview) */
 .rb-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .rb-editor-statusbar {
@@ -2732,7 +2794,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 }
 
 .sd-dropdown-opt {
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 10px;
   padding: 6px 8px;
   font: inherit; font-size: 13px;
   color: var(--fg-1);

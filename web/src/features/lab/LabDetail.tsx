@@ -15,7 +15,7 @@ import { Dropdown } from "@/components/Dropdown";
 import { TagsEditor } from "./TagsEditor";
 import { CardGallery, type CardItem } from "./CardGallery";
 import { RunbookEditor } from "./RunbookEditor";
-import { RunbookList } from "./RunbookList";
+import { RunbookList, CategoryIcon } from "./RunbookList";
 import { testProbe } from "@/lib/data-source/api";
 import { slugify, uniqueSlug } from "@/lib/slug";
 
@@ -1718,6 +1718,45 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
 }
 
 // ─── Runbook full-screen viewer ────────────────────────────────────
+// Headline ref row — used twice in the runbook head (nodes + related
+// runbooks). Pure presentation; the caller computes options and supplies
+// callbacks for add/remove/jump. Defined outside RunbookScreen because
+// per-render new component types remount inputs and steal focus.
+function RefsRow({ label, items, options, onAdd, onRemove, onJump }: {
+  label: string;
+  items: { id: string; label: string }[];
+  options: { id: string; label: string }[];
+  onAdd: (id: string) => void;
+  onRemove: (id: string) => void;
+  onJump: (id: string) => void;
+}) {
+  const known = new Set(items.map((it) => it.id));
+  const available = options.filter((o) => !known.has(o.id));
+  if (items.length === 0 && available.length === 0) return null;
+  return (
+    <div className="rb-refs-row">
+      <span className="rb-refs-label">{label}</span>
+      <div className="rb-refs-chips">
+        {items.map((it) => (
+          <span key={it.id} className="rb-ref-chip">
+            <button className="rb-ref-chip-jump" onClick={() => onJump(it.id)} title={it.id}>{it.label}</button>
+            <button className="rb-ref-chip-x" onClick={() => onRemove(it.id)} aria-label="remove">×</button>
+          </span>
+        ))}
+        {available.length > 0 && (
+          <Dropdown
+            className="rb-ref-add"
+            value=""
+            options={available.map((o) => ({ value: o.id, label: o.label, description: o.id }))}
+            onChange={(id) => onAdd(id)}
+            placeholder="+"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook }) {
   const { t } = useTranslation();
   const { NODES, RUNBOOKS, createRunbook, updateRunbook, deleteRunbook } = useSorack();
@@ -1786,8 +1825,27 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
         <div className="rb-article-wrap" style={{ flex: 1, overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div className="rb-article-head">
             <div className="rb-meta-row">
-              <span className="rb-meta-cat">{rb.category}</span>
-              <span className={`rb-meta-state rb-meta-state--${rb.state}`}>{t(`runbook.state.${rb.state}`, { defaultValue: rb.state })}</span>
+              <Dropdown
+                className="rb-meta-pick rb-meta-pick--cat"
+                ariaLabel={t('runbook.category.label', { defaultValue: 'category' })}
+                value={rb.category}
+                options={['task','sop','incident','postmortem','design_doc'].map(c => ({
+                  value: c,
+                  label: t(`runbook.category.${c}`, { defaultValue: c }),
+                  icon: <CategoryIcon cat={c} />,
+                }))}
+                onChange={(v) => updateRunbook(rb.id, { category: v as any })}
+              />
+              <Dropdown
+                className={`rb-meta-pick rb-meta-state rb-meta-state--${rb.state}`}
+                ariaLabel={t('runbook.state.label', { defaultValue: 'status' })}
+                value={rb.state}
+                options={['planned','in_progress','completed','rolled_back'].map(s => ({
+                  value: s,
+                  label: t(`runbook.state.${s}`, { defaultValue: s }),
+                }))}
+                onChange={(v) => updateRunbook(rb.id, { status: v as any })}
+              />
               <span className="rb-meta-date">{t('runbook.updated', { date: rb.updated })}</span>
               <button className="rb-head-del" onClick={handleDelete} title={t('action.delete', { defaultValue: 'Delete' })} aria-label="delete">
                 <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -1832,6 +1890,22 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
                 {rb.summary || t('runbook.summaryEmpty', { defaultValue: '(no summary)' })}
               </div>
             )}
+            <RefsRow
+              label={t('runbook.refs.nodes', { defaultValue: 'nodes' })}
+              items={((rb.nodeRefs ?? []) as string[]).map((id) => ({ id, label: NODES[id]?.name ?? id }))}
+              options={Object.values(NODES).map((n: any) => ({ id: n.id, label: n.name ?? n.id }))}
+              onAdd={(id) => updateRunbook(rb.id, { nodeRefs: [...((rb.nodeRefs ?? []) as string[]), id] })}
+              onRemove={(id) => updateRunbook(rb.id, { nodeRefs: ((rb.nodeRefs ?? []) as string[]).filter((x) => x !== id) })}
+              onJump={onJumpNode}
+            />
+            <RefsRow
+              label={t('runbook.refs.runbooks', { defaultValue: 'related' })}
+              items={((rb.meta?.runbookRefs ?? []) as string[]).map((id) => ({ id, label: RUNBOOKS[id]?.title ?? id }))}
+              options={Object.values(RUNBOOKS).filter((r: any) => r.id !== rb.id).map((r: any) => ({ id: r.id, label: r.title ?? r.id }))}
+              onAdd={(id) => updateRunbook(rb.id, { meta: { runbookRefs: [...((rb.meta?.runbookRefs ?? []) as string[]), id] } as any })}
+              onRemove={(id) => updateRunbook(rb.id, { meta: { runbookRefs: ((rb.meta?.runbookRefs ?? []) as string[]).filter((x) => x !== id) } as any })}
+              onJump={onJumpRunbook}
+            />
           </div>
           <RunbookEditor
             runbookId={rb.id}

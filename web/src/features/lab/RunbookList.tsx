@@ -17,7 +17,7 @@ type Sort = "updated_desc" | "title_asc";
 
 // Small inline SVGs keep us off another icon dep. Each one's viewBox lines up
 // so the group header chip column stays uniform.
-const CategoryIcon = ({ cat }: { cat: string }) => {
+export const CategoryIcon = ({ cat }: { cat: string }) => {
   switch (cat) {
     case "task":
       return <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" /><path d="M5 8.5l2 2 4-4" /></svg>;
