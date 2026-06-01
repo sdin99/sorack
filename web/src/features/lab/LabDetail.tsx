@@ -16,6 +16,9 @@ import { TagsEditor } from "./TagsEditor";
 import { CardGallery, type CardItem } from "./CardGallery";
 import { RunbookEditor } from "./RunbookEditor";
 import { RunbookList, CategoryIcon } from "./RunbookList";
+import { ConfirmDialog } from "@/features/node-form/NodeActions";
+import { fetchRunbookTemplates, type ApiRunbookTemplate } from "@/lib/data-source/api";
+import { useQuery as useQueryD } from "@tanstack/react-query";
 import { testProbe } from "@/lib/data-source/api";
 import { slugify, uniqueSlug } from "@/lib/slug";
 
@@ -1762,24 +1765,32 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
   const { NODES, RUNBOOKS, createRunbook, updateRunbook, deleteRunbook } = useSorack();
   const [showTree, setShowTree] = useStateD(!runbookId);
   const [editingTitle, setEditingTitle] = useStateD(false);
+  const [deleteOpen, setDeleteOpen] = useStateD(false);
+  const tplQ = useQueryD({ queryKey: ["runbook-templates"], queryFn: fetchRunbookTemplates, staleTime: 5 * 60_000 });
+  const templates: ApiRunbookTemplate[] = tplQ.data ?? [];
   const [titleDraft, setTitleDraft] = useStateD('');
   const [editingSummary, setEditingSummary] = useStateD(false);
   const [summaryDraft, setSummaryDraft] = useStateD('');
 
   const rb = runbookId ? RUNBOOKS[runbookId] : null;
 
-  const handleCreate = async () => {
-    const title = window.prompt(t('runbook.newPromptTitle', { defaultValue: 'New runbook title?' }));
-    if (!title || !title.trim()) return;
-    const r = await createRunbook({ title: title.trim() });
+  const handleCreate = async ({ title, templateId }: { title: string; templateId: string }) => {
+    const tpl = templates.find((t) => t.id === templateId);
+    const payload: any = { title };
+    if (tpl) {
+      if (tpl.category) payload.category = tpl.category;
+      if (tpl.summary) payload.summary = tpl.summary;
+      if (tpl.markdown) payload.markdown = tpl.markdown;
+    }
+    const r = await createRunbook(payload);
     onJumpRunbook(r.id);
     setShowTree(false);
   };
 
   const handleDelete = async () => {
     if (!rb) return;
-    if (!window.confirm(t('runbook.deleteConfirm', { title: rb.title, defaultValue: `Delete "${rb.title}"?` }))) return;
     await deleteRunbook(rb.id);
+    setDeleteOpen(false);
     onJumpRunbook(''); // navigate back to list
     setShowTree(true);
   };
@@ -1816,6 +1827,7 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
         <RunbookList
           runbookId={runbookId ?? null}
           runbooks={RUNBOOKS}
+          templates={templates}
           onJumpRunbook={(id) => { onJumpRunbook(id); setShowTree(false); }}
           onCreate={handleCreate}
         />
@@ -1847,7 +1859,7 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
                 onChange={(v) => updateRunbook(rb.id, { status: v as any })}
               />
               <span className="rb-meta-date">{t('runbook.updated', { date: rb.updated })}</span>
-              <button className="rb-head-del" onClick={handleDelete} title={t('action.delete', { defaultValue: 'Delete' })} aria-label="delete">
+              <button className="rb-head-del" onClick={() => setDeleteOpen(true)} title={t('action.delete', { defaultValue: 'Delete' })} aria-label="delete">
                 <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 5h10M7 5V3.5h4V5M5.5 5l.6 9a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-9" />
                 </svg>
@@ -1919,6 +1931,15 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
           />
         </div>
       )}
+      <ConfirmDialog
+        open={deleteOpen && !!rb}
+        title={t('runbook.deleteTitle', { defaultValue: 'Delete runbook?' })}
+        message={t('runbook.deleteConfirm', { title: rb?.title ?? '', defaultValue: `Delete "${rb?.title ?? ''}"? This removes the file from disk.` })}
+        confirmLabel={t('action.delete', { defaultValue: 'Delete' })}
+        danger
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

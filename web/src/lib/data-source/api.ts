@@ -114,6 +114,16 @@ export const updateRunbook = (id: string, patch: RunbookUpdatePayload) =>
   sendJSON<ApiRunbook>("PATCH", `/api/runbooks/${encodeURIComponent(id)}`, patch);
 export const deleteRunbook = (id: string) =>
   sendJSON<{ ok: true }>("DELETE", `/api/runbooks/${encodeURIComponent(id)}`);
+
+export interface ApiRunbookTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: ApiRunbook["category"];
+  summary: string;
+  markdown: string;
+}
+export const fetchRunbookTemplates = () => getJSON<ApiRunbookTemplate[]>("/api/runbooks/_templates");
 export const fetchAlerts = () => getJSON<ApiAlert[]>("/api/alerts");
 
 // ── node mutations (Phase 3B) ────────────────────────────────────────

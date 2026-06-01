@@ -51,21 +51,42 @@ function formatRelative(iso: string): string {
   return `${Math.floor(sec / (86400 * 365))}y`;
 }
 
+export interface RunbookListTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface Props {
   runbookId: string | null;
   runbooks: Record<string, any>;
+  templates: RunbookListTemplate[];
   onJumpRunbook: (id: string) => void;
-  onCreate: () => void;
+  onCreate: (payload: { title: string; templateId: string }) => Promise<void>;
 }
 
-export function RunbookList({ runbookId, runbooks, onJumpRunbook, onCreate }: Props) {
+export function RunbookList({ runbookId, runbooks, templates, onJumpRunbook, onCreate }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [cats, setCats] = useState<Set<string>>(new Set());
   const [states, setStates] = useState<Set<string>>(new Set());
   const [tags, setTags] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<Sort>("updated_desc");
+  const [creating, setCreating] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [selectedTpl, setSelectedTpl] = useState<string>(templates[0]?.id ?? "blank");
+  const [submitting, setSubmitting] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const openCreate = () => { setCreateTitle(""); setSelectedTpl(templates[0]?.id ?? "blank"); setCreating(true); };
+  const cancelCreate = () => { setCreating(false); setCreateTitle(""); setSubmitting(false); };
+  const submitCreate = async () => {
+    const title = createTitle.trim();
+    if (!title || submitting) return;
+    setSubmitting(true);
+    try { await onCreate({ title, templateId: selectedTpl }); cancelCreate(); }
+    catch (e) { console.error("[runbook] create failed:", e); setSubmitting(false); }
+  };
 
   const toggle = (s: Set<string>, v: string, setter: (n: Set<string>) => void) => {
     const next = new Set(s);
@@ -145,10 +166,54 @@ export function RunbookList({ runbookId, runbooks, onJumpRunbook, onCreate }: Pr
   return (
     <div className="rb-list" ref={listRef}>
       <div className="rb-list-head">
-        <button className="rb-list-new" onClick={onCreate}>
-          <PlusIcon />
-          <span>{t("runbook.new", { defaultValue: "New runbook" })}</span>
-        </button>
+        {!creating && (
+          <button className="rb-list-new" onClick={openCreate}>
+            <PlusIcon />
+            <span>{t("runbook.new", { defaultValue: "New runbook" })}</span>
+          </button>
+        )}
+        {creating && (
+          <div className="rb-create-panel">
+            <input
+              className="rb-create-title"
+              value={createTitle}
+              onChange={(e) => setCreateTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); submitCreate(); }
+                else if (e.key === "Escape") { cancelCreate(); }
+              }}
+              placeholder={t("runbook.newTitlePlaceholder", { defaultValue: "Title…" })}
+              autoFocus
+            />
+            <div className="rb-create-tpl-label">{t("runbook.template.startFrom", { defaultValue: "Start from" })}</div>
+            <div className="rb-create-tpl-list">
+              {templates.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  className={`rb-create-tpl ${selectedTpl === tpl.id ? "rb-create-tpl--on" : ""}`}
+                  onClick={() => setSelectedTpl(tpl.id)}
+                  type="button"
+                >
+                  <span className="rb-create-tpl-name">{tpl.name}</span>
+                  {tpl.description && <span className="rb-create-tpl-desc">{tpl.description}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="rb-create-actions">
+              <button className="rb-create-cancel" onClick={cancelCreate} type="button">
+                {t("action.cancel", { defaultValue: "Cancel" })}
+              </button>
+              <button
+                className="rb-create-submit"
+                onClick={submitCreate}
+                disabled={!createTitle.trim() || submitting}
+                type="button"
+              >
+                {submitting ? "…" : t("action.create", { defaultValue: "Create" })}
+              </button>
+            </div>
+          </div>
+        )}
         <input
           className="rb-list-search"
           value={query}

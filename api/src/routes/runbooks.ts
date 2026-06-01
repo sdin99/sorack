@@ -12,6 +12,7 @@ import { runbooks } from "../db/schema";
 import { env } from "../lib/env";
 import { writeRow } from "../runbooks/writer";
 import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader";
+import { TEMPLATES } from "../runbooks/templates";
 
 export const runbooksRoutes = new Hono();
 
@@ -19,6 +20,10 @@ runbooksRoutes.get("/", async (c) => {
   const rows = await db.select().from(runbooks);
   return c.json(rows);
 });
+
+// Must be registered before `/:id` — otherwise the path-param route would
+// claim `_templates` as a runbook id.
+runbooksRoutes.get("/_templates", (c) => c.json(TEMPLATES));
 
 runbooksRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
