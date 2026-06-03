@@ -149,7 +149,17 @@
       "incident": "incident",
       "postmortem": "postmortem",
       "design_doc": "design doc"
-    }
+    },
+    "conflict": {
+      "message": "this runbook was edited elsewhere.",
+      "reload": "reload external",
+      "keepDraft": "keep my draft",
+      "dismiss": "dismiss"
+    },
+    "collapseSidebar": "collapse list",
+    "expandSidebar": "expand list",
+    "collapseHead": "collapse header",
+    "expandHead": "expand header"
   },
   "nd": {
     "synced": "{{count}} synced",

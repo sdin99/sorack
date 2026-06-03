@@ -7,6 +7,7 @@
 // react-query cache stays in sync.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, completionKeymap, acceptCompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
@@ -92,6 +93,8 @@ function makeMentionSource(mentionsRef: { current: MentionSources }) {
 type SaveState = "idle" | "dirty" | "saving" | "saved";
 
 export function RunbookEditor({ runbookId, initialContent, previewRender, onSave, mentions }: RunbookEditorProps) {
+  const { t } = useTranslation("common");
+
   // Keep mention sources in a ref so the completion source (built once) reads
   // the latest list each invocation without us recreating the extension.
   const mentionsRef = useRef(mentions);
@@ -115,6 +118,13 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   // but Y got modified" when the autosave races with the navigation.
   const pendingFlushRef = useRef<(() => void) | null>(null);
 
+  // External-edit conflict tracking. When SSE refetch arrives while the user
+  // has unsaved work, we surface a banner instead of silently dropping either
+  // side. pendingExternalRef holds the incoming version so the banner's
+  // "reload" action can apply it without re-fetching.
+  const pendingExternalRef = useRef<string | null>(null);
+  const [hasConflict, setHasConflict] = useState(false);
+
   // Reset only when switching to a different runbook. We intentionally don't
   // depend on initialContent here — react-query refetches after every save
   // and would stomp on the user's in-progress draft.
@@ -127,6 +137,8 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     setContent(initialContent);
     savedRef.current = initialContent;
     setState("idle");
+    pendingExternalRef.current = null;
+    setHasConflict(false);
     return () => {
       if (pendingFlushRef.current) {
         pendingFlushRef.current();
@@ -146,18 +158,67 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // External-edit auto-accept. SSE-triggered refetch updates `initialContent`
-  // here. If the editor is at rest (no draft, no in-flight save), absorb
-  // the new content so AI / vim / another tab's edits show up without a
-  // manual reload. Mid-edit (`dirty`/`saving`) → keep the user's draft.
+  // External-edit detection. SSE-triggered refetch updates `initialContent`.
+  //   - matches our last saved value → self-echo from our own write, skip
+  //   - matches current buffer → no change to apply, skip
+  //   - at rest (idle/saved) → auto-accept (silent, AI/vim/other-tab friendly)
+  //   - mid-edit (dirty/saving) → stash incoming + raise conflict banner so
+  //     the user decides (keep draft = last-write-wins on next save / reload
+  //     external = drop draft, take incoming).
   useEffect(() => {
+    const dbg = (...args: unknown[]) => { if (import.meta.env.DEV) console.log("[rb-editor]", runbookId, ...args); };
+    if (initialContent === savedRef.current) { dbg("incoming === savedRef → self-echo, skip"); return; }
+    if (initialContent === contentRef.current) { dbg("incoming === contentRef → no-op, skip"); return; }
+
     const s = stateRef.current;
-    if ((s === "idle" || s === "saved") && initialContent !== contentRef.current) {
+    if (s === "idle" || s === "saved") {
+      dbg("auto-accept (state=" + s + ")");
       setContent(initialContent);
       savedRef.current = initialContent;
+      return;
     }
+
+    // dirty / saving. Guard against re-raising on the same incoming value
+    // (re-renders could otherwise pulse the banner).
+    if (pendingExternalRef.current === initialContent) { dbg("conflict already raised for this version, skip"); return; }
+    dbg("raise conflict (state=" + s + ")");
+    pendingExternalRef.current = initialContent;
+    setHasConflict(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialContent]);
+
+  // Conflict actions. `dismiss` keeps the user's draft (next save will
+  // overwrite the external change — last-write-wins). `accept` drops the
+  // draft and adopts the external version.
+  const dismissConflict = () => {
+    pendingExternalRef.current = null;
+    setHasConflict(false);
+  };
+  const acceptExternal = async () => {
+    const ext = pendingExternalRef.current;
+    if (ext == null) {
+      setHasConflict(false);
+      return;
+    }
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    pendingFlushRef.current = null;
+    // If a save was in flight when the user chose "reload external", the
+    // pending write would otherwise resolve with the now-discarded draft as
+    // the authoritative version — a chokidar cycle later would surface it as
+    // a fresh external change. Re-commit `ext` so the last write wins.
+    const wasSaving = stateRef.current === "saving";
+    setContent(ext);
+    savedRef.current = ext;
+    setState("idle");
+    pendingExternalRef.current = null;
+    setHasConflict(false);
+    if (wasSaving) {
+      try { await onSave(ext); } catch (e) { console.error("[runbook] reload-save failed:", e); }
+    }
+  };
 
   const flush = async (md: string) => {
     if (timerRef.current != null) {
@@ -314,6 +375,28 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
         </div>
         <span className="rb-editor-hint">⌘S</span>
       </div>
+      {hasConflict && (
+        <div className="rb-editor-conflict" role="status">
+          <span className="rb-editor-conflict-msg">{t("runbook.conflict.message")}</span>
+          <button
+            type="button"
+            className="rb-editor-conflict-btn rb-editor-conflict-btn--accept"
+            onClick={acceptExternal}
+          >{t("runbook.conflict.reload")}</button>
+          <button
+            type="button"
+            className="rb-editor-conflict-btn"
+            onClick={dismissConflict}
+          >{t("runbook.conflict.keepDraft")}</button>
+          <button
+            type="button"
+            className="rb-editor-conflict-close"
+            onClick={dismissConflict}
+            aria-label={t("runbook.conflict.dismiss")}
+            title={t("runbook.conflict.dismiss")}
+          >✕</button>
+        </div>
+      )}
       <div className="rb-editor-split" ref={splitRef} style={{ gridTemplateColumns: gridCols }}>
         <div
           className="rb-editor-pane rb-editor-pane--edit"

@@ -149,7 +149,17 @@
       "incident": "인시던트",
       "postmortem": "사후 분석",
       "design_doc": "설계 문서"
-    }
+    },
+    "conflict": {
+      "message": "이 runbook이 외부에서 변경됐어요.",
+      "reload": "외부 변경 가져오기",
+      "keepDraft": "내 변경 유지",
+      "dismiss": "닫기"
+    },
+    "collapseSidebar": "목록 접기",
+    "expandSidebar": "목록 펴기",
+    "collapseHead": "헤더 접기",
+    "expandHead": "헤더 펴기"
   },
   "nd": {
     "synced": "{{count}}건 동기화",

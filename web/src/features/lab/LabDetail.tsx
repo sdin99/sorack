@@ -7,6 +7,7 @@ import { useState as useStateD, useEffect as useEffectD, useMemo as useMemoD, us
 import { useTranslation } from "react-i18next";
 import { useSorack } from "@/lib/data-source/SorackData";
 import { useNow } from "@/lib/use-now";
+import { useIsDesktop } from "@/lib/use-is-desktop";
 import { NodeIcon } from "@/components/icons/NodeIcon";
 import { GearIcon } from "@/components/icons/GearIcon";
 import { ALL_ICON_KINDS, iconForNode, iconForType } from "@/lib/icon-map";
@@ -1805,6 +1806,7 @@ function RefsRow({ label, items, options, onAdd, onRemove, onJump }: {
 
 export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook }) {
   const { t } = useTranslation();
+  const isDesktop = useIsDesktop();
   const { NODES, RUNBOOKS, createRunbook, updateRunbook, deleteRunbook } = useSorack();
   const [showTree, setShowTree] = useStateD(!runbookId);
   const [editingTitle, setEditingTitle] = useStateD(false);
@@ -1814,6 +1816,49 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
   const [titleDraft, setTitleDraft] = useStateD('');
   const [editingSummary, setEditingSummary] = useStateD(false);
   const [summaryDraft, setSummaryDraft] = useStateD('');
+
+  // Desktop layout knobs — sidebar width + collapse + head collapse. All
+  // persisted so the layout sticks across reloads. Mobile ignores these
+  // (the CSS grid only kicks in at ≥1024px; on mobile the list is full-
+  // width via the existing showTree/hide-on-mobile pattern).
+  const [sidebarWidth, setSidebarWidth] = useStateD<number>(() => {
+    const v = Number(localStorage.getItem("sorack-rb-sidebar-w"));
+    return Number.isFinite(v) && v >= 200 && v <= 600 ? v : 320;
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useStateD<boolean>(() =>
+    localStorage.getItem("sorack-rb-sidebar-collapsed") === "1"
+  );
+  const [headCollapsed, setHeadCollapsed] = useStateD<boolean>(() =>
+    localStorage.getItem("sorack-rb-head-collapsed") === "1"
+  );
+  useEffectD(() => { localStorage.setItem("sorack-rb-sidebar-w", String(sidebarWidth)); }, [sidebarWidth]);
+  useEffectD(() => { localStorage.setItem("sorack-rb-sidebar-collapsed", sidebarCollapsed ? "1" : "0"); }, [sidebarCollapsed]);
+  useEffectD(() => { localStorage.setItem("sorack-rb-head-collapsed", headCollapsed ? "1" : "0"); }, [headCollapsed]);
+
+  // Sidebar splitter drag. Pointer-capture pattern matches the existing
+  // editor splitter so cancel/up behaviour is identical.
+  const sbDragRef = useRefD<{ startX: number; startWidth: number } | null>(null);
+  const onSbSplitterDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.classList.add("rb-list-splitter--dragging");
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    sbDragRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+  };
+  const onSbSplitterMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!sbDragRef.current) return;
+    const dx = e.clientX - sbDragRef.current.startX;
+    const next = sbDragRef.current.startWidth + dx;
+    setSidebarWidth(Math.max(200, Math.min(600, next)));
+  };
+  const onSbSplitterUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!sbDragRef.current) return;
+    e.currentTarget.classList.remove("rb-list-splitter--dragging");
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    sbDragRef.current = null;
+  };
 
   const rb = runbookId ? RUNBOOKS[runbookId] : null;
 
@@ -1855,14 +1900,39 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
     await updateRunbook(rb.id, { summary: next });
   };
 
+  // CSS vars drive the desktop grid columns. Mobile ignores them (the grid
+  // only applies at ≥1024px). Collapsing the sidebar zeroes both its width
+  // and the splitter so the article gets the full row.
+  const rbFsStyle: React.CSSProperties = {
+    ['--rb-sidebar-w' as any]: sidebarCollapsed ? '0px' : `${sidebarWidth}px`,
+    ['--rb-splitter-w' as any]: sidebarCollapsed ? '0px' : '6px',
+  };
+
   return (
-    <div className="fs-overlay rb-fs">
+    <div className="fs-overlay rb-fs" style={rbFsStyle}>
       <header className="fs-head">
         <button className="fs-back" onClick={onClose} aria-label={t('action.back')}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 4l-6 6 6 6" />
           </svg>
         </button>
+        {/* Desktop-only sidebar toggle. Mobile uses the hidden-on-mobile
+            pattern via showTree, so this would just be noise there. */}
+        {isDesktop && (
+          <button
+            className="rb-sidebar-toggle"
+            onClick={() => setSidebarCollapsed((v) => !v)}
+            title={t(sidebarCollapsed ? 'runbook.expandSidebar' : 'runbook.collapseSidebar', { defaultValue: sidebarCollapsed ? 'expand list' : 'collapse list' })}
+            aria-label={t(sidebarCollapsed ? 'runbook.expandSidebar' : 'runbook.collapseSidebar', { defaultValue: sidebarCollapsed ? 'expand list' : 'collapse list' })}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              {/* Always the same panel-toggle glyph: outer rect + inner divider.
+                  The grid itself shows whether the panel is open. */}
+              <rect x="2.5" y="3.5" width="13" height="11" rx="1.5" />
+              <line x1="7" y1="3.5" x2="7" y2="14.5" />
+            </svg>
+          </button>
+        )}
         <div className="fs-title">{rb && !showTree ? rb.title : t('runbook.title')}</div>
       </header>
 
@@ -1876,9 +1946,24 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
         />
       </div>
 
+      {/* Desktop splitter — drag to resize the sidebar. Hidden when the
+          sidebar is collapsed (no width to resize). CSS keeps it out of
+          the layout on mobile. */}
+      {isDesktop && !sidebarCollapsed && (
+        <div
+          className="rb-list-splitter"
+          onPointerDown={onSbSplitterDown}
+          onPointerMove={onSbSplitterMove}
+          onPointerUp={onSbSplitterUp}
+          onPointerCancel={onSbSplitterUp}
+          role="separator"
+          aria-orientation="vertical"
+        />
+      )}
+
       {rb && !showTree && (
         <div className="rb-article-wrap" style={{ flex: 1, overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div className="rb-article-head">
+          <div className={`rb-article-head ${headCollapsed ? 'rb-article-head--collapsed' : ''}`}>
             <div className="rb-meta-row">
               <Dropdown
                 className="rb-meta-pick rb-meta-pick--cat"
@@ -1908,12 +1993,24 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
                 />
               )}
               <span className="rb-meta-date">{t('runbook.updated', { date: rb.updated })}</span>
+              <button
+                className="rb-head-collapse"
+                onClick={() => setHeadCollapsed((v) => !v)}
+                title={t(headCollapsed ? 'runbook.expandHead' : 'runbook.collapseHead', { defaultValue: headCollapsed ? 'expand header' : 'collapse header' })}
+                aria-label={t(headCollapsed ? 'runbook.expandHead' : 'runbook.collapseHead', { defaultValue: headCollapsed ? 'expand header' : 'collapse header' })}
+                aria-expanded={!headCollapsed}
+              >
+                <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ transform: headCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.15s' }}>
+                  <path d="M5 7l4 4 4-4" />
+                </svg>
+              </button>
               <button className="rb-head-del" onClick={() => setDeleteOpen(true)} title={t('action.delete', { defaultValue: 'Delete' })} aria-label="delete">
                 <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 5h10M7 5V3.5h4V5M5.5 5l.6 9a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-9" />
                 </svg>
               </button>
             </div>
+            {!headCollapsed && (<>
             {editingTitle ? (
               <input
                 className="rb-h1 rb-h1--input"
@@ -1967,6 +2064,7 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
               onRemove={(id) => updateRunbook(rb.id, { meta: { runbookRefs: ((rb.meta?.runbookRefs ?? []) as string[]).filter((x) => x !== id) } as any })}
               onJump={onJumpRunbook}
             />
+            </>)}
           </div>
           <RunbookEditor
             runbookId={rb.id}

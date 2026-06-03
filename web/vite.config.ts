@@ -18,15 +18,51 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:3001",
     },
+    // Eagerly transform the top of the import tree on dev-server start so
+    // the first browser request lands on warm caches instead of triggering
+    // a cascade of on-demand transforms. Cuts the "spinner → app" gap on
+    // a hard reload from ~1.5s to a few hundred ms in practice.
+    warmup: {
+      clientFiles: [
+        "./src/main.tsx",
+        "./src/App.tsx",
+        "./src/features/lab/LabDetail.tsx",
+        "./src/features/lab/RunbookEditor.tsx",
+        "./src/lib/data-source/SorackData.tsx",
+      ],
+    },
   },
   build: {
     outDir: "dist",
     sourcemap: true,
   },
   optimizeDeps: {
-    // Pre-bundle big lazy-loaded deps so the first dynamic import doesn't
-    // trip the mid-session optimizer reload that 404s for the browser's
-    // stale cached chunk URL.
-    include: ["mermaid"],
+    // Pre-bundle big deps with esbuild on dev-server start. Without this,
+    // every transitive ESM module is fetched/transformed on demand (dev's
+    // no-bundle model) — the codemirror/xyflow/react-markdown/simple-icons
+    // trees add up to hundreds of module requests on first load. Including
+    // them here collapses each to a single pre-bundled chunk and also
+    // sidesteps the mid-session optimizer reload that 404s for stale
+    // dynamic-import URLs (the reason `mermaid` was added originally).
+    include: [
+      "mermaid",
+      "react", "react-dom", "react-dom/client",
+      "react-router-dom",
+      "react-i18next", "i18next", "i18next-browser-languagedetector",
+      "@tanstack/react-query",
+      "@xyflow/react",
+      "@dagrejs/dagre",
+      "@uiw/react-codemirror",
+      "@codemirror/autocomplete",
+      "@codemirror/lang-markdown",
+      "@codemirror/state",
+      "@codemirror/view",
+      "react-markdown",
+      "remark-gfm",
+      "rehype-highlight",
+      "simple-icons",
+      "dompurify",
+      "marked",
+    ],
   },
 });

@@ -1084,7 +1084,19 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   padding-bottom: var(--safe-b);
 }
 /* ── Login gate ── */
-.auth-splash { position: fixed; inset: 0; background: var(--bg); z-index: 60; }
+.auth-splash {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.auth-spinner {
+  width: 28px; height: 28px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: auth-spinner-spin 0.8s linear infinite;
+}
+@keyframes auth-spinner-spin { to { transform: rotate(360deg); } }
 
 .login-screen {
   position: fixed; inset: 0; z-index: 60;
@@ -1310,15 +1322,19 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 
 .fs-head {
   flex: 0 0 var(--topbar-h);
-  display: grid;
-  grid-template-columns: var(--touch) 1fr auto;
+  /* Flex (was grid: var(--touch) 1fr auto) so children can come and go
+     without re-mapping columns — the rb sidebar toggle is desktop-only,
+     and the grid version put the toggle in the 1fr slot and pushed the
+     title into the rightmost auto slot. */
+  display: flex;
   align-items: center; gap: 6px;
-  padding: 0 8px; border-bottom: 1px solid var(--border);
+  padding: 0 16px 0 8px; border-bottom: 1px solid var(--border);
   background: var(--surface-1);
 }
 .fs-back { width: var(--touch); height: var(--touch); border-radius: var(--radius-sm); color: var(--fg-2); }
 .fs-back:hover { background: var(--hover-bg); color: var(--fg-1); }
 .fs-title {
+  flex: 1;
   font-weight: 600; font-size: 15px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   min-width: 0;
@@ -1773,8 +1789,38 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-tag { font-family: var(--mono); font-size: 10.5px; color: var(--fg-3); background: var(--surface-2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 3px; }
 .rb-content { line-height: 1.65; color: var(--fg-2); font-size: 15px; }
 
-/* Editor head (above the split): meta row + editable title + delete. */
-.rb-article-head { padding: 18px 18px 8px; border-bottom: 1px solid var(--border); max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+/* Editor head (above the split): meta row + editable title + delete.
+   Full-width so the border-bottom matches the editor statusbar's border
+   (the old max-width:1200px + margin:auto centered the head and left a
+   gap on the sides where the divider didn't continue). Padding-left lines
+   up with the statusbar / conflict-banner left edge. */
+.rb-article-head {
+  padding: 18px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  width: 100%; box-sizing: border-box;
+  transition: padding 0.15s;
+}
+/* Collapsed = only the meta-row stays (category/state/date + toggle + delete);
+   title, summary, refs hidden. Trim padding so the strip stays thin. */
+.rb-article-head--collapsed { padding: 4px 16px; }
+.rb-article-head--collapsed .rb-meta-row { margin-bottom: 0; }
+/* Collapse/expand chevron in the meta-row. Same footprint as .rb-head-del so
+   the row layout stays balanced. */
+.rb-head-collapse {
+  margin-left: auto;
+  width: 24px; height: 24px; min-width: 0; min-height: 0;
+  padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-3); background: transparent;
+  border: none; border-radius: var(--radius-sm); cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.rb-head-collapse:hover { color: var(--fg-1); background: var(--hover-bg); }
+/* .rb-head-del was margin-left:auto when it was the rightmost item; with the
+   collapse toggle now also using auto-margin, only the first auto-margin
+   wins (the rest are 0). Pull delete back to a fixed 0 left margin so the
+   two buttons sit together at the right end. */
+.rb-head-collapse + .rb-head-del { margin-left: 0; }
 .rb-head-del {
   margin-left: auto;
   width: 24px; height: 24px; min-width: 0; min-height: 0;
@@ -1860,6 +1906,45 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-editor-status--saving { color: var(--fg-3); }
 .rb-editor-status--saved  { color: var(--ok); }
 .rb-editor-hint { margin-left: auto; }
+/* Conflict banner — surfaces when an external write lands while the user
+   has unsaved work. Amber/warn tone so it reads as a soft warning, not a
+   destructive alert. Two actions + ✕ dismiss; ✕ behaves as "keep draft". */
+.rb-editor-conflict {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 16px;
+  font-family: var(--mono); font-size: 11.5px; color: var(--fg-1);
+  background: color-mix(in oklab, var(--warn) 14%, var(--surface-1));
+  border-bottom: 1px solid color-mix(in oklab, var(--warn) 40%, var(--border));
+}
+.rb-editor-conflict-msg { flex: 1; }
+.rb-editor-conflict-btn {
+  font: inherit; font-family: var(--mono); font-size: 10.5px;
+  padding: 3px 10px; min-height: 0; min-width: 0;
+  color: var(--fg-2); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
+.rb-editor-conflict-btn:hover {
+  color: var(--fg-1); background: var(--hover-bg); border-color: var(--border-strong);
+}
+.rb-editor-conflict-btn--accept {
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 50%, var(--border));
+}
+.rb-editor-conflict-btn--accept:hover {
+  color: var(--surface-0); background: var(--warn);
+  border-color: var(--warn);
+}
+.rb-editor-conflict-close {
+  font: inherit; font-family: var(--mono); font-size: 11px;
+  padding: 0; width: 18px; height: 18px;
+  min-height: 0; min-width: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-4); background: transparent;
+  border: none; border-radius: 3px; cursor: pointer;
+}
+.rb-editor-conflict-close:hover { color: var(--fg-1); background: var(--hover-bg); }
 /* grid-template-columns is set inline by the component (`<editPct>% 6px
    <100-editPct>%` in split mode; `1fr 0 0` or `0 0 1fr` for solo modes). */
 .rb-editor-split { flex: 1; display: grid; min-height: 0; overflow: hidden; }
@@ -2205,13 +2290,47 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   }
   .fs-overlay--alerts .fs-head { background: var(--surface-1); border-radius: var(--radius) var(--radius) 0 0; }
 
-  /* Runbook gets a sidebar tree */
-  .rb-fs { display: grid; grid-template-rows: var(--topbar-h) 1fr; grid-template-columns: 320px 1fr; }
+  /* Runbook gets a sidebar tree. Width + splitter width are driven by CSS
+     vars set inline on .rb-fs by RunbookScreen so the layout reacts to
+     the sidebar drag/collapse state. Defaults match the old fixed 320px
+     when no var is set (e.g. brief moment before first render). */
+  .rb-fs {
+    display: grid;
+    grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-columns: var(--rb-sidebar-w, 320px) var(--rb-splitter-w, 0px) 1fr;
+  }
   .rb-fs > .fs-head { grid-column: 1 / -1; }
   .rb-list-wrap { grid-column: 1; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  .rb-article-wrap { grid-column: 2; overflow-y: auto; }
+  .rb-list-splitter {
+    grid-column: 2; grid-row: 2;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    transition: background 0.1s;
+  }
+  /* Wider invisible hit-strip — same trick as the editor splitter so the
+     pointer doesn't need to be pixel-perfect on a 6px line. */
+  .rb-list-splitter::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: -4px; right: -4px;
+  }
+  .rb-list-splitter:hover, .rb-list-splitter--dragging { background: var(--primary); }
+  .rb-article-wrap { grid-column: 3; overflow-y: auto; }
   .rb-article { padding: 32px 48px; }
 }
+
+/* Sidebar collapse/expand toggle in the fs-head. Same visual weight as
+   .fs-back so the row stays balanced. Only rendered on desktop (mobile
+   uses showTree/back to flip between list and article). */
+.rb-sidebar-toggle {
+  width: 36px; height: 36px;
+  min-width: 0; min-height: 0;
+  padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-3); background: transparent;
+  border: none; border-radius: var(--radius-sm); cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.rb-sidebar-toggle:hover { color: var(--fg-1); background: var(--hover-bg); }
 
 /* ───── Card gallery (infra / software picker) ─────────────────────── */
 /* Modal-style picker: backdrop + centered panel with a search field and

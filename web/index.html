@@ -10,9 +10,65 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
+    <!-- Apply the user's saved theme before the first paint. Without this,
+         React mounts on a default-dark <html>, then a light-theme user sees
+         the page repaint from dark → light. Mirrors the App.tsx storage key
+         ('sorack-theme'). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('sorack-theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <!-- Inline base background so the very first paint (before global.css
+         finishes loading) already matches the resolved theme. Eliminates
+         the white flash on reload. Values intentionally duplicated from
+         the --bg/--fg-1 tokens.
+
+         Also defines the pre-mount spinner so it appears the moment the
+         browser parses this <style> — without it, the spinner only shows
+         up after React mounts (~1–1.5s on a hard reload), which is
+         exactly the empty-window stretch we're trying to fill. Same
+         dimensions/colours as .auth-spinner in global.css so the React
+         spinner takes over seamlessly without a visual jump. -->
+    <style>
+      html, body { background: #0a0d12; color: #e6edf3; margin: 0; }
+      html[data-theme="light"], html[data-theme="light"] body { background: #f7f7f4; color: #1a1a1a; }
+      .initial-splash {
+        position: fixed; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: #0a0d12;
+      }
+      html[data-theme="light"] .initial-splash { background: #f7f7f4; }
+      .initial-spinner {
+        /* border-box matches .auth-spinner — without it, content-box adds
+           the 2px border outside the 28px box and the spinner visibly
+           shrinks the moment React mounts its own .auth-spinner. */
+        box-sizing: border-box;
+        width: 28px; height: 28px;
+        border: 2px solid #1f2733;
+        border-top-color: #58a6ff;
+        border-radius: 50%;
+        animation: initial-spin 0.8s linear infinite;
+      }
+      html[data-theme="light"] .initial-spinner {
+        border-color: #e4e2da;
+        border-top-color: #2058c8;
+      }
+      @keyframes initial-spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Placeholder spinner inside #root. React replaces the entire #root
+         contents on first render, at which point AuthGate's .auth-splash
+         takes over (same visual). No JS needed to remove this. -->
+    <div id="root">
+      <div class="initial-splash"><div class="initial-spinner"></div></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

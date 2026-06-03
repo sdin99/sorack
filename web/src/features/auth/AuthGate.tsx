@@ -11,7 +11,11 @@ import { LoginOverlay } from "./LoginOverlay";
 // users, and the anon LoginOverlay never sees a router context.
 export function AuthGate() {
   const { status } = useAuth();
-  if (status === "loading") return <div className="auth-splash" />;
+  if (status === "loading") return (
+    <div className="auth-splash">
+      <div className="auth-spinner" aria-hidden="true" />
+    </div>
+  );
   if (status === "anon") return <LoginOverlay />;
   return (
     <SorackDataProvider>

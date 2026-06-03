@@ -189,7 +189,29 @@ function DataInner({ children }: { children: ReactNode }) {
   const createRunbookM = useMutation({ mutationFn: createRunbook, onSuccess: invalidateRunbooks });
   const updateRunbookM = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: RunbookUpdatePayload }) => updateRunbook(id, patch),
-    onSuccess: invalidateRunbooks,
+    // Optimistic: patch the cached runbook list immediately so toggles
+    // (category / status) and inline edits (title / summary / refs) render
+    // without waiting for the PATCH → chokidar → SSE refetch round-trip
+    // (~1–2s). Meta is shallow-merged so updating one key doesn't blow
+    // away its siblings. The refetch in onSettled reconciles drift.
+    onMutate: async ({ id, patch }: { id: string; patch: RunbookUpdatePayload }) => {
+      await qc.cancelQueries({ queryKey: ["runbooks"] });
+      const prev = qc.getQueryData<any[]>(["runbooks"]);
+      qc.setQueryData<any[]>(["runbooks"], (cur) => {
+        if (!cur) return cur;
+        return cur.map((rb) => {
+          if (rb.id !== id) return rb;
+          const next: any = { ...rb, ...patch };
+          if (patch.meta) next.meta = { ...(rb.meta ?? {}), ...patch.meta };
+          return next;
+        });
+      });
+      return { prev };
+    },
+    onError: (_e, _vars, ctx: any) => {
+      if (ctx?.prev) qc.setQueryData(["runbooks"], ctx.prev);
+    },
+    onSettled: invalidateRunbooks,
   });
   const deleteRunbookM = useMutation({ mutationFn: deleteRunbook, onSuccess: invalidateRunbooks });
 
@@ -200,16 +222,25 @@ function DataInner({ children }: { children: ReactNode }) {
   // matching queryKey invalidation.
   useEffect(() => {
     const es = new EventSource("/api/events");
-    const invalidateRb = () => qc.invalidateQueries({ queryKey: ["runbooks"] });
+    const dbg = (...args: unknown[]) => { if (import.meta.env.DEV) console.log("[sse]", ...args); };
+    const invalidateRb = (e: Event) => {
+      dbg("runbook.changed", (e as MessageEvent).data);
+      qc.invalidateQueries({ queryKey: ["runbooks"] });
+    };
+    es.addEventListener("open", () => dbg("open"));
     es.addEventListener("connected", () => {
+      dbg("connected — invalidating all");
       qc.invalidateQueries({ queryKey: ["runbooks"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["alerts"] });
     });
     es.addEventListener("runbook.changed", invalidateRb);
-    es.addEventListener("runbook.deleted", invalidateRb);
+    es.addEventListener("runbook.deleted", (e) => {
+      dbg("runbook.deleted", (e as MessageEvent).data);
+      qc.invalidateQueries({ queryKey: ["runbooks"] });
+    });
     es.addEventListener("ping", () => {}); // heartbeat, ignored
-    es.onerror = () => {/* browser auto-reconnects; suppress console noise */};
+    es.onerror = () => { dbg("error / reconnect", { readyState: es.readyState }); };
     return () => es.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
