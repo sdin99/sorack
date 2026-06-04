@@ -30,6 +30,7 @@ import { slugify, uniqueSlug } from "@/lib/slug";
 // markdown links pass through unchanged.
 import ReactMarkdownLib from "react-markdown";
 import remarkGfmLib from "remark-gfm";
+import remarkDirectiveLib from "remark-directive";
 import rehypeHighlightLib from "rehype-highlight";
 import { MermaidBlock } from "@/components/MermaidBlock";
 
@@ -40,10 +41,56 @@ function preprocessMentions(md: string): string {
   });
 }
 
+// Docusaurus-style admonitions: `:::name ... :::` where name ∈ ADMONITIONS.
+// remark-directive parses `:::name` into a containerDirective AST node; this
+// transform paints that node so it renders as a labelled div in HTML.
+//
+// Label = optional `:::name[Custom Title]` (directive-label child paragraph)
+// or the type name uppercased. The label is prepended as the first child so
+// it shows above the body when react-markdown renders.
+//
+// No dep on unist-util-visit — a 3-line walker is enough.
+const ADMONITIONS = new Set(["note", "info", "tip", "warning", "danger"]);
+function walk(node: any, fn: (n: any) => void) {
+  fn(node);
+  if (node.children) for (const c of node.children) walk(c, fn);
+}
+function remarkAdmonitions() {
+  return (tree: any) => {
+    walk(tree, (node) => {
+      if (node.type !== "containerDirective") return;
+      if (!ADMONITIONS.has(node.name)) return;
+      const data = node.data || (node.data = {});
+      data.hName = "div";
+      data.hProperties = {
+        className: ["md-admonition", `md-admonition--${node.name}`],
+      };
+      // Extract user-provided label (`:::tip[Watch out]`) if any. remark-
+      // directive flags it on the first paragraph child with
+      // `data.directiveLabel === true`. Fall back to the type name uppercased.
+      let labelChildren: any[] | null = null;
+      const first = node.children?.[0];
+      if (first?.type === "paragraph" && first.data?.directiveLabel) {
+        labelChildren = first.children;
+        node.children.shift();
+      }
+      // Prepend a styled label so the admonition has a visible title.
+      node.children.unshift({
+        type: "paragraph",
+        data: {
+          hName: "div",
+          hProperties: { className: ["md-admonition-label"] },
+        },
+        children: labelChildren ?? [{ type: "text", value: node.name.toUpperCase() }],
+      });
+    });
+  };
+}
+
 function renderMarkdown(md: string, onNodeJump: (id: string) => void, onRunbookJump: (id: string) => void, NODES: any, RUNBOOKS: any) {
   return (
     <ReactMarkdownLib
-      remarkPlugins={[remarkGfmLib]}
+      remarkPlugins={[remarkGfmLib, remarkDirectiveLib, remarkAdmonitions]}
       rehypePlugins={[[rehypeHighlightLib, { detect: true, ignoreMissing: true }]]}
       // Default url-sanitizer rejects custom schemes, so `sorack-node:foo`
       // never reaches our components.a (the chip becomes a bare hyperlink).

@@ -2009,6 +2009,36 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   pointer-events: none;
 }
 .md-quote { border-left: 2px solid var(--accent); padding: 4px 12px; margin: 12px 0; color: var(--fg-2); background: color-mix(in oklab, var(--accent) 6%, transparent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+/* Admonitions — Docusaurus-style `:::name ... :::` containers. Five types
+   map to the existing semantic tokens so dark/light themes resolve
+   automatically. Label is auto-prepended by the remark transform; user
+   can override with `:::tip[Custom title]`. */
+.md-admonition {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  padding: 10px 14px; margin: 12px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--fg-2);
+}
+.md-admonition-label {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--accent);
+  margin: 0 0 4px 0;
+}
+.md-admonition > :not(.md-admonition-label) { margin: 6px 0; }
+.md-admonition > :last-child { margin-bottom: 0; }
+.md-admonition--note { border-left-color: var(--accent); background: color-mix(in oklab, var(--accent) 8%, transparent); }
+.md-admonition--note .md-admonition-label { color: var(--accent); }
+.md-admonition--info { border-left-color: var(--fg-3); background: color-mix(in oklab, var(--fg-3) 8%, transparent); }
+.md-admonition--info .md-admonition-label { color: var(--fg-2); }
+.md-admonition--tip { border-left-color: var(--ok); background: color-mix(in oklab, var(--ok) 8%, transparent); }
+.md-admonition--tip .md-admonition-label { color: var(--ok); }
+.md-admonition--warning { border-left-color: var(--warn); background: color-mix(in oklab, var(--warn) 8%, transparent); }
+.md-admonition--warning .md-admonition-label { color: var(--warn); }
+.md-admonition--danger { border-left-color: var(--err); background: color-mix(in oklab, var(--err) 8%, transparent); }
+.md-admonition--danger .md-admonition-label { color: var(--err); }
 .md-ul, .md-ol { padding-left: 22px; margin: 10px 0; }
 .md-ul li, .md-ol li { margin: 4px 0; }
 .md-li-check { list-style: none; margin-left: -22px; display: flex; gap: 8px; align-items: flex-start; }
