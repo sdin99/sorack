@@ -154,6 +154,9 @@
       "message": "this runbook was edited elsewhere.",
       "reload": "reload external",
       "keepDraft": "keep my draft",
+      "viewDiff": "view diff",
+      "diffTitle": "diff — external vs my draft",
+      "diffEmpty": "no differences.",
       "dismiss": "dismiss"
     },
     "collapseSidebar": "collapse list",

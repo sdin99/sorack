@@ -7,7 +7,9 @@
 // react-query cache stays in sync.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { diffLines } from "diff";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, completionKeymap, acceptCompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
@@ -92,6 +94,89 @@ function makeMentionSource(mentionsRef: { current: MentionSources }) {
 
 type SaveState = "idle" | "dirty" | "saving" | "saved";
 
+// Unified diff modal. Defined OUTSIDE RunbookEditor so each render doesn't
+// build a fresh component type (which would remount the modal and lose
+// internal scroll position). Direction: base = external (disk), head =
+// draft (mine) — standard git-diff orientation so `+` reads as "lines I
+// added vs disk", `-` as "lines disk has that I'd discard if I keep mine".
+interface DiffModalProps {
+  draft: string;
+  external: string;
+  title: string;
+  closeLabel: string;
+  emptyLabel: string;
+  onClose: () => void;
+}
+function DiffModal({ draft, external, title, closeLabel, emptyLabel, onClose }: DiffModalProps) {
+  // Esc closes. Capture-phase + stopImmediatePropagation so the underlying
+  // Sheet / panel doesn't also dismiss on the same keystroke (the gallery
+  // had the same trap — `1d16008`).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
+  }, [onClose]);
+
+  // diff once per (draft, external) pair. Modal usually opens, user reads,
+  // closes — recomputation only matters if a typing session reopens it.
+  const lines = useMemo(() => {
+    const parts = diffLines(external, draft);
+    const out: Array<{ kind: "add" | "del" | "ctx"; text: string; key: string }> = [];
+    parts.forEach((part, pi) => {
+      const kind: "add" | "del" | "ctx" = part.added ? "add" : part.removed ? "del" : "ctx";
+      // `diffLines` returns groups whose value ends in a trailing "\n" for
+      // each terminated line; splitting then drops the resulting empty
+      // sentinel without touching genuine blank lines inside the group.
+      const rawLines = part.value.split("\n");
+      if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") rawLines.pop();
+      rawLines.forEach((line, li) => {
+        out.push({ kind, text: line, key: `${pi}-${li}` });
+      });
+    });
+    return out;
+  }, [draft, external]);
+
+  const hasChanges = lines.some((l) => l.kind !== "ctx");
+
+  return createPortal(
+    <div className="rb-diff-overlay" onClick={onClose}>
+      <div
+        className="rb-diff-panel"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <div className="rb-diff-head">
+          <span className="rb-diff-title">{title}</span>
+          <button className="rb-diff-close" onClick={onClose} aria-label={closeLabel} title={closeLabel}>✕</button>
+        </div>
+        <div className="rb-diff-body">
+          {!hasChanges ? (
+            <div className="rb-diff-empty">{emptyLabel}</div>
+          ) : (
+            lines.map((l) => (
+              <div key={l.key} className={`rb-diff-line rb-diff-line--${l.kind}`}>
+                <span className="rb-diff-prefix">
+                  {l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}
+                </span>
+                <span className="rb-diff-text">{l.text || " "}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function RunbookEditor({ runbookId, initialContent, previewRender, onSave, mentions }: RunbookEditorProps) {
   const { t } = useTranslation("common");
 
@@ -124,6 +209,7 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   // "reload" action can apply it without re-fetching.
   const pendingExternalRef = useRef<string | null>(null);
   const [hasConflict, setHasConflict] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
 
   // Reset only when switching to a different runbook. We intentionally don't
   // depend on initialContent here — react-query refetches after every save
@@ -139,6 +225,7 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     setState("idle");
     pendingExternalRef.current = null;
     setHasConflict(false);
+    setDiffOpen(false);
     return () => {
       if (pendingFlushRef.current) {
         pendingFlushRef.current();
@@ -193,6 +280,7 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   const dismissConflict = () => {
     pendingExternalRef.current = null;
     setHasConflict(false);
+    setDiffOpen(false);
   };
   const acceptExternal = async () => {
     const ext = pendingExternalRef.current;
@@ -215,6 +303,7 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     setState("idle");
     pendingExternalRef.current = null;
     setHasConflict(false);
+    setDiffOpen(false);
     if (wasSaving) {
       try { await onSave(ext); } catch (e) { console.error("[runbook] reload-save failed:", e); }
     }
@@ -380,6 +469,11 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
           <span className="rb-editor-conflict-msg">{t("runbook.conflict.message")}</span>
           <button
             type="button"
+            className="rb-editor-conflict-btn"
+            onClick={() => setDiffOpen(true)}
+          >{t("runbook.conflict.viewDiff")}</button>
+          <button
+            type="button"
             className="rb-editor-conflict-btn rb-editor-conflict-btn--accept"
             onClick={acceptExternal}
           >{t("runbook.conflict.reload")}</button>
@@ -396,6 +490,16 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
             title={t("runbook.conflict.dismiss")}
           >✕</button>
         </div>
+      )}
+      {hasConflict && diffOpen && (
+        <DiffModal
+          draft={content}
+          external={pendingExternalRef.current ?? ""}
+          title={t("runbook.conflict.diffTitle")}
+          closeLabel={t("runbook.conflict.dismiss")}
+          emptyLabel={t("runbook.conflict.diffEmpty")}
+          onClose={() => setDiffOpen(false)}
+        />
       )}
       <div className="rb-editor-split" ref={splitRef} style={{ gridTemplateColumns: gridCols }}>
         <div

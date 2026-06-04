@@ -154,6 +154,9 @@
       "message": "이 runbook이 외부에서 변경됐어요.",
       "reload": "외부 변경 가져오기",
       "keepDraft": "내 변경 유지",
+      "viewDiff": "diff 보기",
+      "diffTitle": "diff — 외부 vs 내 변경",
+      "diffEmpty": "차이 없음.",
       "dismiss": "닫기"
     },
     "collapseSidebar": "목록 접기",
