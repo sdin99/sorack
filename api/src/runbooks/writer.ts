@@ -38,7 +38,12 @@ export async function writeRow(dir: string, row: RunbookRow): Promise<string> {
   await mkdir(dir, { recursive: true });
   const target = pathForId(dir, row.id);
   const fm = buildFrontmatter(row);
-  const body = matter.stringify(row.markdown, fm);
+  // Append one \n before stringify so gray-matter's "add a \n if absent /
+  // leave alone if present" rule turns into "always add exactly one extra
+  // \n". The loader strips exactly one trailing \n, so user trailing blank
+  // lines round-trip 1:1 instead of getting silently eaten by the writer's
+  // single-\n cap.
+  const body = matter.stringify(row.markdown + "\n", fm);
   const tmp = `${target}.tmp`;
   await writeFile(tmp, body, "utf8");
   await rename(tmp, target);

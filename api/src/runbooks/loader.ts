@@ -134,10 +134,12 @@ export async function loadFile(filePath: string): Promise<RunbookRow> {
     category: VALID_CATEGORY.has(catRaw) ? catRaw : "task",
     status: VALID_STATUS.has(stRaw) ? stRaw : "planned",
     summary: typeof data.summary === "string" ? data.summary : "",
-    // Strip leading/trailing newlines so a save→read→save round-trip is
-    // idempotent. gray-matter's stringify always appends \n, so without
-    // this the file grows a blank line per save.
-    markdown: fm.content.replace(/^\n+|\n+$/g, ""),
+    // Strip exactly ONE trailing newline — the one gray-matter's stringify
+    // always appends — so save→read→save is idempotent without eating the
+    // user's own trailing blank lines. The earlier `/^\n+|\n+$/g` wiped
+    // every leading and trailing newline, which silently ate any paragraph
+    // spacing the user typed at the end of the buffer.
+    markdown: fm.content.replace(/\n$/, ""),
     nodeRefs: strArr(data.nodeRefs),
     meta,
   };
