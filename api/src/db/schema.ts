@@ -19,6 +19,7 @@ import {
   timestamp,
   uuid,
   varchar,
+  integer,
 } from "drizzle-orm/pg-core";
 
 // ── schemas ──────────────────────────────────────────────────────────
@@ -146,4 +147,25 @@ export const sessions = auth.table("sessions", {
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── docs.git_config ─────────────────────────────────────────────────
+// Single-row table holding the operator's Git settings (remote URL,
+// branch, PAT, commit author). "Single row" is enforced by a CHECK on
+// id=1 in the migration; an upsert on id=1 always writes the existing
+// row. Env vars (SORACK_GIT_*) take precedence — see git/config.ts.
+//
+// Token is stored plaintext here: v1 assumes a single-tenant Sorack
+// instance and a self-hosted Postgres the operator already trusts. A
+// later round can swap to an env-injected encryption key.
+
+export const gitConfig = docs.table("git_config", {
+  id: integer("id").primaryKey().default(1),
+  remote: text("remote"),
+  branch: text("branch"),
+  username: text("username"),
+  token: text("token"),
+  authorName: text("author_name"),
+  authorEmail: text("author_email"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

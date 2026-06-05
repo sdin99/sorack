@@ -15,6 +15,8 @@ import { runbooksRoutes } from "./routes/runbooks";
 import { alertsRoutes } from "./routes/alerts";
 import { inventoryRoutes } from "./routes/inventory";
 import { eventsRoutes } from "./routes/events";
+import { gitRoutes } from "./routes/git";
+import { bootstrapClone, startGitBackground, stopGitBackground } from "./git/runtime";
 
 const app = new Hono();
 
@@ -60,6 +62,7 @@ app.route("/api/runbooks", runbooksRoutes);
 app.route("/api/alerts", alertsRoutes);
 app.route("/api/inventory", inventoryRoutes);
 app.route("/api/events", eventsRoutes);
+app.route("/api/git", gitRoutes);
 
 const port = env.PORT;
 
@@ -70,6 +73,14 @@ const port = env.PORT;
 await runMigrations();
 // Create the admin user on first boot before accepting traffic.
 await ensureAdminUser();
+// If a git remote is configured and the runbooks dir is empty, clone it
+// before the initial scan so the file watcher / DB sync see the cloned
+// content from the first request. Bootstrap is best-effort — a failure
+// (network down, bad PAT) is logged and the api still serves whatever is
+// already on disk; the user can fix config + retry via /api/git/pull.
+await bootstrapClone()
+  .then((r) => { if (r.cloned) console.log("[git] cloned remote into RUNBOOKS_DIR"); })
+  .catch((e) => console.warn("[git] bootstrap clone failed:", e?.message ?? e));
 // Reconcile runbook files ↔ DB before traffic so GET /api/runbooks reflects
 // disk state from the first request (skipped silently if the dir is empty).
 await initialScan().catch((e) => console.warn("[runbooks] initial scan failed:", e));
@@ -78,6 +89,7 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(`[api] listening on :${info.port}`);
   startCollector(); // begin health polling; no-op if SORACK_HEALTH_ENABLED=false
   startWatcher(); // chokidar — external edits to RUNBOOKS_DIR flow into DB
+  startGitBackground(); // 5-min `git fetch` + SSE emit on snapshot change
 });
 
 // Graceful shutdown: stop the interval so a tsx-watch restart or a k8s pod
@@ -85,6 +97,7 @@ serve({ fetch: app.fetch, port }, (info) => {
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.once(sig, async () => {
     stopCollector();
+    stopGitBackground();
     await stopWatcher();
     process.exit(0);
   });

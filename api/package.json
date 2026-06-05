@@ -19,6 +19,7 @@
     "drizzle-orm": "^0.44.0",
     "gray-matter": "^4.0.3",
     "hono": "^4.10.0",
+    "isomorphic-git": "^1.38.4",
     "postgres": "^3.4.5"
   },
   "devDependencies": {

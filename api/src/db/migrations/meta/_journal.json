@@ -29,6 +29,13 @@
       "when": 1780245698335,
       "tag": "0003_runbook_frontmatter",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780477200000,
+      "tag": "0004_git_config",
+      "breakpoints": true
     }
   ]
 }
