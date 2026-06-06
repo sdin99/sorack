@@ -44,3 +44,6 @@ docs/
 # pattern only matches the repo-root `runbooks/`, not the `api/src/runbooks/`
 # code module.
 /runbooks/
+# Same idea for alt dirs used during e2e git testing (operator points
+# SORACK_RUNBOOKS_DIR at one of these temporarily).
+/runbooks-*/

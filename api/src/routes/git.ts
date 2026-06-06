@@ -12,6 +12,7 @@ import { db } from "../db";
 import { gitConfig } from "../db/schema";
 import { getGitClient } from "../git/runtime";
 import { getConfigSource, isGitEnabled, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config";
+import { encryptToken } from "../git/crypto";
 
 export const gitRoutes = new Hono();
 
@@ -59,7 +60,11 @@ gitRoutes.patch("/config", async (c) => {
   if (body.remote !== undefined && source.remote !== "env") safe.remote = body.remote;
   if (body.branch !== undefined && source.branch !== "env") safe.branch = body.branch;
   if (body.username !== undefined && source.username !== "env") safe.username = body.username;
-  if (body.token !== undefined && source.token !== "env") safe.token = body.token;
+  if (body.token !== undefined && source.token !== "env") {
+    // Empty string clears the stored token; any non-empty value is
+    // encrypted at rest with the master key (env.GIT_TOKEN_KEY).
+    safe.token = body.token ? encryptToken(body.token) : null;
+  }
   if (body.authorName !== undefined && source.authorName !== "env") safe.authorName = body.authorName;
   if (body.authorEmail !== undefined && source.authorEmail !== "env") safe.authorEmail = body.authorEmail;
   await saveGitConfig(safe);

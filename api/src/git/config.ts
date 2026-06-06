@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { gitConfig } from "../db/schema";
 import type { GitConfig } from "./client";
+import { decryptToken } from "./crypto";
 
 const ENV = {
   ENABLED: process.env.SORACK_GIT_ENABLED, // string "true" | "false" | undefined
@@ -47,11 +48,14 @@ export async function loadGitConfig(): Promise<GitConfig | null> {
   const row = await readDbRow();
   const remote = ENV.REMOTE ?? row?.remote ?? "";
   if (!remote) return null;
+  // DB-stored token is encrypted (or legacy plaintext for rows written
+  // before the encryption landed). Env-supplied tokens are always raw.
+  const dbToken = decryptToken(row?.token ?? null);
   return {
     remote,
     branch: ENV.BRANCH ?? row?.branch ?? "main",
     username: ENV.USERNAME ?? row?.username ?? undefined,
-    token: ENV.TOKEN ?? row?.token ?? undefined,
+    token: ENV.TOKEN ?? dbToken,
     authorName: ENV.AUTHOR_NAME ?? row?.authorName ?? undefined,
     authorEmail: ENV.AUTHOR_EMAIL ?? row?.authorEmail ?? undefined,
   };

@@ -22,6 +22,30 @@ function authSecret(): string {
   return randomBytes(32).toString("base64");
 }
 
+// AES-256-GCM key for PATs stored in docs.git_config. Same model as
+// AUTH_SECRET — missing → random + warn, but the consequence is that
+// stored tokens become unreadable on restart and the user re-enters the
+// PAT in Settings. 32 bytes base64 (`openssl rand -base64 32`).
+function gitTokenKey(): string {
+  const v = process.env.SORACK_GIT_TOKEN_KEY;
+  if (v) {
+    if (Buffer.from(v, "base64").length !== 32) {
+      throw new Error(
+        "SORACK_GIT_TOKEN_KEY must be 32 bytes base64 — " +
+          "generate with `openssl rand -base64 32`.",
+      );
+    }
+    return v;
+  }
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[git] SORACK_GIT_TOKEN_KEY not set — generated a random key. " +
+      "Stored PATs become unreadable on restart. " +
+      "Set SORACK_GIT_TOKEN_KEY (`openssl rand -base64 32`) to persist.",
+  );
+  return randomBytes(32).toString("base64");
+}
+
 export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   POSTGRES_HOST: process.env.POSTGRES_HOST ?? "sorack-postgres.sorack.svc.cluster.local",
@@ -32,6 +56,7 @@ export const env = {
 
   // ── auth ──
   AUTH_SECRET: authSecret(),
+  GIT_TOKEN_KEY: gitTokenKey(),
   ADMIN_USERNAME: process.env.SORACK_ADMIN_USERNAME ?? "admin",
   ADMIN_PASSWORD: process.env.SORACK_ADMIN_PASSWORD, // optional → bootstrap generates
   COOKIE_SECURE: (process.env.SORACK_COOKIE_SECURE ?? "true") !== "false",
