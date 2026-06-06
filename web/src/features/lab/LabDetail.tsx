@@ -17,6 +17,7 @@ import { TagsEditor } from "./TagsEditor";
 import { CardGallery, type CardItem } from "./CardGallery";
 import { RunbookEditor } from "./RunbookEditor";
 import { RunbookList, CategoryIcon } from "./RunbookList";
+import { GitInline } from "@/features/git/GitInline";
 import { ConfirmDialog } from "@/features/node-form/NodeActions";
 import { fetchRunbookTemplates, type ApiRunbookTemplate } from "@/lib/data-source/api";
 import { useQuery as useQueryD } from "@tanstack/react-query";
@@ -1981,6 +1982,7 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
           </button>
         )}
         <div className="fs-title">{rb && !showTree ? rb.title : t('runbook.title')}</div>
+        <GitInline />
       </header>
 
       <div className={`rb-list-wrap ${showTree || !rb ? '' : 'rb-list-wrap--hidden-on-mobile'}`}>

@@ -11,6 +11,7 @@ import {
   type GitFieldSource,
 } from "@/lib/data-source/api";
 import { useSorack } from "@/lib/data-source/SorackData";
+import { CommitPushModal } from "@/features/git/CommitPushModal";
 import { SUPPORTED_LANGS, type Lang } from "@/i18n";
 
 export type SettingsCategory = "appearance" | "account" | "runbook";
@@ -195,9 +196,26 @@ function RunbookPanel() {
 
   const setMode = async (next: boolean) => {
     if (envPinnedMode || next === enabled) return;
-    await updateGitConfig({ enabled: next });
-    await qc.invalidateQueries({ queryKey: ["git-config"] });
-    await qc.invalidateQueries({ queryKey: ["git-status"] });
+    // Optimistic: flip the cached enabled immediately so the segmented
+    // toggle (and the conditional GitPanel mount below) react in one
+    // frame instead of waiting for the PATCH + refetch round-trip
+    // (~1.5s on dev). On failure we roll back to the prior snapshot.
+    //
+    // cancelQueries first — without it, a still-in-flight initial fetch
+    // (or anyone else's fetch on this key) lands AFTER our setQueryData
+    // and stomps the optimistic value, producing a visible "git → local
+    // → git" flicker before the invalidate's refetch catches up.
+    await qc.cancelQueries({ queryKey: ["git-config"] });
+    const prev = qc.getQueryData<typeof cfgQ.data>(["git-config"]);
+    if (prev) qc.setQueryData(["git-config"], { ...prev, enabled: next });
+    try {
+      await updateGitConfig({ enabled: next });
+    } catch (e) {
+      if (prev) qc.setQueryData(["git-config"], prev);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["git-config"] });
+    qc.invalidateQueries({ queryKey: ["git-status"] });
   };
 
   return (
@@ -400,15 +418,7 @@ function GitPanel() {
         </div>
       </form>
 
-      {commitOpen && (
-        <CommitPushModal
-          onClose={() => setCommitOpen(false)}
-          onDone={() => {
-            setCommitOpen(false);
-            qc.invalidateQueries({ queryKey: ["git-status"] });
-          }}
-        />
-      )}
+      {commitOpen && <CommitPushModal onClose={() => setCommitOpen(false)} />}
     </>
   );
 }
@@ -473,67 +483,5 @@ function GitTokenField({
   );
 }
 
-// Commit & Push modal. Backdrop click + Esc close. On success, refreshes
-// git status and closes; on failure, surfaces the reason inline so the
-// user can fix and retry without losing the message they typed.
-function CommitPushModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const { t } = useTranslation();
-  const { gitStatus } = useSorack();
-  const [message, setMessage] = useState<string>(`update ${gitStatus?.dirty ?? 0} runbook${(gitStatus?.dirty ?? 0) === 1 ? "" : "s"}`);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string>("");
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); } };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
-  }, [onClose]);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim()) return;
-    setBusy(true); setErr("");
-    try {
-      const { gitCommitPush } = await import("@/lib/data-source/api");
-      const r = await gitCommitPush(message.trim());
-      if (r.ok) onDone();
-      else setErr(r.reason);
-    } catch (ex: any) {
-      setErr(String(ex?.message ?? ex));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="git-modal-overlay" onClick={onClose}>
-      <form className="git-modal-panel" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div className="git-modal-head">
-          <span className="git-modal-title">{t("git.commitAndPush")}</span>
-          <button type="button" className="git-modal-close" onClick={onClose} aria-label={t("action.close")}>✕</button>
-        </div>
-        <div className="git-modal-body">
-          <label className="settings-input-row">
-            <span className="settings-input-label">{t("git.commitMessage")}</span>
-            <input
-              className="settings-input"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              autoFocus
-            />
-          </label>
-          <div className="settings-field-hint">
-            {gitStatus?.dirty ?? 0} {t("git.filesChanged")}
-          </div>
-          {err && <div className="settings-err">{err}</div>}
-        </div>
-        <div className="git-modal-actions">
-          <button type="button" className="settings-btn" onClick={onClose}>{t("action.cancel")}</button>
-          <button type="submit" className="settings-btn settings-btn--primary" disabled={busy || !message.trim()}>
-            {busy ? "…" : t("git.commitAndPush")}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
+// CommitPushModal moved to @/features/git/CommitPushModal — also used by
+// the runbook-screen inline git actions.
