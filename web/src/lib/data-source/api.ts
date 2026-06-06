@@ -220,3 +220,57 @@ export async function fetchMe(): Promise<MeResponse | null> {
   if (!r.ok) throw new Error(`me ${r.status}`);
   return r.json();
 }
+
+// ── Git ──────────────────────────────────────────────────────────────
+export type GitFieldSource = "env" | "db" | null;
+export interface GitStatus {
+  configured: boolean;       // git mode + remote OK (client has cfg)
+  enabled: boolean;          // explicit storage-mode toggle
+  repo: boolean;
+  branch?: string;
+  dirty: number;
+  ahead: number;
+  behind: number;
+  lastFetchAt?: string;
+  remote?: string;
+  error?: string;
+}
+export interface GitConfigView {
+  enabled: boolean;
+  remote: string;
+  branch: string;
+  username: string;
+  authorName: string;
+  authorEmail: string;
+  tokenSet: boolean;
+  source: {
+    enabled: GitFieldSource;
+    remote: GitFieldSource;
+    branch: GitFieldSource;
+    username: GitFieldSource;
+    token: GitFieldSource;
+    authorName: GitFieldSource;
+    authorEmail: GitFieldSource;
+  };
+}
+export type GitConfigPatch = Partial<{
+  enabled: boolean;
+  remote: string | null;
+  branch: string | null;
+  username: string | null;
+  token: string | null;
+  authorName: string | null;
+  authorEmail: string | null;
+}>;
+
+export const fetchGitStatus = () => getJSON<GitStatus>("/api/git/status");
+export const fetchGitConfig = () => getJSON<GitConfigView>("/api/git/config");
+export const updateGitConfig = (patch: GitConfigPatch) =>
+  sendJSON<{ ok: true }>("PATCH", "/api/git/config", patch);
+export const gitPull = () =>
+  sendJSON<{ ok: true } | { ok: false; reason: string }>("POST", "/api/git/pull");
+export const gitCommitPush = (message: string) =>
+  sendJSON<
+    | { ok: true; oid: string; filesCommitted: number }
+    | { ok: false; reason: string }
+  >("POST", "/api/git/commit-push", { message });

@@ -170,6 +170,27 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 }
 .alert-badge--warn { background: var(--warn); }
 
+/* Git status badge (topbar). Compact icon + count. Hidden when git
+   isn't configured at all. Colour tracks the same semantics as the
+   editor save-state pills: clean=fg-3, dirty=warn, ahead/behind=accent,
+   error=err. */
+.topbar-git {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 32px; padding: 0 8px; min-width: 0; min-height: 0;
+  border-radius: var(--radius-sm);
+  color: var(--fg-3); background: transparent; border: none;
+  transition: color 0.1s, background 0.1s;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  cursor: pointer;
+}
+.topbar-git:hover { background: var(--hover-bg); }
+.topbar-git--clean  { color: var(--fg-3); }
+.topbar-git--accent { color: var(--accent); }
+.topbar-git--warn   { color: var(--warn); }
+.topbar-git--err    { color: var(--err); }
+.topbar-git-count { font-family: var(--mono); font-size: 11px; }
+.topbar-git-glyph { font-weight: 700; }
+
 /* Desktop-only header bits hidden on mobile */
 .topbar-crumbs { display: none; }
 
@@ -1296,6 +1317,56 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1);
 }
 .settings-btn--primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); font-weight: 600; }
+.settings-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.settings-subcard-actions { gap: 10px; }
+
+/* Git panel — "(env)" / "(set)" tag in the input label, disabled-input
+   styling for env-pinned fields. */
+.settings-env-pin {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--fg-4); text-transform: lowercase; letter-spacing: 0;
+  margin-left: 6px;
+}
+.settings-input:disabled {
+  background: var(--surface-3); color: var(--fg-4);
+  cursor: not-allowed;
+}
+.settings-field-value { font-family: var(--mono); font-size: 12.5px; color: var(--fg-1); }
+
+/* Commit-push modal — portal-mounted from SettingsView via React state
+   (not a true createPortal here; the .settings-view itself is rendered
+   inline so a normal-z modal works). */
+.git-modal-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--scrim);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.git-modal-panel {
+  width: min(520px, 100%);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+}
+.git-modal-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.git-modal-title { flex: 1; font-weight: 600; font-size: 13.5px; color: var(--fg-1); }
+.git-modal-close {
+  width: 28px; height: 28px; min-width: 0; min-height: 0;
+  padding: 0; color: var(--fg-3); background: transparent;
+  border: none; border-radius: var(--radius-sm); cursor: pointer;
+}
+.git-modal-close:hover { color: var(--fg-1); background: var(--hover-bg); }
+.git-modal-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.git-modal-actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 10px 14px; border-top: 1px solid var(--border);
+}
 .settings-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
 .settings-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .settings-signout {

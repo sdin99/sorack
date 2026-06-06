@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { changePassword } from "@/lib/data-source/api";
+import {
+  changePassword,
+  fetchGitConfig,
+  updateGitConfig,
+  gitPull,
+  type GitConfigView,
+  type GitFieldSource,
+} from "@/lib/data-source/api";
+import { useSorack } from "@/lib/data-source/SorackData";
 import { SUPPORTED_LANGS, type Lang } from "@/i18n";
 
-export type SettingsCategory = "appearance" | "account";
+export type SettingsCategory = "appearance" | "account" | "runbook";
 
-const KNOWN_CATEGORIES: SettingsCategory[] = ["appearance", "account"];
+const KNOWN_CATEGORIES: SettingsCategory[] = ["appearance", "account", "runbook"];
 
 interface Props {
   theme: "dark" | "light";
@@ -30,6 +39,7 @@ export function SettingsView({ theme, setTheme, category, onCategoryChange, onCl
   const cats: { key: SettingsCategory; label: string }[] = [
     { key: "appearance", label: t("settings.appearance") },
     { key: "account", label: t("settings.account") },
+    { key: "runbook", label: t("settings.runbook") },
   ];
 
   return (
@@ -53,6 +63,7 @@ export function SettingsView({ theme, setTheme, category, onCategoryChange, onCl
         <div className="settings-content">
           {cat === "appearance" && <AppearancePanel theme={theme} setTheme={setTheme} />}
           {cat === "account" && <AccountPanel />}
+          {cat === "runbook" && <RunbookPanel />}
         </div>
       </div>
     </div>
@@ -167,5 +178,362 @@ function AccountPanel() {
 
       <button className="settings-signout" onClick={() => logout()}>{t("auth.signOut")}</button>
     </section>
+  );
+}
+
+// ── Runbook ─────────────────────────────────────────────────────────
+// Wrapper panel for all runbook-related settings. v1 only has one
+// section (Storage = local-file vs git-sync), but keeping it as its own
+// category leaves room for retention / template-source / attachment
+// settings without piling onto Appearance or Account.
+function RunbookPanel() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const cfgQ = useQuery({ queryKey: ["git-config"], queryFn: fetchGitConfig });
+  const enabled = cfgQ.data?.enabled ?? false;
+  const envPinnedMode = cfgQ.data?.source.enabled === "env";
+
+  const setMode = async (next: boolean) => {
+    if (envPinnedMode || next === enabled) return;
+    await updateGitConfig({ enabled: next });
+    await qc.invalidateQueries({ queryKey: ["git-config"] });
+    await qc.invalidateQueries({ queryKey: ["git-status"] });
+  };
+
+  return (
+    <section className="settings-panel">
+      <h2 className="settings-panel-title">{t("settings.runbook")}</h2>
+
+      <div className="settings-field">
+        <div className="settings-field-text">
+          <div className="settings-field-label">
+            {t("runbook.storageMode")}
+            {envPinnedMode && <span className="settings-env-pin"> (env)</span>}
+          </div>
+          <div className="settings-field-hint">
+            {enabled ? t("runbook.storageGitHint") : t("runbook.storageLocalHint")}
+          </div>
+        </div>
+        <div className="settings-seg">
+          <button
+            className={`settings-seg-btn ${!enabled ? "settings-seg-btn--on" : ""}`}
+            onClick={() => setMode(false)}
+            disabled={envPinnedMode}
+          >{t("runbook.storageLocal")}</button>
+          <button
+            className={`settings-seg-btn ${enabled ? "settings-seg-btn--on" : ""}`}
+            onClick={() => setMode(true)}
+            disabled={envPinnedMode}
+          >{t("runbook.storageGit")}</button>
+        </div>
+      </div>
+
+      {enabled && <GitPanel />}
+    </section>
+  );
+}
+
+// ── Git (Storage = Git sync) ────────────────────────────────────────
+// Status (clean / dirty N / ahead / behind / last fetch) + config form.
+// Env-pinned fields render read-only with a "(env)" hint so an operator
+// understands why they can't change the value from the UI. Nested
+// inside RunbookPanel — git is one storage mechanism, not its own
+// top-level category.
+function GitPanel() {
+  const { t } = useTranslation();
+  const { gitStatus } = useSorack();
+  const qc = useQueryClient();
+  const cfgQ = useQuery({ queryKey: ["git-config"], queryFn: fetchGitConfig });
+  const [draft, setDraft] = useState<GitConfigView | null>(null);
+  const [tokenDraft, setTokenDraft] = useState<string>("");
+  const [savingState, setSavingState] = useState<"idle" | "busy" | "ok" | "err">("idle");
+  const [saveErr, setSaveErr] = useState<string>("");
+  const [pullState, setPullState] = useState<"idle" | "busy">("idle");
+  const [pullMsg, setPullMsg] = useState<string>("");
+  const [commitOpen, setCommitOpen] = useState(false);
+
+  // Mirror server state into the form once on first load (and again when
+  // the user discards). After that the form owns its draft.
+  useEffect(() => {
+    if (cfgQ.data && !draft) setDraft(cfgQ.data);
+  }, [cfgQ.data, draft]);
+
+  if (!cfgQ.data || !draft) {
+    return <div className="settings-field-hint">…</div>;
+  }
+
+  const src = draft.source;
+  const isEnv = (k: keyof typeof src): boolean => src[k] === "env";
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaveErr("");
+    setSavingState("busy");
+    try {
+      const patch: any = {};
+      // Only send fields the user actually owns (UI side); env-pinned
+      // fields are skipped both here and server-side.
+      if (!isEnv("remote")) patch.remote = draft.remote || null;
+      if (!isEnv("branch")) patch.branch = draft.branch || null;
+      if (!isEnv("username")) patch.username = draft.username || null;
+      if (!isEnv("authorName")) patch.authorName = draft.authorName || null;
+      if (!isEnv("authorEmail")) patch.authorEmail = draft.authorEmail || null;
+      // Token only if user typed a new value; empty string clears it.
+      if (!isEnv("token") && tokenDraft) patch.token = tokenDraft;
+      await updateGitConfig(patch);
+      setTokenDraft("");
+      await qc.invalidateQueries({ queryKey: ["git-config"] });
+      await qc.invalidateQueries({ queryKey: ["git-status"] });
+      setSavingState("ok");
+      setTimeout(() => setSavingState("idle"), 2000);
+    } catch (ex: any) {
+      setSaveErr(String(ex?.message ?? ex));
+      setSavingState("err");
+    }
+  };
+
+  const doPull = async () => {
+    setPullState("busy");
+    setPullMsg("");
+    try {
+      const r = await gitPull();
+      if (r.ok) {
+        setPullMsg(t("git.pullOk"));
+      } else {
+        setPullMsg(t("git.pullErr", { reason: r.reason }));
+      }
+    } catch (ex: any) {
+      setPullMsg(t("git.pullErr", { reason: String(ex?.message ?? ex) }));
+    } finally {
+      setPullState("idle");
+      qc.invalidateQueries({ queryKey: ["git-status"] });
+      setTimeout(() => setPullMsg(""), 4000);
+    }
+  };
+
+  const statusLabel = (() => {
+    if (!gitStatus) return "…";
+    if (!gitStatus.configured) return t("git.notConfigured");
+    if (!gitStatus.repo) return t("git.notRepo");
+    const parts: string[] = [];
+    if (gitStatus.dirty > 0) parts.push(t("git.dirtyN", { count: gitStatus.dirty }));
+    if (gitStatus.ahead > 0) parts.push(t("git.aheadN", { count: gitStatus.ahead }));
+    if (gitStatus.behind > 0) parts.push(t("git.behindN", { count: gitStatus.behind }));
+    if (parts.length === 0) return t("git.clean");
+    return parts.join(" · ");
+  })();
+
+  return (
+    <>
+      <div className="settings-subcard">
+        <div className="settings-subcard-title">{t("git.status")}</div>
+        <div className="settings-field">
+          <div className="settings-field-text">
+            <div className="settings-field-label">{t("git.state")}</div>
+            <div className="settings-field-hint">
+              {gitStatus?.branch ? `branch: ${gitStatus.branch}` : ""}
+              {gitStatus?.lastFetchAt ? ` · last fetch: ${new Date(gitStatus.lastFetchAt).toLocaleString()}` : ""}
+            </div>
+          </div>
+          <div className="settings-field-value">{statusLabel}</div>
+        </div>
+        {gitStatus?.error && <div className="settings-err">{gitStatus.error}</div>}
+        <div className="settings-subcard-actions">
+          <button
+            className="settings-btn"
+            onClick={doPull}
+            disabled={pullState === "busy" || !gitStatus?.configured || !gitStatus?.repo}
+          >{pullState === "busy" ? "…" : t("git.pull")}</button>
+          <button
+            className="settings-btn settings-btn--primary"
+            onClick={() => setCommitOpen(true)}
+            disabled={!gitStatus?.configured || !gitStatus?.repo || (gitStatus?.dirty ?? 0) === 0}
+          >{t("git.commitAndPush")}</button>
+        </div>
+        {pullMsg && <div className="settings-field-hint">{pullMsg}</div>}
+      </div>
+
+      <form className="settings-subcard" onSubmit={submit}>
+        <div className="settings-subcard-title">{t("git.config")}</div>
+
+        <GitField
+          label={t("git.remote")} hint={t("git.remoteHint")}
+          value={draft.remote} src={src.remote}
+          onChange={(v) => setDraft({ ...draft, remote: v })}
+          placeholder="https://github.com/user/repo.git"
+        />
+        <GitField
+          label={t("git.branch")} value={draft.branch} src={src.branch}
+          onChange={(v) => setDraft({ ...draft, branch: v })}
+          placeholder="main"
+        />
+        <GitField
+          label={t("git.username")} hint={t("git.usernameHint")}
+          value={draft.username} src={src.username}
+          onChange={(v) => setDraft({ ...draft, username: v })}
+          placeholder="x-access-token"
+        />
+        <GitTokenField
+          label={t("git.token")} hint={t("git.tokenHint")}
+          src={src.token} hasValue={draft.tokenSet}
+          value={tokenDraft} onChange={setTokenDraft}
+        />
+        <GitField
+          label={t("git.authorName")} value={draft.authorName} src={src.authorName}
+          onChange={(v) => setDraft({ ...draft, authorName: v })}
+          placeholder="sorack"
+        />
+        <GitField
+          label={t("git.authorEmail")} value={draft.authorEmail} src={src.authorEmail}
+          onChange={(v) => setDraft({ ...draft, authorEmail: v })}
+          placeholder="sorack@localhost"
+        />
+
+        {saveErr && <div className="settings-err">{saveErr}</div>}
+        {savingState === "ok" && <div className="settings-ok">{t("git.saved")}</div>}
+        <div className="settings-subcard-actions">
+          <button
+            type="submit"
+            className="settings-btn settings-btn--primary"
+            disabled={savingState === "busy"}
+          >{savingState === "busy" ? "…" : t("git.save")}</button>
+        </div>
+      </form>
+
+      {commitOpen && (
+        <CommitPushModal
+          onClose={() => setCommitOpen(false)}
+          onDone={() => {
+            setCommitOpen(false);
+            qc.invalidateQueries({ queryKey: ["git-status"] });
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// Reusable form row. Env-pinned fields render as a disabled input with
+// the value greyed out and an "(env)" tag in the hint line.
+function GitField({
+  label, hint, value, src, onChange, placeholder,
+}: {
+  label: string; hint?: string;
+  value: string; src: GitFieldSource;
+  onChange: (v: string) => void; placeholder?: string;
+}) {
+  const envPinned = src === "env";
+  return (
+    <label className="settings-input-row">
+      <span className="settings-input-label">
+        {label}
+        {envPinned && <span className="settings-env-pin"> (env)</span>}
+      </span>
+      <input
+        className="settings-input"
+        value={envPinned ? "•••• (env)" : value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={envPinned}
+        placeholder={placeholder}
+      />
+      {hint && <span className="settings-field-hint">{hint}</span>}
+    </label>
+  );
+}
+
+// Token row: writes are one-way (we never read the token back to the
+// UI). Shows "(set)" if a value already exists server-side and the user
+// hasn't typed a new one yet.
+function GitTokenField({
+  label, hint, src, hasValue, value, onChange,
+}: {
+  label: string; hint?: string;
+  src: GitFieldSource; hasValue: boolean;
+  value: string; onChange: (v: string) => void;
+}) {
+  const envPinned = src === "env";
+  return (
+    <label className="settings-input-row">
+      <span className="settings-input-label">
+        {label}
+        {envPinned && <span className="settings-env-pin"> (env)</span>}
+        {!envPinned && hasValue && !value && <span className="settings-env-pin"> (set)</span>}
+      </span>
+      <input
+        type="password"
+        autoComplete="new-password"
+        className="settings-input"
+        value={envPinned ? "•••• (env)" : value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={envPinned}
+        placeholder={envPinned ? "" : hasValue ? "•••• (set — replace by typing)" : "ghp_…"}
+      />
+      {hint && <span className="settings-field-hint">{hint}</span>}
+    </label>
+  );
+}
+
+// Commit & Push modal. Backdrop click + Esc close. On success, refreshes
+// git status and closes; on failure, surfaces the reason inline so the
+// user can fix and retry without losing the message they typed.
+function CommitPushModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { t } = useTranslation();
+  const { gitStatus } = useSorack();
+  const [message, setMessage] = useState<string>(`update ${gitStatus?.dirty ?? 0} runbook${(gitStatus?.dirty ?? 0) === 1 ? "" : "s"}`);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>("");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
+  }, [onClose]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setBusy(true); setErr("");
+    try {
+      const { gitCommitPush } = await import("@/lib/data-source/api");
+      const r = await gitCommitPush(message.trim());
+      if (r.ok) onDone();
+      else setErr(r.reason);
+    } catch (ex: any) {
+      setErr(String(ex?.message ?? ex));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="git-modal-overlay" onClick={onClose}>
+      <form className="git-modal-panel" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div className="git-modal-head">
+          <span className="git-modal-title">{t("git.commitAndPush")}</span>
+          <button type="button" className="git-modal-close" onClick={onClose} aria-label={t("action.close")}>✕</button>
+        </div>
+        <div className="git-modal-body">
+          <label className="settings-input-row">
+            <span className="settings-input-label">{t("git.commitMessage")}</span>
+            <input
+              className="settings-input"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              autoFocus
+            />
+          </label>
+          <div className="settings-field-hint">
+            {gitStatus?.dirty ?? 0} {t("git.filesChanged")}
+          </div>
+          {err && <div className="settings-err">{err}</div>}
+        </div>
+        <div className="git-modal-actions">
+          <button type="button" className="settings-btn" onClick={onClose}>{t("action.cancel")}</button>
+          <button type="submit" className="settings-btn settings-btn--primary" disabled={busy || !message.trim()}>
+            {busy ? "…" : t("git.commitAndPush")}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

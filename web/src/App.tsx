@@ -131,9 +131,57 @@ const Ic = {
   ),
 };
 
+// ─── Git status badge (in TopBar) ─────────────────────────────────
+// Compact glanceable summary of repo state. Hidden when not configured
+// so non-git users don't see a stub control. Click → Settings → Git.
+// Defined outside TopBar so each render doesn't build a fresh component
+// type and remount the button.
+function GitBadge({ status, onClick }: { status: any; onClick: () => void }) {
+  const { t } = useTranslation();
+  if (!status || !status.configured) return null;
+  const dirty = status.dirty ?? 0;
+  const ahead = status.ahead ?? 0;
+  const behind = status.behind ?? 0;
+  const hasError = Boolean(status.error);
+  const isClean = !hasError && dirty === 0 && ahead === 0 && behind === 0;
+  const tone =
+    hasError ? 'err' :
+    dirty > 0 ? 'warn' :
+    (ahead > 0 || behind > 0) ? 'accent' :
+    'clean';
+  const title =
+    !status.repo ? t('git.notRepo') :
+    hasError ? status.error :
+    isClean ? t('git.clean') :
+    [
+      dirty > 0 && t('git.dirtyN', { count: dirty }),
+      ahead > 0 && t('git.aheadN', { count: ahead }),
+      behind > 0 && t('git.behindN', { count: behind }),
+    ].filter(Boolean).join(' · ');
+  return (
+    <button className={`topbar-git topbar-git--${tone}`} onClick={onClick} title={title} aria-label="git status">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="8" cy="3" r="1.6" /><circle cx="3.5" cy="13" r="1.6" /><circle cx="12.5" cy="13" r="1.6" />
+        <path d="M8 4.6V8a2 2 0 0 1-2 2H5M8 4.6V8a2 2 0 0 0 2 2h1" />
+      </svg>
+      {hasError && <span className="topbar-git-glyph">!</span>}
+      {!hasError && dirty > 0 && <span className="topbar-git-count">{dirty}</span>}
+      {!hasError && dirty === 0 && (ahead > 0 || behind > 0) && (
+        <span className="topbar-git-count">
+          {ahead > 0 && `↑${ahead}`}
+          {ahead > 0 && behind > 0 && ' '}
+          {behind > 0 && `↓${behind}`}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // ─── TopBar ────────────────────────────────────────────────────────
 function TopBar({ onMenu, onSearch, onAlerts, alertsCount, breadcrumb, onCrumb, onRunbooks, mode }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { gitStatus } = useSorack();
   const crumbsRef = useRefA(null);
   const dragRef = useRefA(null);
   const movedRef = useRefA(false);
@@ -214,6 +262,7 @@ function TopBar({ onMenu, onSearch, onAlerts, alertsCount, breadcrumb, onCrumb, 
           {alertsCount.err > 0 && <span className="alert-badge">{alertsCount.err}</span>}
           {alertsCount.err === 0 && alertsCount.warn > 0 && <span className="alert-badge alert-badge--warn">{alertsCount.warn}</span>}
         </button>
+        <GitBadge status={gitStatus} onClick={() => navigate('/settings/runbook')} />
       </div>
     </header>
   );

@@ -44,7 +44,8 @@
     "passwordChanged": "비밀번호가 변경되었습니다",
     "passwordMismatch": "비밀번호가 일치하지 않습니다",
     "passwordTooShort": "비밀번호는 8자 이상이어야 합니다",
-    "currentWrong": "현재 비밀번호가 올바르지 않습니다"
+    "currentWrong": "현재 비밀번호가 올바르지 않습니다",
+    "runbook": "런북"
   },
   "topbar": {
     "searchTrigger": "인프라·런북 검색"
@@ -162,7 +163,40 @@
     "collapseSidebar": "목록 접기",
     "expandSidebar": "목록 펴기",
     "collapseHead": "헤더 접기",
-    "expandHead": "헤더 펴기"
+    "expandHead": "헤더 펴기",
+    "storageMode": "저장소",
+    "storageLocal": "로컬 파일",
+    "storageGit": "git 동기화",
+    "storageLocalHint": "런북이 로컬 볼륨에만 저장됩니다. 아래에서 git remote 설정 시 동기화 활성화.",
+    "storageGitHint": "런북이 로컬 볼륨에 저장되며 설정된 git remote와 동기화됩니다."
+  },
+  "git": {
+    "status": "상태",
+    "state": "상태",
+    "config": "설정",
+    "clean": "변경 없음",
+    "dirtyN": "{{count}}개 변경",
+    "aheadN": "{{count}}개 push 대기",
+    "behindN": "{{count}}개 pull 대기",
+    "notConfigured": "설정 안 됨",
+    "notRepo": "git repo 아님",
+    "remote": "remote URL",
+    "remoteHint": "HTTPS clone URL",
+    "branch": "branch",
+    "username": "username",
+    "usernameHint": "GitHub: 아무 값(token이 인증함)",
+    "token": "token",
+    "tokenHint": "personal access token (HTTPS), 해당 repo에 write 권한",
+    "authorName": "commit author 이름",
+    "authorEmail": "commit author 이메일",
+    "save": "저장",
+    "saved": "저장됨",
+    "pull": "pull",
+    "pullOk": "pull 완료",
+    "pullErr": "pull 실패: {{reason}}",
+    "commitAndPush": "commit & push",
+    "commitMessage": "commit 메시지",
+    "filesChanged": "개 파일 변경됨"
   },
   "nd": {
     "synced": "{{count}}건 동기화",

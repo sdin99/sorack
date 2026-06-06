@@ -12,6 +12,7 @@ import {
   fetchInventory,
   fetchRunbooks,
   fetchAlerts,
+  fetchGitStatus,
   createNode,
   updateNode,
   deleteNode,
@@ -60,6 +61,11 @@ interface SorackData {
   RUNBOOKS: Record<string, any>;
   ALERTS: any[];
   FAVORITES: string[];
+
+  // Git status (Phase 4) — read-only snapshot polled every 10s and
+  // invalidated by SSE on snapshot change. Consumers render a badge
+  // (Topbar) and the Settings → Git pane.
+  gitStatus: import("./api").GitStatus | undefined;
 
   // helpers (closed over the current NODES/RUNBOOKS)
   getNode: (id: string) => any;
@@ -147,6 +153,10 @@ function DataInner({ children }: { children: ReactNode }) {
   const inv = useQuery({ queryKey: ["inventory"], queryFn: fetchInventory, refetchInterval: 5_000 });
   const rbs = useQuery({ queryKey: ["runbooks"], queryFn: fetchRunbooks });
   const als = useQuery({ queryKey: ["alerts"], queryFn: fetchAlerts });
+  // Git status — polled lightly so the badge picks up local dirty/clean
+  // transitions from save→watcher→DB even between background fetches.
+  // SSE invalidates this query whenever the server's snapshot changes.
+  const gitQ = useQuery({ queryKey: ["git-status"], queryFn: fetchGitStatus, refetchInterval: 10_000 });
 
   const qc = useQueryClient();
   const invalidateInventory = () => qc.invalidateQueries({ queryKey: ["inventory"] });
@@ -238,6 +248,10 @@ function DataInner({ children }: { children: ReactNode }) {
     es.addEventListener("runbook.deleted", (e) => {
       dbg("runbook.deleted", (e as MessageEvent).data);
       qc.invalidateQueries({ queryKey: ["runbooks"] });
+    });
+    es.addEventListener("git.status_changed", () => {
+      dbg("git.status_changed");
+      qc.invalidateQueries({ queryKey: ["git-status"] });
     });
     es.addEventListener("ping", () => {}); // heartbeat, ignored
     es.onerror = () => { dbg("error / reconnect", { readyState: es.readyState }); };
@@ -367,6 +381,7 @@ function DataInner({ children }: { children: ReactNode }) {
       RUNBOOKS,
       ALERTS,
       FAVORITES,
+      gitStatus: gitQ.data,
       getNode,
       getChildren,
       getPath,

@@ -7,8 +7,11 @@
 // the UI can render them as in-place messages rather than generic 500s.
 
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
+import { db } from "../db";
+import { gitConfig } from "../db/schema";
 import { getGitClient } from "../git/runtime";
-import { getConfigSource, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config";
+import { getConfigSource, isGitEnabled, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config";
 
 export const gitRoutes = new Hono();
 
@@ -17,22 +20,31 @@ export const gitRoutes = new Hono();
 gitRoutes.get("/status", async (c) => {
   const client = await getGitClient();
   const status = await client.status();
-  return c.json(status);
+  // `configured` already encodes "git mode is active + remote set"
+  // (loadGitConfig returns null otherwise). We add `enabled` so the UI
+  // can distinguish "local mode" from "git mode but missing config".
+  const enabled = await isGitEnabled();
+  return c.json({ ...status, enabled });
 });
 
 // Config — UI form values + per-field source ("env" | "db" | null) so
 // env-pinned fields render read-only. Token itself is never returned;
 // the UI shows a "(set)" placeholder when source !== null.
 gitRoutes.get("/config", async (c) => {
-  const cfg = await loadGitConfig();
+  // We read the DB row directly so the form shows the user's stored
+  // values even when storage mode is currently "local" (loadGitConfig
+  // returns null in that case).
+  const [row] = await db.select().from(gitConfig).where(eq(gitConfig.id, 1)).limit(1);
+  const enabled = await isGitEnabled();
   const source = await getConfigSource();
   return c.json({
-    remote: cfg?.remote ?? "",
-    branch: cfg?.branch ?? "main",
-    username: cfg?.username ?? "",
-    authorName: cfg?.authorName ?? "",
-    authorEmail: cfg?.authorEmail ?? "",
-    tokenSet: Boolean(cfg?.token),
+    enabled,
+    remote: row?.remote ?? process.env.SORACK_GIT_REMOTE ?? "",
+    branch: row?.branch ?? process.env.SORACK_GIT_BRANCH ?? "main",
+    username: row?.username ?? process.env.SORACK_GIT_USERNAME ?? "",
+    authorName: row?.authorName ?? process.env.SORACK_GIT_AUTHOR_NAME ?? "",
+    authorEmail: row?.authorEmail ?? process.env.SORACK_GIT_AUTHOR_EMAIL ?? "",
+    tokenSet: Boolean(row?.token || process.env.SORACK_GIT_TOKEN),
     source,
   });
 });
@@ -43,6 +55,7 @@ gitRoutes.patch("/config", async (c) => {
   const body = (await c.req.json()) as SaveablePatch;
   const source = await getConfigSource();
   const safe: SaveablePatch = {};
+  if (body.enabled !== undefined && source.enabled !== "env") safe.enabled = body.enabled;
   if (body.remote !== undefined && source.remote !== "env") safe.remote = body.remote;
   if (body.branch !== undefined && source.branch !== "env") safe.branch = body.branch;
   if (body.username !== undefined && source.username !== "env") safe.username = body.username;

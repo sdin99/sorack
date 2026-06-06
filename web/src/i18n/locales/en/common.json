@@ -44,7 +44,8 @@
     "passwordChanged": "password changed",
     "passwordMismatch": "passwords don't match",
     "passwordTooShort": "password must be at least 8 characters",
-    "currentWrong": "current password is incorrect"
+    "currentWrong": "current password is incorrect",
+    "runbook": "runbook"
   },
   "topbar": {
     "searchTrigger": "search infra, runbooks"
@@ -162,7 +163,40 @@
     "collapseSidebar": "collapse list",
     "expandSidebar": "expand list",
     "collapseHead": "collapse header",
-    "expandHead": "expand header"
+    "expandHead": "expand header",
+    "storageMode": "storage",
+    "storageLocal": "local files",
+    "storageGit": "git sync",
+    "storageLocalHint": "runbooks live in the local volume only. Configure a git remote below to enable sync.",
+    "storageGitHint": "runbooks live in the local volume and sync with the configured git remote."
+  },
+  "git": {
+    "status": "status",
+    "state": "state",
+    "config": "config",
+    "clean": "clean",
+    "dirtyN": "{{count}} dirty",
+    "aheadN": "{{count}} ahead",
+    "behindN": "{{count}} behind",
+    "notConfigured": "not configured",
+    "notRepo": "no repo",
+    "remote": "remote URL",
+    "remoteHint": "HTTPS clone URL",
+    "branch": "branch",
+    "username": "username",
+    "usernameHint": "GitHub: any non-empty value (token is what authenticates)",
+    "token": "token",
+    "tokenHint": "personal access token (HTTPS), write scope on the repo",
+    "authorName": "commit author name",
+    "authorEmail": "commit author email",
+    "save": "save",
+    "saved": "saved",
+    "pull": "pull",
+    "pullOk": "pull complete",
+    "pullErr": "pull failed: {{reason}}",
+    "commitAndPush": "commit & push",
+    "commitMessage": "commit message",
+    "filesChanged": "file(s) changed"
   },
   "nd": {
     "synced": "{{count}} synced",

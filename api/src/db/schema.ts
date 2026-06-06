@@ -20,6 +20,7 @@ import {
   uuid,
   varchar,
   integer,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 // ── schemas ──────────────────────────────────────────────────────────
@@ -161,6 +162,11 @@ export const sessions = auth.table("sessions", {
 
 export const gitConfig = docs.table("git_config", {
   id: integer("id").primaryKey().default(1),
+  // `enabled` is the explicit storage-mode toggle (Local file ↔ Git
+  // sync). false = ignore everything below, runbook files live in the
+  // local volume only. Decoupled from "config is filled in" so the user
+  // can keep the PAT around while temporarily switching back to local.
+  enabled: boolean("enabled").notNull().default(false),
   remote: text("remote"),
   branch: text("branch"),
   username: text("username"),

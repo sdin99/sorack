@@ -14,6 +14,7 @@ import { gitConfig } from "../db/schema";
 import type { GitConfig } from "./client";
 
 const ENV = {
+  ENABLED: process.env.SORACK_GIT_ENABLED, // string "true" | "false" | undefined
   REMOTE: process.env.SORACK_GIT_REMOTE || undefined,
   BRANCH: process.env.SORACK_GIT_BRANCH || undefined,
   USERNAME: process.env.SORACK_GIT_USERNAME || undefined,
@@ -23,6 +24,7 @@ const ENV = {
 } as const;
 
 interface DbRow {
+  enabled: boolean;
   remote: string | null;
   branch: string | null;
   username: string | null;
@@ -36,10 +38,12 @@ async function readDbRow(): Promise<DbRow | null> {
   return rows[0] ?? null;
 }
 
-// Returns the effective config the GitClient should use, or null if no
-// remote URL is configured anywhere (the badge then shows "not
-// configured" and routes return 412).
+// Returns the effective config the GitClient should use. Returns null
+// when storage mode is "local file" (enabled=false) or when no remote
+// URL is set anywhere. The caller treats both cases as "git infra
+// idle".
 export async function loadGitConfig(): Promise<GitConfig | null> {
+  if (!(await isGitEnabled())) return null;
   const row = await readDbRow();
   const remote = ENV.REMOTE ?? row?.remote ?? "";
   if (!remote) return null;
@@ -53,8 +57,18 @@ export async function loadGitConfig(): Promise<GitConfig | null> {
   };
 }
 
+// Whether the user (or operator) has flipped storage to "git sync".
+// Env overrides the DB toggle so devops can pin a deployment on.
+export async function isGitEnabled(): Promise<boolean> {
+  if (ENV.ENABLED === "true") return true;
+  if (ENV.ENABLED === "false") return false;
+  const row = await readDbRow();
+  return Boolean(row?.enabled);
+}
+
 export type FieldSource = "env" | "db" | null;
 export interface ConfigSource {
+  enabled: FieldSource;
   remote: FieldSource;
   branch: FieldSource;
   username: FieldSource;
@@ -72,6 +86,9 @@ export async function getConfigSource(): Promise<ConfigSource> {
     return null;
   }
   return {
+    enabled:
+      ENV.ENABLED === "true" || ENV.ENABLED === "false" ? "env" :
+      row?.enabled !== undefined ? "db" : null,
     remote: pick(ENV.REMOTE, row?.remote),
     branch: pick(ENV.BRANCH, row?.branch),
     username: pick(ENV.USERNAME, row?.username),
@@ -82,6 +99,7 @@ export async function getConfigSource(): Promise<ConfigSource> {
 }
 
 export type SaveablePatch = Partial<{
+  enabled: boolean;
   remote: string | null;
   branch: string | null;
   username: string | null;
