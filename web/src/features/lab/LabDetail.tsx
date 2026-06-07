@@ -33,6 +33,7 @@ import ReactMarkdownLib from "react-markdown";
 import remarkGfmLib from "remark-gfm";
 import remarkDirectiveLib from "remark-directive";
 import rehypeHighlightLib from "rehype-highlight";
+import rehypeRawLib from "rehype-raw";
 import { MermaidBlock } from "@/components/MermaidBlock";
 
 function preprocessMentions(md: string): string {
@@ -106,6 +107,35 @@ function remarkAdmonitions() {
   };
 }
 
+// Attachment URLs in markdown are stored as relative paths (`./<id>/<name>`
+// or `<id>/<name>`) so the same source works in any viewer / git
+// browser. The preview swaps them for the api route that serves the
+// file. Everything with a real scheme or absolute path is left alone.
+function resolveAttachmentUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(url)) return url;       // scheme
+  if (url.startsWith("//") || url.startsWith("#")) return url;
+  if (url.startsWith("/")) return url;
+  const clean = url.startsWith("./") ? url.slice(2) : url;
+  const m = clean.match(/^([^/]+)\/(.+)$/);
+  if (!m) return url;
+  const [, id, name] = m;
+  return `/api/runbooks/${encodeURIComponent(id)}/attachments/${name}`;
+}
+
+// Module-level plugin arrays so renderMarkdown can't accidentally
+// hand react-markdown new references each call — that would force a
+// reparse on every parent rerender (inventory poll, SSE ping, …) and
+// blink every `<img>` while it re-fetches.
+const REMARK_PLUGINS: any[] = [remarkGfmLib, remarkDirectiveLib, remarkAdmonitions];
+// `rehype-raw` lets the user drop in raw `<img src width>` (or any
+// other HTML) for fine-grained control. Markdown source is
+// authenticated-user content, so the XSS surface is low — same call
+// we already made for `urlTransform`. Order matters: `rehype-raw`
+// must run before `rehype-highlight` so code blocks aren't double-
+// parsed.
+const REHYPE_PLUGINS: any[] = [rehypeRawLib, [rehypeHighlightLib, { detect: true, ignoreMissing: true }]];
+
 function renderMarkdown(
   md: string,
   onNodeJump: (id: string) => void,
@@ -116,8 +146,8 @@ function renderMarkdown(
 ) {
   return (
     <ReactMarkdownLib
-      remarkPlugins={[remarkGfmLib, remarkDirectiveLib, remarkAdmonitions]}
-      rehypePlugins={[[rehypeHighlightLib, { detect: true, ignoreMissing: true }]]}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={REHYPE_PLUGINS}
       // Default url-sanitizer rejects custom schemes, so `sorack-node:foo`
       // never reaches our components.a (the chip becomes a bare hyperlink).
       // Pass through unchanged — markdown source is authenticated-user
@@ -220,6 +250,32 @@ function renderMarkdown(
           return <code className="md-code">{children}</code>;
         },
         table: ({ children }) => <table className="md-table">{children}</table>,
+        img: ({ src, alt, width, height, ...rest }: any) => {
+          // Two sizing paths, both via this override:
+          //   1. HTML inline: `<img src="…" width="400">` — width comes
+          //      through `rehype-raw` as a prop on this node directly.
+          //   2. Markdown alt-extension: `![label|400](…)` — we peel a
+          //      trailing `|<number>` off the alt and use it as width.
+          //      The textual label still reads cleanly in editors that
+          //      don't know the convention (they just see "label|400").
+          let parsedAlt = alt ?? "";
+          let parsedWidth: number | string | undefined = width;
+          if (typeof parsedAlt === "string" && parsedWidth === undefined) {
+            const m = parsedAlt.match(/^(.*)\|(\d+)$/);
+            if (m) { parsedAlt = m[1]; parsedWidth = Number(m[2]); }
+          }
+          return (
+            <img
+              {...rest}
+              src={resolveAttachmentUrl(src)}
+              alt={parsedAlt}
+              width={parsedWidth}
+              height={height}
+              className="md-img"
+              loading="lazy"
+            />
+          );
+        },
         a: ({ href, children }) => {
           if (typeof href === "string" && href.startsWith("sorack-node:")) {
             const id = href.slice("sorack-node:".length);
@@ -243,12 +299,15 @@ function renderMarkdown(
               </button>
             );
           }
+          // Attachment links (relative `./<id>/<name>`) resolve to the
+          // api route; external links keep their original href.
+          const resolved = resolveAttachmentUrl(href);
           // External link — Notion-flavored inline pill: colored, lightly
           // underlined, with a trailing ↗ glyph + hostname hint on hover.
           let host = "";
-          try { host = new URL(href || "").hostname.replace(/^www\./, ""); } catch {/* ignore */}
+          try { host = new URL(resolved || "").hostname.replace(/^www\./, ""); } catch {/* ignore */}
           return (
-            <a className="md-link" href={href} target="_blank" rel="noreferrer noopener" title={host || undefined}>
+            <a className="md-link" href={resolved} target="_blank" rel="noreferrer noopener" title={host || undefined}>
               {children}
               <svg className="md-link-ext" width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 2H2v10h10V9" />

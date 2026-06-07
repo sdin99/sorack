@@ -2064,7 +2064,35 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-editor-status--dirty  { color: var(--warn); }
 .rb-editor-status--saving { color: var(--fg-3); }
 .rb-editor-status--saved  { color: var(--ok); }
-.rb-editor-hint { margin-left: auto; }
+/* Icon variant of the segmented toggle button — same border, hover,
+   "on" state as the text view buttons, but sized for a 13px SVG so the
+   save+attach pair reads as one unit next to edit|split|preview. */
+.rb-editor-viewbtn--icon {
+  padding: 0; min-width: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.rb-editor-viewbtn--icon:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Right cluster (edit|split|preview) docks to the right edge. The
+   selector is intentionally `.a.b` (specificity 0,2,0) so it wins over
+   the base `.rb-editor-viewbtns { margin-left: 16px }` declared later
+   in the file. */
+.rb-editor-viewbtns.rb-editor-viewbtns--right { margin-left: auto; }
+.rb-editor-upload-err {
+  font-family: var(--mono); font-size: 10.5px; color: var(--err);
+  margin: 0 8px;
+  max-width: 240px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Preview-side image: keep within the content column without distorting
+   the page when an oversized screenshot ships. */
+.md-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
 /* Per-runbook git diff trigger in the statusbar (right of the
    view-mode toggle, left of the ⌘S hint). Hidden when git mode is off
    or the current file is clean; same monospace small-cap vocabulary as

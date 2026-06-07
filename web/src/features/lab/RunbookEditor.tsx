@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { diffLines } from "diff";
 import { useSorack } from "@/lib/data-source/SorackData";
 import { RunbookGitDiffModal } from "@/features/git/RunbookGitDiffModal";
+import { uploadRunbookAttachment } from "@/lib/data-source/api";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, completionKeymap, acceptCompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
@@ -214,6 +215,15 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   const contentRef = useRef(initialContent);
   const savedRef = useRef(initialContent);
   contentRef.current = content;
+  // previewRender + handleChange are wrapped via refs so the cached
+  // preview's task-toggle callback always sees the latest functions
+  // even though the parent passes new identities each render. The
+  // assignment for handleChangeRef happens after handleChange is
+  // defined further below; consumers only fire on click, so a brief
+  // "ref still null" window during the first render is harmless.
+  const previewRenderRef = useRef(previewRender);
+  previewRenderRef.current = previewRender;
+  const handleChangeRef = useRef<((v: string) => void) | null>(null);
   // The pending save closure — captured at handleChange time with the
   // then-current `onSave` (= the runbook the user was editing). On runbook
   // switch we invoke this immediately so the draft commits to the OLD
@@ -367,6 +377,8 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   }, []);
 
   const handleChange = (v: string) => {
+    /* preview-side callback also routes through here via handleChangeRef
+       (assigned below) — same dirty + debounce flow as a keystroke. */
     setContent(v);
     setState("dirty");
     if (timerRef.current != null) window.clearTimeout(timerRef.current);
@@ -380,6 +392,24 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
       doFlush();
     }, SAVE_DEBOUNCE_MS);
   };
+  // Wire handleChangeRef to the latest handleChange after the function
+  // is defined; useMemo below reads it via ref so it doesn't capture the
+  // mount-time closure.
+  handleChangeRef.current = handleChange;
+
+  // Cache the rendered preview against `content` (+ runbookId) so
+  // external rerenders — the 5s inventory poll, 10s git-status poll,
+  // SSE pings, any unrelated SorackData context churn — don't drop into
+  // the markdown layer and rebuild every `<img>`, which is what caused
+  // the visible flicker. Typing still invalidates because content
+  // changes; everything else gets the same memoized element back.
+  const renderedPreview = useMemo(() => {
+    return previewRenderRef.current(content, (line, next) => {
+      const updated = toggleTaskAtLine(contentRef.current, line, next);
+      if (updated !== contentRef.current) handleChangeRef.current?.(updated);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, runbookId]);
 
   // View mode + split ratio. Persisted so the user's layout sticks across
   // sessions. On mobile, `split` collapses to `edit` (Preview takes the full
@@ -432,6 +462,48 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     ? `${editPct}% 6px ${100 - editPct}%`
     : showEdit ? "1fr 0 0" : "0 0 1fr";
 
+  // Attachment upload. We keep the editor view + the latest runbook id +
+  // the upload state in refs so the CodeMirror extensions (built once on
+  // mount, see useMemo below) read the current values instead of the
+  // ones captured at mount time.
+  const viewRef = useRef<CMEditorView | null>(null);
+  const runbookIdRef = useRef(runbookId);
+  runbookIdRef.current = runbookId;
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const insertAtCursor = (text: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: text },
+      selection: { anchor: sel.from + text.length },
+    });
+    // The transaction routes back through onChange → handleChange, so
+    // dirty / debounce / auto-save all behave as if the user typed.
+  };
+
+  const handleUpload = async (file: File) => {
+    if (!file) return;
+    setUploading(true); setUploadErr("");
+    try {
+      const result = await uploadRunbookAttachment(runbookIdRef.current, file);
+      const isImage = (file.type || result.contentType || "").startsWith("image/");
+      const label = result.filename;
+      const url = `./${runbookIdRef.current}/${encodeURIComponent(result.filename)}`;
+      insertAtCursor(isImage ? `![${label}](${url})` : `[${label}](${url})`);
+    } catch (e: any) {
+      setUploadErr(String(e?.message ?? e));
+      setTimeout(() => setUploadErr(""), 4000);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const handleUploadRef = useRef(handleUpload);
+  handleUploadRef.current = handleUpload;
+
   const extensions = useMemo(() => [
     markdown(),
     EditorView.lineWrapping,
@@ -445,6 +517,32 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     // shift text right while the completion popup stays open).
     Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
     keymap.of(completionKeymap),
+    // Paste & drop file uploads. Both surface as the same upload-and-
+    // insert flow as the toolbar button, so the user has three ways
+    // (paste/drop/click) without three code paths.
+    EditorView.domEventHandlers({
+      paste: (event) => {
+        const files = event.clipboardData?.files;
+        if (!files || files.length === 0) return false;
+        event.preventDefault();
+        for (const f of Array.from(files)) void handleUploadRef.current(f);
+        return true;
+      },
+      drop: (event, view) => {
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        event.preventDefault();
+        // Move the cursor to the drop location before inserting so the
+        // attachment lands where the user pointed, not at the previous
+        // caret. posAtCoords returns null for clicks outside the doc
+        // (header padding etc.) — in that case keep the existing
+        // selection rather than crash.
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        if (pos !== null) view.dispatch({ selection: { anchor: pos } });
+        for (const f of Array.from(files)) void handleUploadRef.current(f);
+        return true;
+      },
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], []);
 
@@ -454,7 +552,60 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
         <span className={`rb-editor-status rb-editor-status--${state}`}>
           {state === "saving" ? "saving…" : state === "saved" ? "saved" : state === "dirty" ? "unsaved" : "—"}
         </span>
-        <div className="rb-editor-viewbtns" role="tablist">
+        <div className="rb-editor-viewbtns" role="group" aria-label="file actions">
+          <button
+            type="button"
+            className="rb-editor-viewbtn rb-editor-viewbtn--icon"
+            onClick={() => flushRef.current(contentRef.current)}
+            disabled={state === "saving"}
+            title={t("runbook.save", { defaultValue: "save now (⌘S)" })}
+            aria-label={t("runbook.save", { defaultValue: "save" })}
+          >
+            {/* floppy — outer rect + small inset (label area). Two
+                shapes, no fussy details. */}
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+              <rect x="5" y="9" width="6" height="4.5" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="rb-editor-viewbtn rb-editor-viewbtn--icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title={t("runbook.attach", { defaultValue: "attach file" })}
+            aria-label={t("runbook.attach", { defaultValue: "attach file" })}
+          >
+            {uploading ? (
+              <span aria-hidden="true">…</span>
+            ) : (
+              // paperclip — single continuous path, no fussy curves
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M11.5 4.5l-6 6a2 2 0 1 0 2.8 2.8l5.7-5.7a3 3 0 1 0-4.2-4.2L4 9" />
+              </svg>
+            )}
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          hidden
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files) for (const f of Array.from(files)) void handleUpload(f);
+            e.target.value = "";
+          }}
+        />
+        {gitDirty && (
+          <button
+            type="button"
+            className="rb-editor-gitdiff"
+            onClick={() => setGitDiffOpen(true)}
+            title={t("git.viewDiff", { defaultValue: "view git diff" })}
+          >git diff</button>
+        )}
+        {uploadErr && <span className="rb-editor-upload-err">{uploadErr}</span>}
+        <div className="rb-editor-viewbtns rb-editor-viewbtns--right" role="tablist">
           <button
             type="button"
             role="tab"
@@ -482,15 +633,6 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
             title="Preview only"
           >preview</button>
         </div>
-        {gitDirty && (
-          <button
-            type="button"
-            className="rb-editor-gitdiff"
-            onClick={() => setGitDiffOpen(true)}
-            title={t("git.viewDiff", { defaultValue: "view git diff" })}
-          >git diff</button>
-        )}
-        <span className="rb-editor-hint">⌘S</span>
       </div>
       {gitDiffOpen && (
         <RunbookGitDiffModal
@@ -545,6 +687,7 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
             value={content}
             onChange={handleChange}
             extensions={extensions}
+            onCreateEditor={(view) => { viewRef.current = view; }}
             theme="none"
             basicSetup={{
               lineNumbers: false,
@@ -568,10 +711,7 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
           className="rb-editor-pane rb-editor-pane--preview"
           style={{ gridColumn: 3, display: showPreview ? undefined : "none" }}
         >
-          <div className="rb-content">{previewRender(content, (line, next) => {
-            const updated = toggleTaskAtLine(content, line, next);
-            if (updated !== content) handleChange(updated);
-          })}</div>
+          <div className="rb-content">{renderedPreview}</div>
         </div>
       </div>
     </div>

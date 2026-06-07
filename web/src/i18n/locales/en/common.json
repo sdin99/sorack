@@ -168,7 +168,9 @@
     "storageLocal": "local files",
     "storageGit": "git sync",
     "storageLocalHint": "runbooks live in the local volume only. Configure a git remote below to enable sync.",
-    "storageGitHint": "runbooks live in the local volume and sync with the configured git remote."
+    "storageGitHint": "runbooks live in the local volume and sync with the configured git remote.",
+    "attach": "attach file",
+    "save": "save now (⌘S)"
   },
   "git": {
     "status": "status",

@@ -13,6 +13,17 @@ import { env } from "../lib/env";
 import { writeRow } from "../runbooks/writer";
 import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader";
 import { TEMPLATES } from "../runbooks/templates";
+import {
+  AttachmentError,
+  contentTypeForName,
+  deleteAttachment,
+  listAttachments,
+  readAttachment,
+  uniqueName,
+  writeAttachment,
+} from "../runbooks/attachments";
+
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export const runbooksRoutes = new Hono();
 
@@ -24,6 +35,87 @@ runbooksRoutes.get("/", async (c) => {
 // Must be registered before `/:id` — otherwise the path-param route would
 // claim `_templates` as a runbook id.
 runbooksRoutes.get("/_templates", (c) => c.json(TEMPLATES));
+
+// ── Attachments ───────────────────────────────────────────────────────
+// Files stored next to the .md (`RUNBOOKS_DIR/<id>/<name>`) so a
+// runbook + its attachments travel together in the git repo. Path
+// segments are validated in attachments.ts; routes only enforce size.
+runbooksRoutes.get("/:id/attachments", async (c) => {
+  try {
+    const names = await listAttachments(c.req.param("id"));
+    return c.json({ files: names });
+  } catch (e) {
+    if (e instanceof AttachmentError) return c.json({ error: e.message }, e.status as any);
+    throw e;
+  }
+});
+
+runbooksRoutes.post("/:id/attachments", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.parseBody();
+  const raw = body["file"];
+  const file = Array.isArray(raw) ? raw[0] : raw;
+  if (!(file instanceof File)) return c.json({ error: "file field required" }, 400);
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return c.json({ error: `file too large (>${MAX_ATTACHMENT_BYTES / 1024 / 1024}MB)` }, 413);
+  }
+  try {
+    // Honor the user's filename when we can; fall back if the browser
+    // didn't supply one (e.g. paste from clipboard yields "image.png").
+    const requested = file.name && file.name.length > 0 ? file.name : "file";
+    const filename = await uniqueName(id, requested);
+    const buf = Buffer.from(await file.arrayBuffer());
+    await writeAttachment(id, filename, buf);
+    return c.json({
+      filename,
+      url: `/api/runbooks/${encodeURIComponent(id)}/attachments/${encodeURIComponent(filename)}`,
+      size: buf.length,
+      contentType: file.type || contentTypeForName(filename),
+    });
+  } catch (e) {
+    if (e instanceof AttachmentError) return c.json({ error: e.message }, e.status as any);
+    throw e;
+  }
+});
+
+runbooksRoutes.get("/:id/attachments/:name", async (c) => {
+  try {
+    const { body, size } = await readAttachment(c.req.param("id"), c.req.param("name"));
+    // Hono's c.body wants a Uint8Array backed by a fresh ArrayBuffer (not
+    // ArrayBufferLike, which would also admit SharedArrayBuffer). Copy
+    // into a clean buffer so the type matches and the request can't
+    // accidentally hold a reference to Node's pooled Buffer slab.
+    const ab = new ArrayBuffer(body.byteLength);
+    new Uint8Array(ab).set(body);
+    return c.body(new Uint8Array(ab), 200, {
+      "content-type": contentTypeForName(c.req.param("name")),
+      "content-length": String(size),
+      // Inline so images render in the preview; the browser still lets
+      // the user "save as" via the link's context menu.
+      "content-disposition": "inline",
+      // Without an explicit cache directive browsers treat the response
+      // as non-cacheable, so every re-render of the markdown preview
+      // re-downloads the file → visible flicker on each keystroke. A
+      // minute is long enough to kill the flicker and short enough that
+      // a deleted+re-uploaded attachment with the same name (rare)
+      // refreshes promptly.
+      "cache-control": "private, max-age=60",
+    });
+  } catch (e) {
+    if (e instanceof AttachmentError) return c.json({ error: e.message }, e.status as any);
+    throw e;
+  }
+});
+
+runbooksRoutes.delete("/:id/attachments/:name", async (c) => {
+  try {
+    await deleteAttachment(c.req.param("id"), c.req.param("name"));
+    return c.json({ ok: true });
+  } catch (e) {
+    if (e instanceof AttachmentError) return c.json({ error: e.message }, e.status as any);
+    throw e;
+  }
+});
 
 runbooksRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");

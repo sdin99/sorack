@@ -283,3 +283,27 @@ export const gitCreateBranch = (name: string) =>
   sendJSON<{ ok: true } | { ok: false; reason: string }>("POST", "/api/git/branches", { name });
 export const gitCheckoutBranch = (name: string) =>
   sendJSON<{ ok: true } | { ok: false; reason: string }>("POST", "/api/git/checkout", { name });
+
+// ── Runbook attachments ──────────────────────────────────────────────
+export interface AttachmentUploaded {
+  filename: string;
+  url: string;
+  size: number;
+  contentType: string;
+}
+export async function uploadRunbookAttachment(runbookId: string, file: File): Promise<AttachmentUploaded> {
+  const fd = new FormData();
+  fd.append("file", file, file.name || "file");
+  const r = await fetch(`/api/runbooks/${encodeURIComponent(runbookId)}/attachments`, {
+    method: "POST",
+    credentials: "include",
+    body: fd,
+  });
+  if (r.status === 401) { onUnauthorized?.(); throw new UnauthorizedError(); }
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).error ?? ""; } catch { /* swallow */ }
+    throw new Error(`upload ${r.status}${detail ? `: ${detail}` : ""}`);
+  }
+  return r.json();
+}
