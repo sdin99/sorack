@@ -2286,9 +2286,40 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .md-admonition--danger .md-admonition-label { color: var(--err); }
 .md-ul, .md-ol { padding-left: 22px; margin: 10px 0; }
 .md-ul li, .md-ol li { margin: 4px 0; }
-.md-li-check { list-style: none; margin-left: -22px; display: flex; gap: 8px; align-items: flex-start; }
-.md-check { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid var(--border-strong); border-radius: 3px; font-size: 11px; color: var(--ok); margin-top: 3px; flex-shrink: 0; }
+/* Task list rows. flex-start with the checkbox margin-top tuned to the
+   .rb-content line-height (1.65 × 15px ≈ 25px → checkbox 16px → top
+   offset ~4-5px) so the box sits on the first text line even when the
+   item wraps. */
+.md-li-check {
+  list-style: none;
+  margin-left: -22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.md-check {
+  /* Override global button min-* so the 16px box doesn't get padded out
+     to the touch-target minimum. */
+  min-width: 0; min-height: 0;
+  width: 16px; height: 16px;
+  padding: 0;
+  margin: 5px 0 0 0;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; line-height: 1;
+  color: var(--ok); background: transparent;
+  border: 1px solid var(--border-strong); border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.md-check:disabled { cursor: default; }
+.md-check:not(:disabled):hover { border-color: var(--ok); }
 .md-check--on { background: color-mix(in oklab, var(--ok) 20%, transparent); border-color: var(--ok); }
+.md-li-check-text { flex: 1; min-width: 0; }
+/* GFM also dumps a leftover <p> margin inside task items; trim so the
+   text aligns with the checkbox top instead of pushing the box down. */
+.md-li-check-text > p:first-child { margin-top: 0; }
+.md-li-check-text > p:last-child { margin-bottom: 0; }
 .md-mention { display: inline-flex; align-items: baseline; gap: 5px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--border); background: var(--surface-2); font-size: inherit; line-height: 1.4; text-align: left; min-height: 0; min-width: 0; }
 .md-mention:hover { border-color: var(--accent); background: var(--accent-soft); }
 .md-mention-kind { font-family: var(--mono); font-size: 9.5px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.08em; }

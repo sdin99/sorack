@@ -59,36 +59,61 @@ function walk(node: any, fn: (n: any) => void) {
 function remarkAdmonitions() {
   return (tree: any) => {
     walk(tree, (node) => {
-      if (node.type !== "containerDirective") return;
-      if (!ADMONITIONS.has(node.name)) return;
-      const data = node.data || (node.data = {});
-      data.hName = "div";
-      data.hProperties = {
-        className: ["md-admonition", `md-admonition--${node.name}`],
-      };
-      // Extract user-provided label (`:::tip[Watch out]`) if any. remark-
-      // directive flags it on the first paragraph child with
-      // `data.directiveLabel === true`. Fall back to the type name uppercased.
-      let labelChildren: any[] | null = null;
-      const first = node.children?.[0];
-      if (first?.type === "paragraph" && first.data?.directiveLabel) {
-        labelChildren = first.children;
-        node.children.shift();
+      // 5종 container admonition은 styled div로 변환.
+      if (node.type === "containerDirective" && ADMONITIONS.has(node.name)) {
+        const data = node.data || (node.data = {});
+        data.hName = "div";
+        data.hProperties = {
+          className: ["md-admonition", `md-admonition--${node.name}`],
+        };
+        // Extract user-provided label (`:::tip[Watch out]`) if any. remark-
+        // directive flags it on the first paragraph child with
+        // `data.directiveLabel === true`. Fall back to the type name uppercased.
+        let labelChildren: any[] | null = null;
+        const first = node.children?.[0];
+        if (first?.type === "paragraph" && first.data?.directiveLabel) {
+          labelChildren = first.children;
+          node.children.shift();
+        }
+        // Prepend a styled label so the admonition has a visible title.
+        node.children.unshift({
+          type: "paragraph",
+          data: {
+            hName: "div",
+            hProperties: { className: ["md-admonition-label"] },
+          },
+          children: labelChildren ?? [{ type: "text", value: node.name.toUpperCase() }],
+        });
+        return;
       }
-      // Prepend a styled label so the admonition has a visible title.
-      node.children.unshift({
-        type: "paragraph",
-        data: {
-          hName: "div",
-          hProperties: { className: ["md-admonition-label"] },
-        },
-        children: labelChildren ?? [{ type: "text", value: node.name.toUpperCase() }],
-      });
+      // `:name` text directives and `::name` leaf directives are almost
+      // never user-intended in our content — they get matched whenever
+      // a colon appears in the body (`HH:MM`, `key:value`, URL schemes,
+      // etc.) and render as empty <div>s that visibly eat the surrounding
+      // text. Roll them back to plain text so the source round-trips.
+      // (Container `:::name` directives are left alone — those are
+      // intentional even when the name isn't an admonition.)
+      if (node.type === "textDirective" || node.type === "leafDirective") {
+        const marker = node.type === "leafDirective" ? "::" : ":";
+        node.type = "text";
+        node.value = `${marker}${node.name ?? ""}`;
+        delete node.name;
+        delete node.attributes;
+        delete node.children;
+        delete node.data;
+      }
     });
   };
 }
 
-function renderMarkdown(md: string, onNodeJump: (id: string) => void, onRunbookJump: (id: string) => void, NODES: any, RUNBOOKS: any) {
+function renderMarkdown(
+  md: string,
+  onNodeJump: (id: string) => void,
+  onRunbookJump: (id: string) => void,
+  NODES: any,
+  RUNBOOKS: any,
+  onToggleTask?: (lineNumber: number, nextChecked: boolean) => void,
+) {
   return (
     <ReactMarkdownLib
       remarkPlugins={[remarkGfmLib, remarkDirectiveLib, remarkAdmonitions]}
@@ -106,22 +131,59 @@ function renderMarkdown(md: string, onNodeJump: (id: string) => void, onRunbookJ
         p: ({ children }) => <p className="md-p">{children}</p>,
         ul: ({ children }) => <ul className="md-ul">{children}</ul>,
         ol: ({ children }) => <ol className="md-ol">{children}</ol>,
-        li: ({ children, ...props }: any) => {
-          // GFM task list items inject a checkbox <input>; pull it out so we
-          // can render our own glyph and keep the row layout tidy.
-          const arr = Array.isArray(children) ? children : [children];
-          const cb = arr.find((c: any) => c && typeof c === "object" && c.type === "input");
+        li: ({ node, children, className: incomingClass, ...props }: any) => {
+          // remark-gfm renders GFM task items as a <li> containing a
+          // disabled <input type="checkbox" checked={...}/>. Where that
+          // input lives in the children tree depends on whether the
+          // list is tight (input at top level) or loose (wrapped in a
+          // <p>). Walking to find it covers both shapes; we don't rely
+          // on any other signal (mdast's `checked` flag is dropped when
+          // mdast → hast → React props happens).
+          function findInput(kids: any): any | null {
+            const arr = Array.isArray(kids) ? kids : [kids];
+            for (const c of arr) {
+              if (!c || typeof c !== "object") continue;
+              if (c.type === "input") return c;
+              const inner = c.props?.children;
+              if (inner !== undefined) {
+                const hit = findInput(inner);
+                if (hit) return hit;
+              }
+            }
+            return null;
+          }
+          const cb = findInput(children);
           if (cb) {
-            const rest = arr.filter((c: any) => c !== cb);
-            const checked = (cb as any).props?.checked;
+            const checked = Boolean(cb.props?.checked);
+            const line: number | undefined = node?.position?.start?.line;
+            const canToggle = Boolean(onToggleTask && line);
+            // Drop the input wherever it sits (the rest of the tree —
+            // <p>, inline marks, etc. — is preserved).
+            function stripInput(kids: any): any {
+              if (Array.isArray(kids)) return kids.map(stripInput).filter((c) => c !== null);
+              if (kids && typeof kids === "object") {
+                if (kids.type === "input") return null;
+                if (kids.props?.children !== undefined) {
+                  return { ...kids, props: { ...kids.props, children: stripInput(kids.props.children) } };
+                }
+              }
+              return kids;
+            }
             return (
-              <li className="md-li-check" {...props}>
-                <span className={`md-check ${checked ? "md-check--on" : ""}`}>{checked ? "✓" : ""}</span>
-                {rest}
+              <li {...props} className="md-li-check">
+                <button
+                  type="button"
+                  className={`md-check ${checked ? "md-check--on" : ""}`}
+                  onClick={canToggle ? () => onToggleTask!(line!, !checked) : undefined}
+                  disabled={!canToggle}
+                  aria-checked={checked}
+                  role="checkbox"
+                >{checked ? "✓" : ""}</button>
+                <span className="md-li-check-text">{stripInput(children)}</span>
               </li>
             );
           }
-          return <li className="md-li" {...props}>{children}</li>;
+          return <li {...props} className="md-li">{children}</li>;
         },
         blockquote: ({ children }) => <blockquote className="md-quote">{children}</blockquote>,
         // rehype-highlight tags <code class="language-foo hljs"> inside <pre>;
@@ -2118,7 +2180,7 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
           <RunbookEditor
             runbookId={rb.id}
             initialContent={rb.md ?? ''}
-            previewRender={(md) => renderMarkdown(md, (id) => { onJumpNode(id); }, onJumpRunbook, NODES, RUNBOOKS)}
+            previewRender={(md, onToggleTask) => renderMarkdown(md, (id) => { onJumpNode(id); }, onJumpRunbook, NODES, RUNBOOKS, onToggleTask)}
             onSave={(md) => updateRunbook(rb.id, { markdown: md })}
             mentions={{
               nodes: Object.values(NODES).map((n: any) => ({ id: n.id, label: n.name ?? n.id })),

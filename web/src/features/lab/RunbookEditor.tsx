@@ -33,9 +33,22 @@ export interface MentionSources {
 export interface RunbookEditorProps {
   runbookId: string;
   initialContent: string;
-  previewRender: (md: string) => ReactNode;
+  previewRender: (md: string, onToggleTask?: (line: number, next: boolean) => void) => ReactNode;
   onSave: (markdown: string) => Promise<unknown>;
   mentions: MentionSources;
+}
+
+// Rewrite the checkbox marker at a 1-indexed source line so a click in
+// the preview produces a normal markdown edit (and therefore a normal
+// dirty + auto-save). No-ops when the target line isn't a task item.
+function toggleTaskAtLine(md: string, lineNumber: number, next: boolean): string {
+  const lines = md.split("\n");
+  const i = lineNumber - 1;
+  if (i < 0 || i >= lines.length) return md;
+  const m = lines[i].match(/^(\s*[-*+]\s+\[)([ xX])(\].*)$/);
+  if (!m) return md;
+  lines[i] = m[1] + (next ? "x" : " ") + m[3];
+  return lines.join("\n");
 }
 
 // Builds the autocomplete source consumed by @codemirror/autocomplete. The
@@ -555,7 +568,10 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
           className="rb-editor-pane rb-editor-pane--preview"
           style={{ gridColumn: 3, display: showPreview ? undefined : "none" }}
         >
-          <div className="rb-content">{previewRender(content)}</div>
+          <div className="rb-content">{previewRender(content, (line, next) => {
+            const updated = toggleTaskAtLine(content, line, next);
+            if (updated !== content) handleChange(updated);
+          })}</div>
         </div>
       </div>
     </div>
