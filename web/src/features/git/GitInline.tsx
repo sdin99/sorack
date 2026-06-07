@@ -17,17 +17,14 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
 import { useSorack } from "@/lib/data-source/SorackData";
-import { gitPull } from "@/lib/data-source/api";
 import { CommitPushModal } from "./CommitPushModal";
+import { useGitActions } from "./use-git-actions";
 
 export function GitInline() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
   const { gitStatus } = useSorack();
-  const [pulling, setPulling] = useState(false);
-  const [pullMsg, setPullMsg] = useState<string>("");
+  const { pulling, pullMsg, pull } = useGitActions();
   const [commitOpen, setCommitOpen] = useState(false);
 
   if (!gitStatus || !gitStatus.configured) return null;
@@ -52,26 +49,6 @@ export function GitInline() {
       behind > 0 && `↓${behind}`,
     ].filter(Boolean).join(" · ");
 
-  const doPull = async () => {
-    setPulling(true); setPullMsg("");
-    try {
-      const r = await gitPull();
-      if (r.ok) {
-        setPullMsg(t("git.pullOk"));
-      } else {
-        setPullMsg(t("git.pullErr", { reason: r.reason }));
-      }
-    } catch (ex: any) {
-      setPullMsg(t("git.pullErr", { reason: String(ex?.message ?? ex) }));
-    } finally {
-      setPulling(false);
-      qc.invalidateQueries({ queryKey: ["git-status"] });
-      // Banner auto-fades after a few seconds so it doesn't linger in the
-      // header indefinitely.
-      setTimeout(() => setPullMsg(""), 4000);
-    }
-  };
-
   return (
     <>
       <div className="git-inline" role="group" aria-label="git">
@@ -82,9 +59,9 @@ export function GitInline() {
         <button
           type="button"
           className="git-inline-btn"
-          onClick={doPull}
-          disabled={pulling || behind === 0}
-          title={t("git.pull")}
+          onClick={pull}
+          disabled={pulling || dirty > 0}
+          title={dirty > 0 ? t("git.pullBlockedDirty", { defaultValue: "commit pending changes first" }) : t("git.pull")}
         >{pulling ? "…" : t("git.pull")}</button>
         <button
           type="button"

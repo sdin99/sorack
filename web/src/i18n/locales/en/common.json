@@ -194,6 +194,7 @@
     "pull": "pull",
     "pullOk": "pull complete",
     "pullErr": "pull failed: {{reason}}",
+    "pullBlockedDirty": "commit pending changes first",
     "commitAndPush": "commit & push",
     "commitMessage": "commit message",
     "filesChanged": "file(s) changed"

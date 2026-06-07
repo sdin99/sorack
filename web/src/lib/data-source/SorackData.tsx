@@ -236,6 +236,9 @@ function DataInner({ children }: { children: ReactNode }) {
     const invalidateRb = (e: Event) => {
       dbg("runbook.changed", (e as MessageEvent).data);
       qc.invalidateQueries({ queryKey: ["runbooks"] });
+      // A file changed → dirty count changes too. Without this the
+      // git badge stays stale until the next 10s poll / 5min fetch.
+      qc.invalidateQueries({ queryKey: ["git-status"] });
     };
     es.addEventListener("open", () => dbg("open"));
     es.addEventListener("connected", () => {
@@ -248,6 +251,7 @@ function DataInner({ children }: { children: ReactNode }) {
     es.addEventListener("runbook.deleted", (e) => {
       dbg("runbook.deleted", (e as MessageEvent).data);
       qc.invalidateQueries({ queryKey: ["runbooks"] });
+      qc.invalidateQueries({ queryKey: ["git-status"] });
     });
     es.addEventListener("git.status_changed", () => {
       dbg("git.status_changed");

@@ -60,8 +60,12 @@ export class GitClient {
   }
 
   async isRepo(): Promise<boolean> {
+    // resolveRef("HEAD") would walk into refs/heads/<branch> too and
+    // throw on an unborn-branch state (empty remote, fresh clone — no
+    // commits yet). We just want "is this a git working tree?", so a
+    // stat on .git/HEAD is the right scope.
     try {
-      await git.resolveRef({ fs, dir: this.dir, ref: "HEAD" });
+      await fs.promises.stat(path.join(this.dir, ".git", "HEAD"));
       return true;
     } catch {
       return false;
@@ -150,8 +154,22 @@ export class GitClient {
       depth: 50,       // shallow; we don't need ancient history in the dashboard
       onAuth: onAuth(this.cfg),
     });
+    // Cloning a completely empty remote leaves HEAD pointing at
+    // isomorphic-git's hardcoded fallback (`refs/heads/master`) even
+    // when we requested `main`. Force HEAD to the configured branch so
+    // the first commit + push land on the right ref.
+    await this.forceHeadBranch();
     this.lastFetchAt = new Date().toISOString();
     this.lastError = undefined;
+  }
+
+  // Write HEAD as a symbolic ref to refs/heads/<cfg.branch>. Idempotent;
+  // safe to call when the branch already exists (this just rewrites HEAD
+  // to point at it).
+  private async forceHeadBranch(): Promise<void> {
+    if (!this.cfg) return;
+    const headPath = path.join(this.dir, ".git", "HEAD");
+    await fs.promises.writeFile(headPath, `ref: refs/heads/${this.cfg.branch}\n`, "utf8");
   }
 
   // Background-safe fetch: never throws to the caller, just records the
@@ -180,17 +198,47 @@ export class GitClient {
   // ff-only pull: fetch + verify the remote contains our local head, then
   // checkout the remote oid. If the histories have diverged we throw and
   // the caller surfaces a "merge needed — resolve in shell" error.
+  //
+  // Refuse to run when the working tree has uncommitted changes — a
+  // `force: true` checkout in that state silently wipes the user's
+  // edits. The user is told to commit (or discard via shell) first.
   async pull(): Promise<{ ok: true } | { ok: false; reason: string }> {
     if (!this.cfg) throw new Error("no git config");
     const branch = this.cfg.branch;
+    // Dirty-tree guard. Mirrors the same statusMatrix walk we use to
+    // surface the count in status(); rejecting here is strictly safer
+    // than landing the destructive checkout below.
+    const matrix = await git.statusMatrix({ fs, dir: this.dir });
+    const dirty = matrix.filter(([, h, w, s]) => w !== h || s !== h).length;
+    if (dirty > 0) {
+      return {
+        ok: false,
+        reason: `working tree has ${dirty} uncommitted change(s) — commit or discard first`,
+      };
+    }
     await this.fetch();
-    const localOid = await git.resolveRef({ fs, dir: this.dir, ref: branch });
-    const remoteOid = await git.resolveRef({ fs, dir: this.dir, ref: `refs/remotes/origin/${branch}` });
+    let localOid: string | null = null;
+    try {
+      localOid = await git.resolveRef({ fs, dir: this.dir, ref: branch });
+    } catch {
+      // Unborn branch — no commits locally yet. Anything the remote has
+      // is by definition a fast-forward.
+    }
+    let remoteOid: string | null = null;
+    try {
+      remoteOid = await git.resolveRef({ fs, dir: this.dir, ref: `refs/remotes/origin/${branch}` });
+    } catch {
+      // Remote branch not yet present on disk (empty remote, or fetch
+      // didn't pick this branch up). Nothing to pull.
+      return { ok: true };
+    }
     if (localOid === remoteOid) return { ok: true };
-    // Remote contains local? Walk back from remote and look for local oid.
-    const remoteLog = await git.log({ fs, dir: this.dir, ref: remoteOid, depth: 1000 });
-    if (!remoteLog.some((c) => c.oid === localOid)) {
-      return { ok: false, reason: "diverged: local has commits not on remote" };
+    if (localOid) {
+      // Remote contains local? Walk back from remote and look for local oid.
+      const remoteLog = await git.log({ fs, dir: this.dir, ref: remoteOid, depth: 1000 });
+      if (!remoteLog.some((c) => c.oid === localOid)) {
+        return { ok: false, reason: "diverged: local has commits not on remote" };
+      }
     }
     // ff: write remote oid as the new branch head, then checkout to
     // realise it in the working tree.

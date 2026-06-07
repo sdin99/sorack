@@ -6,12 +6,12 @@ import {
   changePassword,
   fetchGitConfig,
   updateGitConfig,
-  gitPull,
   type GitConfigView,
   type GitFieldSource,
 } from "@/lib/data-source/api";
 import { useSorack } from "@/lib/data-source/SorackData";
 import { CommitPushModal } from "@/features/git/CommitPushModal";
+import { useGitActions } from "@/features/git/use-git-actions";
 import { SUPPORTED_LANGS, type Lang } from "@/i18n";
 
 export type SettingsCategory = "appearance" | "account" | "runbook";
@@ -266,8 +266,7 @@ function GitPanel() {
   const [tokenDraft, setTokenDraft] = useState<string>("");
   const [savingState, setSavingState] = useState<"idle" | "busy" | "ok" | "err">("idle");
   const [saveErr, setSaveErr] = useState<string>("");
-  const [pullState, setPullState] = useState<"idle" | "busy">("idle");
-  const [pullMsg, setPullMsg] = useState<string>("");
+  const { pulling, pullMsg, pull } = useGitActions();
   const [commitOpen, setCommitOpen] = useState(false);
 
   // Mirror server state into the form once on first load (and again when
@@ -310,25 +309,6 @@ function GitPanel() {
     }
   };
 
-  const doPull = async () => {
-    setPullState("busy");
-    setPullMsg("");
-    try {
-      const r = await gitPull();
-      if (r.ok) {
-        setPullMsg(t("git.pullOk"));
-      } else {
-        setPullMsg(t("git.pullErr", { reason: r.reason }));
-      }
-    } catch (ex: any) {
-      setPullMsg(t("git.pullErr", { reason: String(ex?.message ?? ex) }));
-    } finally {
-      setPullState("idle");
-      qc.invalidateQueries({ queryKey: ["git-status"] });
-      setTimeout(() => setPullMsg(""), 4000);
-    }
-  };
-
   const statusLabel = (() => {
     if (!gitStatus) return "…";
     if (!gitStatus.configured) return t("git.notConfigured");
@@ -359,9 +339,10 @@ function GitPanel() {
         <div className="settings-subcard-actions">
           <button
             className="settings-btn"
-            onClick={doPull}
-            disabled={pullState === "busy" || !gitStatus?.configured || !gitStatus?.repo}
-          >{pullState === "busy" ? "…" : t("git.pull")}</button>
+            onClick={pull}
+            disabled={pulling || !gitStatus?.configured || !gitStatus?.repo || (gitStatus?.dirty ?? 0) > 0}
+            title={(gitStatus?.dirty ?? 0) > 0 ? t("git.pullBlockedDirty") : undefined}
+          >{pulling ? "…" : t("git.pull")}</button>
           <button
             className="settings-btn settings-btn--primary"
             onClick={() => setCommitOpen(true)}
