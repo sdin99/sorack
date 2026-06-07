@@ -86,6 +86,41 @@ gitRoutes.post("/pull", async (c) => {
   }
 });
 
+gitRoutes.get("/branches", async (c) => {
+  const client = await getGitClient();
+  if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);
+  try {
+    return c.json(await client.listBranches());
+  } catch (e) {
+    return c.json({ ok: false, reason: String((e as Error)?.message ?? e) }, 500);
+  }
+});
+
+gitRoutes.post("/branches", async (c) => {
+  const client = await getGitClient();
+  if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);
+  const body = (await c.req.json()) as { name?: string };
+  const name = (body.name ?? "").trim();
+  if (!name) return c.json({ ok: false, reason: "name required" }, 400);
+  return c.json(await client.createBranch(name));
+});
+
+gitRoutes.post("/checkout", async (c) => {
+  const client = await getGitClient();
+  if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);
+  const body = (await c.req.json()) as { name?: string };
+  const name = (body.name ?? "").trim();
+  if (!name) return c.json({ ok: false, reason: "name required" }, 400);
+  const r = await client.checkoutBranch(name);
+  // Successful switch → keep cfg.branch in sync so future pulls /
+  // pushes target the new ref. Persist + refresh the live client.
+  if (r.ok) {
+    await saveGitConfig({ branch: name });
+    client.setConfig(await loadGitConfig());
+  }
+  return c.json(r);
+});
+
 gitRoutes.get("/diff/:id", async (c) => {
   const client = await getGitClient();
   if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);

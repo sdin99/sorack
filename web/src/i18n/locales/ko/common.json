@@ -197,6 +197,12 @@
     "pullBlockedDirty": "변경사항 먼저 commit",
     "viewDiff": "git diff",
     "diffTitle": "git diff — {{id}}.md",
+    "branchSection": "브랜치",
+    "currentBranch": "현재 브랜치",
+    "switchTo": "{{name}} 로 전환",
+    "noBranches": "브랜치 없음 — 먼저 commit 필요",
+    "newBranchPlaceholder": "새 브랜치 이름",
+    "createBranch": "생성",
     "commitAndPush": "commit & push",
     "commitMessage": "commit 메시지",
     "filesChanged": "개 파일 변경됨"

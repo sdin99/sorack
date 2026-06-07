@@ -197,6 +197,12 @@
     "pullBlockedDirty": "commit pending changes first",
     "viewDiff": "git diff",
     "diffTitle": "git diff — {{id}}.md",
+    "branchSection": "branches",
+    "currentBranch": "current branch",
+    "switchTo": "switch to {{name}}",
+    "noBranches": "no branches yet — make a commit first",
+    "newBranchPlaceholder": "new-branch-name",
+    "createBranch": "create",
     "commitAndPush": "commit & push",
     "commitMessage": "commit message",
     "filesChanged": "file(s) changed"

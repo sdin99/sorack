@@ -277,3 +277,9 @@ export const gitCommitPush = (message: string) =>
   >("POST", "/api/git/commit-push", { message });
 export const fetchRunbookGitDiff = (id: string) =>
   getJSON<{ head: string | null; working: string | null }>(`/api/git/diff/${encodeURIComponent(id)}`);
+export const fetchGitBranches = () =>
+  getJSON<{ current: string; branches: string[] }>("/api/git/branches");
+export const gitCreateBranch = (name: string) =>
+  sendJSON<{ ok: true } | { ok: false; reason: string }>("POST", "/api/git/branches", { name });
+export const gitCheckoutBranch = (name: string) =>
+  sendJSON<{ ok: true } | { ok: false; reason: string }>("POST", "/api/git/checkout", { name });

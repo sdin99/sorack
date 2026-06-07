@@ -145,6 +145,9 @@ export class GitClient {
 
   // Clone into this.dir. Caller verifies the dir is empty (or doesn't
   // exist) — isomorphic-git refuses to clone over an existing repo.
+  // `singleBranch: false` so the UI's branch picker has every remote
+  // branch available without a follow-up fetch; runbook repos are small
+  // enough that the extra refs don't matter.
   async clone(): Promise<void> {
     if (!this.cfg) throw new Error("no git config");
     await fs.promises.mkdir(this.dir, { recursive: true });
@@ -154,7 +157,7 @@ export class GitClient {
       dir: this.dir,
       url: this.cfg.remote,
       ref: this.cfg.branch,
-      singleBranch: true,
+      singleBranch: false,
       depth: 50,       // shallow; we don't need ancient history in the dashboard
       onAuth: onAuth(this.cfg),
     });
@@ -298,6 +301,65 @@ export class GitClient {
       return { ok: false, reason: String((e as Error)?.message ?? e) };
     }
     return { ok: true, oid, filesCommitted: changed.length };
+  }
+
+  // Combined local + remote-tracking branch list with the current branch
+  // pulled out, so the UI can render the picker without two requests.
+  async listBranches(): Promise<{ current: string; branches: string[] }> {
+    const current = (await git.currentBranch({ fs, dir: this.dir })) || this.cfg?.branch || "main";
+    const [local, remote] = await Promise.all([
+      git.listBranches({ fs, dir: this.dir }).catch(() => [] as string[]),
+      git.listBranches({ fs, dir: this.dir, remote: "origin" }).catch(() => [] as string[]),
+    ]);
+    // `HEAD` shows up in the remote list when origin has a default HEAD;
+    // drop it so the user sees the real branches only.
+    const set = new Set<string>([...local, ...remote].filter((b) => b && b !== "HEAD"));
+    return { current, branches: [...set].sort() };
+  }
+
+  // Create a new branch from the current HEAD. Does not checkout — the
+  // caller decides whether to switch (the UI does both in one click).
+  async createBranch(name: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!/^[A-Za-z0-9._/-]+$/.test(name)) {
+      return { ok: false, reason: "invalid branch name" };
+    }
+    const existing = await git.listBranches({ fs, dir: this.dir });
+    if (existing.includes(name)) return { ok: false, reason: "branch already exists" };
+    try {
+      await git.branch({ fs, dir: this.dir, ref: name });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: String((e as Error)?.message ?? e) };
+    }
+  }
+
+  // Switch branches. Refuses on a dirty working tree (same guard as
+  // pull — a force checkout otherwise wipes uncommitted edits). If the
+  // branch only exists on origin, creates the local tracking ref first.
+  async checkoutBranch(name: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const matrix = await git.statusMatrix({ fs, dir: this.dir });
+    const dirty = matrix.filter(([, h, w, s]) => w !== h || s !== h).length;
+    if (dirty > 0) {
+      return { ok: false, reason: `working tree has ${dirty} uncommitted change(s) — commit or discard first` };
+    }
+    const local = await git.listBranches({ fs, dir: this.dir });
+    if (!local.includes(name)) {
+      // Promote the remote-tracking ref into a local branch so checkout
+      // has a head to land on; isomorphic-git's checkout doesn't
+      // auto-create local branches from origin refs.
+      try {
+        const remoteOid = await git.resolveRef({ fs, dir: this.dir, ref: `refs/remotes/origin/${name}` });
+        await git.writeRef({ fs, dir: this.dir, ref: `refs/heads/${name}`, value: remoteOid, force: true });
+      } catch {
+        return { ok: false, reason: "branch not found locally or on origin" };
+      }
+    }
+    try {
+      await git.checkout({ fs, dir: this.dir, ref: name, force: false });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: String((e as Error)?.message ?? e) };
+    }
   }
 
   // Read a single file's HEAD-version + working-tree version so the UI

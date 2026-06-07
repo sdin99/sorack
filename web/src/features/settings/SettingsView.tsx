@@ -12,6 +12,7 @@ import {
 import { useSorack } from "@/lib/data-source/SorackData";
 import { CommitPushModal } from "@/features/git/CommitPushModal";
 import { useGitActions } from "@/features/git/use-git-actions";
+import { BranchPicker } from "@/features/git/BranchPicker";
 import { SUPPORTED_LANGS, type Lang } from "@/i18n";
 
 export type SettingsCategory = "appearance" | "account" | "runbook";
@@ -398,6 +399,8 @@ function GitPanel() {
           >{savingState === "busy" ? "…" : t("git.save")}</button>
         </div>
       </form>
+
+      <BranchPicker />
 
       {commitOpen && <CommitPushModal onClose={() => setCommitOpen(false)} />}
     </>
