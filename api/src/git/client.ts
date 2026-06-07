@@ -30,6 +30,7 @@ export interface GitStatus {
   repo: boolean;                // dir is a git working tree
   branch?: string;
   dirty: number;                // file count w/ uncommitted changes
+  dirtyFiles: string[];         // those file paths (UI surfaces per-runbook diff)
   ahead: number;                // local commits not on origin
   behind: number;               // origin commits not in local
   lastFetchAt?: string;         // ISO timestamp of last successful fetch
@@ -78,14 +79,14 @@ export class GitClient {
   // (sub-100ms in practice); revisit if a user wires up a giant repo.
   async status(): Promise<GitStatus> {
     if (!this.cfg) {
-      return { configured: false, repo: false, dirty: 0, ahead: 0, behind: 0 };
+      return { configured: false, repo: false, dirty: 0, dirtyFiles: [], ahead: 0, behind: 0 };
     }
     const repo = await this.isRepo();
     if (!repo) {
       return {
         configured: true,
         repo: false,
-        dirty: 0, ahead: 0, behind: 0,
+        dirty: 0, dirtyFiles: [], ahead: 0, behind: 0,
         remote: this.cfg.remote,
         lastFetchAt: this.lastFetchAt,
         error: this.lastError,
@@ -99,7 +100,9 @@ export class GitClient {
     //   workdir: 0=absent  1=identical-to-head  2=different
     //   stage:   0=absent  1=identical-to-head  2=different-from-head  3=different-from-workdir
     const matrix = await git.statusMatrix({ fs, dir: this.dir });
-    const dirty = matrix.filter(([, h, w, s]) => w !== h || s !== h).length;
+    const dirtyRows = matrix.filter(([, h, w, s]) => w !== h || s !== h);
+    const dirtyFiles = dirtyRows.map((row) => row[0] as string);
+    const dirty = dirtyRows.length;
 
     // Ahead/behind vs origin/<branch>. Both numbers come from counting
     // commits between the local/remote heads and their merge base. If
@@ -131,6 +134,7 @@ export class GitClient {
       repo: true,
       branch,
       dirty,
+      dirtyFiles,
       ahead,
       behind,
       lastFetchAt: this.lastFetchAt,
@@ -294,6 +298,28 @@ export class GitClient {
       return { ok: false, reason: String((e as Error)?.message ?? e) };
     }
     return { ok: true, oid, filesCommitted: changed.length };
+  }
+
+  // Read a single file's HEAD-version + working-tree version so the UI
+  // can render a per-runbook diff. Either side returns null when it
+  // doesn't exist (unborn branch / file deleted / never committed) and
+  // the caller treats null as "empty side" in the diff.
+  async fileDiff(filepath: string): Promise<{ head: string | null; working: string | null }> {
+    let head: string | null = null;
+    try {
+      const oid = await git.resolveRef({ fs, dir: this.dir, ref: "HEAD" });
+      const { blob } = await git.readBlob({ fs, dir: this.dir, oid, filepath });
+      head = Buffer.from(blob).toString("utf8");
+    } catch {
+      // unborn branch, or filepath not in HEAD — leave head as null
+    }
+    let working: string | null = null;
+    try {
+      working = await fs.promises.readFile(path.join(this.dir, filepath), "utf8");
+    } catch {
+      // file deleted from working tree
+    }
+    return { head, working };
   }
 
   // Ensure the configured remote URL is set as `origin`. Useful when a

@@ -10,6 +10,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { diffLines } from "diff";
+import { useSorack } from "@/lib/data-source/SorackData";
+import { RunbookGitDiffModal } from "@/features/git/RunbookGitDiffModal";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { autocompletion, completionKeymap, acceptCompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
@@ -179,6 +181,11 @@ function DiffModal({ draft, external, title, closeLabel, emptyLabel, onClose }: 
 
 export function RunbookEditor({ runbookId, initialContent, previewRender, onSave, mentions }: RunbookEditorProps) {
   const { t } = useTranslation("common");
+  const { gitStatus } = useSorack();
+  const gitDirty = Boolean(
+    gitStatus?.configured && gitStatus?.repo && gitStatus.dirtyFiles?.includes(`${runbookId}.md`),
+  );
+  const [gitDiffOpen, setGitDiffOpen] = useState(false);
 
   // Keep mention sources in a ref so the completion source (built once) reads
   // the latest list each invocation without us recreating the extension.
@@ -462,8 +469,23 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
             title="Preview only"
           >preview</button>
         </div>
+        {gitDirty && (
+          <button
+            type="button"
+            className="rb-editor-gitdiff"
+            onClick={() => setGitDiffOpen(true)}
+            title={t("git.viewDiff", { defaultValue: "view git diff" })}
+          >git diff</button>
+        )}
         <span className="rb-editor-hint">⌘S</span>
       </div>
+      {gitDiffOpen && (
+        <RunbookGitDiffModal
+          runbookId={runbookId}
+          title={t("git.diffTitle", { id: runbookId, defaultValue: `diff — ${runbookId}.md` })}
+          onClose={() => setGitDiffOpen(false)}
+        />
+      )}
       {hasConflict && (
         <div className="rb-editor-conflict" role="status">
           <span className="rb-editor-conflict-msg">{t("runbook.conflict.message")}</span>

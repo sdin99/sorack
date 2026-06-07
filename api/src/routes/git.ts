@@ -86,6 +86,23 @@ gitRoutes.post("/pull", async (c) => {
   }
 });
 
+gitRoutes.get("/diff/:id", async (c) => {
+  const client = await getGitClient();
+  if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);
+  const id = c.req.param("id");
+  // Runbook files live at <id>.md in the runbooks dir. Refuse path
+  // separators in the id so a stray "../etc/passwd" can't escape.
+  if (id.includes("/") || id.includes("\\") || id.startsWith(".")) {
+    return c.json({ ok: false, reason: "invalid id" }, 400);
+  }
+  try {
+    const r = await client.fileDiff(`${id}.md`);
+    return c.json(r);
+  } catch (e) {
+    return c.json({ ok: false, reason: String((e as Error)?.message ?? e) }, 500);
+  }
+});
+
 gitRoutes.post("/commit-push", async (c) => {
   const client = await getGitClient();
   if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);

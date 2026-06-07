@@ -229,6 +229,7 @@ export interface GitStatus {
   repo: boolean;
   branch?: string;
   dirty: number;
+  dirtyFiles: string[];      // per-file paths (UI: per-runbook diff)
   ahead: number;
   behind: number;
   lastFetchAt?: string;
@@ -274,3 +275,5 @@ export const gitCommitPush = (message: string) =>
     | { ok: true; oid: string; filesCommitted: number }
     | { ok: false; reason: string }
   >("POST", "/api/git/commit-push", { message });
+export const fetchRunbookGitDiff = (id: string) =>
+  getJSON<{ head: string | null; working: string | null }>(`/api/git/diff/${encodeURIComponent(id)}`);

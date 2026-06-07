@@ -195,6 +195,8 @@
     "pullOk": "pull 완료",
     "pullErr": "pull 실패: {{reason}}",
     "pullBlockedDirty": "변경사항 먼저 commit",
+    "viewDiff": "git diff",
+    "diffTitle": "git diff — {{id}}.md",
     "commitAndPush": "commit & push",
     "commitMessage": "commit 메시지",
     "filesChanged": "개 파일 변경됨"

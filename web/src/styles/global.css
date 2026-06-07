@@ -2030,6 +2030,25 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .rb-editor-status--saving { color: var(--fg-3); }
 .rb-editor-status--saved  { color: var(--ok); }
 .rb-editor-hint { margin-left: auto; }
+/* Per-runbook git diff trigger in the statusbar (right of the
+   view-mode toggle, left of the ⌘S hint). Hidden when git mode is off
+   or the current file is clean; same monospace small-cap vocabulary as
+   the view toggle. */
+.rb-editor-gitdiff {
+  font: inherit; font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 8px; min-height: 0; min-width: 0;
+  color: var(--warn); background: transparent;
+  border: 1px solid color-mix(in oklab, var(--warn) 45%, var(--border));
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
+.rb-editor-gitdiff:hover {
+  color: var(--surface-0);
+  background: var(--warn);
+  border-color: var(--warn);
+}
 /* Conflict banner — surfaces when an external write lands while the user
    has unsaved work. Amber/warn tone so it reads as a soft warning, not a
    destructive alert. Two actions + ✕ dismiss; ✕ behaves as "keep draft". */
