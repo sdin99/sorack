@@ -10,6 +10,7 @@ import path from "node:path";
 import { db } from "../db";
 import { runbooks } from "../db/schema";
 import { env } from "../lib/env";
+import { withLock } from "../lib/locks";
 import { writeRow } from "../runbooks/writer";
 import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader";
 import { TEMPLATES } from "../runbooks/templates";
@@ -169,40 +170,51 @@ runbooksRoutes.post("/", async (c) => {
     nodeRefs: Array.isArray(body.nodeRefs) ? body.nodeRefs.filter((v) => typeof v === "string") : [],
     meta: mergeMeta(defaultMeta(), body.meta as Partial<RunbookMeta> | undefined),
   };
-  await writeRow(env.RUNBOOKS_DIR, row);
-  await db.insert(runbooks).values(row).onConflictDoNothing();
-  return c.json(row, 201);
+  return withLock(`runbook:${id}`, async () => {
+    await writeRow(env.RUNBOOKS_DIR, row);
+    await db.insert(runbooks).values(row).onConflictDoNothing();
+    return c.json(row, 201);
+  });
 });
 
 runbooksRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id");
   if (!ID_RE.test(id)) return c.json({ error: "bad id" }, 400);
-  const [cur] = await db.select().from(runbooks).where(eq(runbooks.id, id));
-  if (!cur) return c.json({ error: "not found" }, 404);
+  // Parse the body before taking the lock — don't hold it through a slow
+  // client upload. The select must sit INSIDE the lock: two concurrent
+  // PATCHes ({markdown} and {status}) that both read the same stale row
+  // would otherwise each write a full document that reverts the other's
+  // field (lost update).
   const patch = await c.req.json().catch(() => ({})) as Partial<RunbookRow>;
-  const curMeta = (cur.meta as RunbookMeta) ?? defaultMeta();
-  const next: RunbookRow = {
-    id: cur.id,
-    title: typeof patch.title === "string" ? patch.title.trim() : cur.title,
-    category: (typeof patch.category === "string" ? patch.category : cur.category) as RunbookRow["category"],
-    status: (typeof patch.status === "string" ? patch.status : cur.status) as RunbookRow["status"],
-    summary: typeof patch.summary === "string" ? patch.summary : cur.summary,
-    markdown: typeof patch.markdown === "string" ? patch.markdown : cur.markdown,
-    nodeRefs: Array.isArray(patch.nodeRefs)
-      ? patch.nodeRefs.filter((v) => typeof v === "string")
-      : (cur.nodeRefs as string[]),
-    meta: mergeMeta(curMeta, patch.meta as Partial<RunbookMeta> | undefined),
-  };
-  await writeRow(env.RUNBOOKS_DIR, next);
-  await db.update(runbooks).set({ ...next, updatedAt: new Date() }).where(eq(runbooks.id, id));
-  return c.json(next);
+  return withLock(`runbook:${id}`, async () => {
+    const [cur] = await db.select().from(runbooks).where(eq(runbooks.id, id));
+    if (!cur) return c.json({ error: "not found" }, 404);
+    const curMeta = (cur.meta as RunbookMeta) ?? defaultMeta();
+    const next: RunbookRow = {
+      id: cur.id,
+      title: typeof patch.title === "string" ? patch.title.trim() : cur.title,
+      category: (typeof patch.category === "string" ? patch.category : cur.category) as RunbookRow["category"],
+      status: (typeof patch.status === "string" ? patch.status : cur.status) as RunbookRow["status"],
+      summary: typeof patch.summary === "string" ? patch.summary : cur.summary,
+      markdown: typeof patch.markdown === "string" ? patch.markdown : cur.markdown,
+      nodeRefs: Array.isArray(patch.nodeRefs)
+        ? patch.nodeRefs.filter((v) => typeof v === "string")
+        : (cur.nodeRefs as string[]),
+      meta: mergeMeta(curMeta, patch.meta as Partial<RunbookMeta> | undefined),
+    };
+    await writeRow(env.RUNBOOKS_DIR, next);
+    await db.update(runbooks).set({ ...next, updatedAt: new Date() }).where(eq(runbooks.id, id));
+    return c.json(next);
+  });
 });
 
 runbooksRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
   if (!ID_RE.test(id)) return c.json({ error: "bad id" }, 400);
-  const filePath = path.join(env.RUNBOOKS_DIR, `${id}.md`);
-  await unlink(filePath).catch(() => undefined);
-  await db.delete(runbooks).where(eq(runbooks.id, id));
-  return c.body(null, 204);
+  return withLock(`runbook:${id}`, async () => {
+    const filePath = path.join(env.RUNBOOKS_DIR, `${id}.md`);
+    await unlink(filePath).catch(() => undefined);
+    await db.delete(runbooks).where(eq(runbooks.id, id));
+    return c.body(null, 204);
+  });
 });

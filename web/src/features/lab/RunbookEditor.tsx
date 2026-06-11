@@ -233,6 +233,22 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
   // but Y got modified" when the autosave races with the navigation.
   const pendingFlushRef = useRef<(() => void) | null>(null);
 
+  // Save serialization. All saves go through this promise chain so the editor
+  // never has two PATCHes in flight at once — overlapping saves used to allow
+  // out-of-order completion, where an older body became the final disk state
+  // while the UI showed "saved" (and savedRef regressed, so the SSE self-echo
+  // check then masked the divergence instead of surfacing it).
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  // Which runbook the editor is currently bound to. Render-time assignment is
+  // what makes the owner check in flush() correct on switches: React renders
+  // (new id lands here) BEFORE it runs the previous effect's cleanup, so by
+  // the time cleanup enqueues the draft-commit save, a queued link comparing
+  // its captured owner against this ref already sees the new id and takes the
+  // snapshot branch. (Also read by the CodeMirror attachment extensions
+  // further below, which need the latest id without rebuilding.)
+  const runbookIdRef = useRef(runbookId);
+  runbookIdRef.current = runbookId;
+
   // External-edit conflict tracking. When SSE refetch arrives while the user
   // has unsaved work, we surface a banner instead of silently dropping either
   // side. pendingExternalRef holds the incoming version so the banner's
@@ -339,22 +355,50 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     }
   };
 
-  const flush = async (md: string) => {
+  // Enqueue a save onto the chain. Each link pins the runbook it was enqueued
+  // for (`owner`): when its turn comes,
+  //   - still on the same runbook → save the LIVE buffer (contentRef), so
+  //     links queued behind a slow save coalesce to the latest content and
+  //     the second one no-ops via the savedRef guard;
+  //   - editor switched away meanwhile → commit the snapshot captured at
+  //     enqueue time to the original runbook (onSave is closed over it) and
+  //     leave contentRef/savedRef/state alone — they belong to the NEW
+  //     runbook by then, and reading them here would either drop the draft
+  //     (snapshot === reset savedRef) or save the new runbook's text into
+  //     the old one.
+  const flush = (snapshot: string) => {
     if (timerRef.current != null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (md === savedRef.current) return;
-    setState("saving");
-    try {
-      await onSave(md);
-      savedRef.current = md;
-      // Only mark saved if no newer keystrokes have arrived during the await.
-      if (contentRef.current === md) setState("saved");
-    } catch (e) {
-      console.error("[runbook] save failed:", e);
-      setState("dirty");
-    }
+    const owner = runbookId;
+    const baseline = savedRef.current;
+    saveChainRef.current = saveChainRef.current.then(async () => {
+      if (runbookIdRef.current !== owner) {
+        if (snapshot === baseline) return;
+        try {
+          await onSave(snapshot);
+        } catch (e) {
+          console.error("[runbook] save failed:", e);
+        }
+        return;
+      }
+      const md = contentRef.current;
+      if (md === savedRef.current) return;
+      setState("saving");
+      try {
+        await onSave(md);
+        // Switched runbooks during the await → the refs were reset for the
+        // new runbook; writing md into savedRef here would corrupt it.
+        if (runbookIdRef.current !== owner) return;
+        savedRef.current = md;
+        // Only mark saved if no newer keystrokes have arrived during the await.
+        if (contentRef.current === md) setState("saved");
+      } catch (e) {
+        console.error("[runbook] save failed:", e);
+        if (runbookIdRef.current === owner) setState("dirty");
+      }
+    });
   };
   // Mirror the latest flush so the keydown listener (registered once on
   // mount with empty deps) sees the current render's closures. Without
@@ -462,13 +506,11 @@ export function RunbookEditor({ runbookId, initialContent, previewRender, onSave
     ? `${editPct}% 6px ${100 - editPct}%`
     : showEdit ? "1fr 0 0" : "0 0 1fr";
 
-  // Attachment upload. We keep the editor view + the latest runbook id +
-  // the upload state in refs so the CodeMirror extensions (built once on
-  // mount, see useMemo below) read the current values instead of the
-  // ones captured at mount time.
+  // Attachment upload. We keep the editor view + the upload state in refs
+  // so the CodeMirror extensions (built once on mount, see useMemo below)
+  // read the current values instead of the ones captured at mount time.
+  // (runbookIdRef is declared with the save chain near the top.)
   const viewRef = useRef<CMEditorView | null>(null);
-  const runbookIdRef = useRef(runbookId);
-  runbookIdRef.current = runbookId;
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
