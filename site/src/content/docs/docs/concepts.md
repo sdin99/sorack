@@ -11,8 +11,9 @@ obvious.
 
 Every node has two independent axes:
 
-- An **infra type** — `host`, `vm`, `container`, `k8s_namespace`, `router`, and
-  so on. This is what the thing *is*.
+- An **infra type** — `host`, `vm`, `container`, `k8s_cluster`, `k8s_namespace`,
+  `router`, and so on (the type is a free-form string, so you can add your own).
+  This is what the thing *is*.
 - Zero or more **software attachments** — Proxmox VE, PostgreSQL, Jellyfin, … —
   what *runs on* it.
 
