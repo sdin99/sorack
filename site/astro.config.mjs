@@ -10,6 +10,7 @@ export default defineConfig({
       title: 'sorack',
       description:
         'Self-hosted homelab control plane — topology, per-axis monitoring and node-linked runbooks.',
+      logo: { src: './src/assets/sorack-mark.svg', alt: 'sorack' },
       customCss: ['./src/styles/sorack.css'],
       favicon: '/favicon.svg',
       social: [
