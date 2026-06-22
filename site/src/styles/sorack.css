@@ -1,0 +1,88 @@
+/* ============================================================
+   sorack.com — Starlight theming
+   Maps Starlight's --sl-* design tokens onto the sorack app's
+   own palette (see web/src/styles/global.css) so the docs read
+   as an extension of the product UI.
+   ============================================================ */
+
+:root {
+  /* fonts — match the app */
+  --sl-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* dark (default) — sorack tokens */
+  --sl-color-accent-low: #1b2c44;   /* accent-soft */
+  --sl-color-accent: #3b82f6;       /* primary */
+  --sl-color-accent-high: #9ecbff;
+  --sl-color-white: #e6edf3;        /* fg-1 — headings / strongest text */
+  --sl-color-gray-1: #e6edf3;       /* fg-1 */
+  --sl-color-gray-2: #aab4c0;       /* fg-2 — body text */
+  --sl-color-gray-3: #6e7886;       /* fg-3 — muted */
+  --sl-color-gray-4: #4a5360;       /* fg-4 */
+  --sl-color-gray-5: #2a3340;       /* border-strong */
+  --sl-color-gray-6: #1f2733;       /* border */
+  --sl-color-gray-7: #141a23;       /* surface-2 */
+  --sl-color-black: #0a0d12;        /* bg */
+
+  --sl-color-bg: #0a0d12;
+  --sl-color-bg-nav: color-mix(in srgb, #0f141b 90%, transparent);
+  --sl-color-bg-sidebar: #0f141b;
+  --sl-color-bg-inline-code: #1a212c;
+  --sl-color-hairline-light: #1f2733;
+  --sl-color-hairline: #1f2733;
+  --sl-color-hairline-shade: #141a23;
+  --sl-color-text-accent: #58a6ff;  /* links / accents (independent of button --primary) */
+
+  --sl-shadow-md: 0 16px 40px rgba(0, 0, 0, 0.40);
+  --sl-shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e0ebff;
+  --sl-color-accent: #2058c8;
+  --sl-color-accent-high: #16306e;
+  --sl-color-white: #1a1a1a;        /* in light theme this var is the darkest text */
+  --sl-color-gray-1: #1a1a1a;
+  --sl-color-gray-2: #4a4a4a;
+  --sl-color-gray-3: #76746c;
+  --sl-color-gray-4: #a3a097;
+  --sl-color-gray-5: #d6d3c8;
+  --sl-color-gray-6: #e4e2da;
+  --sl-color-gray-7: #f0efe9;
+  --sl-color-black: #f7f7f4;
+
+  --sl-color-bg: #f7f7f4;
+  --sl-color-bg-nav: color-mix(in srgb, #ffffff 88%, transparent);
+  --sl-color-bg-sidebar: #ffffff;
+  --sl-color-bg-inline-code: #f0efe9;
+  --sl-color-hairline-light: #e4e2da;
+  --sl-color-hairline: #e4e2da;
+  --sl-color-hairline-shade: #f0efe9;
+  --sl-color-text-accent: #2058c8;
+}
+
+/* ---- product-flavored touches ----------------------------- */
+
+/* Section headings get the app's mono micro-label feel on the
+   eyebrow/kicker level via uppercase mono on sidebar group labels. */
+.sidebar-content .large,
+summary .group-label .large {
+  font-family: var(--sl-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+/* Inline code: blue, like the app's mono values. */
+:not(pre) > code {
+  color: var(--sl-color-text-accent);
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 4px;
+}
+
+/* Site title wordmark weight to match the app's brand. */
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
