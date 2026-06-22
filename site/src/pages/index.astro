@@ -320,7 +320,10 @@ footer.foot { padding:46px 0 56px; }
 /* ---- responsive ------------------------------------------- */
 @media (max-width: 920px){
   .hero-grid { grid-template-columns:1fr; gap:30px; padding:56px 24px 64px; }
-  .topo { height:380px; }
+  /* The hero topology is laid out at a fixed desktop width (px-positioned
+     nodes + a stretch-to-fit edge SVG); it distorts below ~560px, so hide
+     it once the hero stacks. The real topology is in the showcase below. */
+  .topo { display:none; }
   .feat-grid { grid-template-columns:repeat(2,1fr); }
   .card.wide { grid-column:span 2; }
   .showcase-grid { grid-template-columns:1fr; }
