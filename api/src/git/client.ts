@@ -15,6 +15,7 @@ import git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { withLock, treeLockKey } from "../lib/locks";
 
 export interface GitConfig {
   remote: string;
@@ -53,6 +54,19 @@ export class GitClient {
   private lastError: string | undefined;
 
   constructor(public dir: string, public cfg: GitConfig | null) {}
+
+  // All mutating operations are serialized through these two locks:
+  //   gitKey  — one git mutation at a time (the background fetch tick and a
+  //             user pull/commit-push/checkout would otherwise write refs and
+  //             packfiles into the same .git concurrently);
+  //   treeKey — shared with the runbook/attachment write routes; held only
+  //             around sections that rewrite the WORKING TREE (pull's
+  //             checkout, branch switch) so file saves can't land inside the
+  //             dirty-check → force-checkout window and get wiped.
+  // Read-only calls (status, fileDiff, listBranches) stay lock-free — status
+  // is polled by the UI and must not stall behind a slow fetch.
+  private get gitKey() { return `git:${this.dir}`; }
+  private get treeKey() { return treeLockKey(this.dir); }
 
   setConfig(cfg: GitConfig | null) {
     this.cfg = cfg;
@@ -149,6 +163,10 @@ export class GitClient {
   // branch available without a follow-up fetch; runbook repos are small
   // enough that the extra refs don't matter.
   async clone(): Promise<void> {
+    return withLock(this.gitKey, () => this.cloneInner());
+  }
+
+  private async cloneInner(): Promise<void> {
     if (!this.cfg) throw new Error("no git config");
     await fs.promises.mkdir(this.dir, { recursive: true });
     await git.clone({
@@ -182,6 +200,12 @@ export class GitClient {
   // Background-safe fetch: never throws to the caller, just records the
   // failure on the client so /api/git/status can surface it.
   async fetch(): Promise<void> {
+    return withLock(this.gitKey, () => this.fetchInner());
+  }
+
+  // Lock-free body, shared with pull() — re-acquiring gitKey there would
+  // deadlock (the chain mutex is not reentrant).
+  private async fetchInner(): Promise<void> {
     if (!this.cfg) throw new Error("no git config");
     try {
       await git.fetch({
@@ -210,20 +234,25 @@ export class GitClient {
   // `force: true` checkout in that state silently wipes the user's
   // edits. The user is told to commit (or discard via shell) first.
   async pull(): Promise<{ ok: true } | { ok: false; reason: string }> {
+    return withLock(this.gitKey, () => this.pullInner());
+  }
+
+  private async pullInner(): Promise<{ ok: true } | { ok: false; reason: string }> {
     if (!this.cfg) throw new Error("no git config");
     const branch = this.cfg.branch;
-    // Dirty-tree guard. Mirrors the same statusMatrix walk we use to
-    // surface the count in status(); rejecting here is strictly safer
-    // than landing the destructive checkout below.
-    const matrix = await git.statusMatrix({ fs, dir: this.dir });
-    const dirty = matrix.filter(([, h, w, s]) => w !== h || s !== h).length;
+    // Dirty-tree fast-fail. Saves the network round-trip when the tree is
+    // obviously dirty — but it is NOT the authoritative check: the fetch
+    // below takes seconds, and an autosave can write a file meanwhile. The
+    // check that actually protects user edits is the one inside the tree
+    // lock, immediately before the force checkout.
+    const dirty = await this.dirtyCount();
     if (dirty > 0) {
       return {
         ok: false,
         reason: `working tree has ${dirty} uncommitted change(s) — commit or discard first`,
       };
     }
-    await this.fetch();
+    await this.fetchInner();
     let localOid: string | null = null;
     try {
       localOid = await git.resolveRef({ fs, dir: this.dir, ref: branch });
@@ -247,17 +276,45 @@ export class GitClient {
         return { ok: false, reason: "diverged: local has commits not on remote" };
       }
     }
-    // ff: write remote oid as the new branch head, then checkout to
-    // realise it in the working tree.
-    await git.writeRef({ fs, dir: this.dir, ref: `refs/heads/${branch}`, value: remoteOid, force: true });
-    await git.checkout({ fs, dir: this.dir, ref: branch, force: true });
-    return { ok: true };
+    // ff: write remote oid as the new branch head, then checkout to realise
+    // it in the working tree. The tree lock + re-check close the TOCTOU
+    // window: a save that landed during the fetch makes the tree dirty →
+    // refuse (same UX as the fast-fail above); a save issued while we hold
+    // the lock queues behind the checkout instead of racing it.
+    return withLock(this.treeKey, async () => {
+      const dirtyNow = await this.dirtyCount();
+      if (dirtyNow > 0) {
+        return {
+          ok: false as const,
+          reason: `working tree has ${dirtyNow} uncommitted change(s) — commit or discard first`,
+        };
+      }
+      await git.writeRef({ fs, dir: this.dir, ref: `refs/heads/${branch}`, value: remoteOid, force: true });
+      await git.checkout({ fs, dir: this.dir, ref: branch, force: true });
+      return { ok: true as const };
+    });
+  }
+
+  // statusMatrix walk shared by status(), pull() and checkoutBranch().
+  // Tuple semantics documented on status() above.
+  private async dirtyCount(): Promise<number> {
+    const matrix = await git.statusMatrix({ fs, dir: this.dir });
+    return matrix.filter(([, h, w, s]) => w !== h || s !== h).length;
   }
 
   // git add . + git commit -m <message> + git push. Returns the new oid
   // on success, or {ok:false, reason} on a known failure (non-ff push,
   // nothing to commit, auth).
   async commitAndPush(message: string): Promise<
+    | { ok: true; oid: string; filesCommitted: number }
+    | { ok: false; reason: string }
+  > {
+    // gitKey only: commit/push mutate .git (objects, refs) but never the
+    // working tree, so file saves don't need to be excluded here.
+    return withLock(this.gitKey, () => this.commitAndPushInner(message));
+  }
+
+  private async commitAndPushInner(message: string): Promise<
     | { ok: true; oid: string; filesCommitted: number }
     | { ok: false; reason: string }
   > {
@@ -323,43 +380,54 @@ export class GitClient {
     if (!/^[A-Za-z0-9._/-]+$/.test(name)) {
       return { ok: false, reason: "invalid branch name" };
     }
-    const existing = await git.listBranches({ fs, dir: this.dir });
-    if (existing.includes(name)) return { ok: false, reason: "branch already exists" };
-    try {
-      await git.branch({ fs, dir: this.dir, ref: name });
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, reason: String((e as Error)?.message ?? e) };
-    }
+    return withLock(this.gitKey, async () => {
+      const existing = await git.listBranches({ fs, dir: this.dir });
+      if (existing.includes(name)) return { ok: false as const, reason: "branch already exists" };
+      try {
+        await git.branch({ fs, dir: this.dir, ref: name });
+        return { ok: true as const };
+      } catch (e) {
+        return { ok: false as const, reason: String((e as Error)?.message ?? e) };
+      }
+    });
   }
 
   // Switch branches. Refuses on a dirty working tree (same guard as
   // pull — a force checkout otherwise wipes uncommitted edits). If the
   // branch only exists on origin, creates the local tracking ref first.
   async checkoutBranch(name: string): Promise<{ ok: true } | { ok: false; reason: string }> {
-    const matrix = await git.statusMatrix({ fs, dir: this.dir });
-    const dirty = matrix.filter(([, h, w, s]) => w !== h || s !== h).length;
-    if (dirty > 0) {
-      return { ok: false, reason: `working tree has ${dirty} uncommitted change(s) — commit or discard first` };
-    }
-    const local = await git.listBranches({ fs, dir: this.dir });
-    if (!local.includes(name)) {
-      // Promote the remote-tracking ref into a local branch so checkout
-      // has a head to land on; isomorphic-git's checkout doesn't
-      // auto-create local branches from origin refs.
-      try {
-        const remoteOid = await git.resolveRef({ fs, dir: this.dir, ref: `refs/remotes/origin/${name}` });
-        await git.writeRef({ fs, dir: this.dir, ref: `refs/heads/${name}`, value: remoteOid, force: true });
-      } catch {
-        return { ok: false, reason: "branch not found locally or on origin" };
+    return withLock(this.gitKey, async () => {
+      // Fast-fail outside the tree lock; the authoritative re-check sits
+      // next to the checkout below (same TOCTOU shape as pull()).
+      const dirty = await this.dirtyCount();
+      if (dirty > 0) {
+        return { ok: false as const, reason: `working tree has ${dirty} uncommitted change(s) — commit or discard first` };
       }
-    }
-    try {
-      await git.checkout({ fs, dir: this.dir, ref: name, force: false });
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, reason: String((e as Error)?.message ?? e) };
-    }
+      const local = await git.listBranches({ fs, dir: this.dir });
+      if (!local.includes(name)) {
+        // Promote the remote-tracking ref into a local branch so checkout
+        // has a head to land on; isomorphic-git's checkout doesn't
+        // auto-create local branches from origin refs.
+        try {
+          const remoteOid = await git.resolveRef({ fs, dir: this.dir, ref: `refs/remotes/origin/${name}` });
+          await git.writeRef({ fs, dir: this.dir, ref: `refs/heads/${name}`, value: remoteOid, force: true });
+        } catch {
+          return { ok: false as const, reason: "branch not found locally or on origin" };
+        }
+      }
+      return withLock(this.treeKey, async () => {
+        const dirtyNow = await this.dirtyCount();
+        if (dirtyNow > 0) {
+          return { ok: false as const, reason: `working tree has ${dirtyNow} uncommitted change(s) — commit or discard first` };
+        }
+        try {
+          await git.checkout({ fs, dir: this.dir, ref: name, force: false });
+          return { ok: true as const };
+        } catch (e) {
+          return { ok: false as const, reason: String((e as Error)?.message ?? e) };
+        }
+      });
+    });
   }
 
   // Read a single file's HEAD-version + working-tree version so the UI
@@ -391,7 +459,9 @@ export class GitClient {
     if (!this.cfg) return;
     const repo = await this.isRepo();
     if (!repo) return;
-    await git.addRemote({ fs, dir: this.dir, remote: "origin", url: this.cfg.remote, force: true });
+    await withLock(this.gitKey, () =>
+      git.addRemote({ fs, dir: this.dir, remote: "origin", url: this.cfg!.remote, force: true }),
+    );
   }
 }
 

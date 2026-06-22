@@ -10,7 +10,13 @@ import path from "node:path";
 import { db } from "../db";
 import { runbooks } from "../db/schema";
 import { env } from "../lib/env";
-import { withLock } from "../lib/locks";
+import { withLock, treeLockKey } from "../lib/locks";
+
+// Working-tree gate shared with GitClient (see lib/locks.ts for the lock
+// ordering contract). Every file write below takes runbook:<id> first, then
+// this — so a save can't land inside pull's dirty-check → force-checkout
+// window.
+const TREE = () => treeLockKey(env.RUNBOOKS_DIR);
 import { writeRow } from "../runbooks/writer";
 import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader";
 import { TEMPLATES } from "../runbooks/templates";
@@ -64,14 +70,20 @@ runbooksRoutes.post("/:id/attachments", async (c) => {
     // Honor the user's filename when we can; fall back if the browser
     // didn't supply one (e.g. paste from clipboard yields "image.png").
     const requested = file.name && file.name.length > 0 ? file.name : "file";
-    const filename = await uniqueName(id, requested);
     const buf = Buffer.from(await file.arrayBuffer());
-    await writeAttachment(id, filename, buf);
-    return c.json({
-      filename,
-      url: `/api/runbooks/${encodeURIComponent(id)}/attachments/${encodeURIComponent(filename)}`,
-      size: buf.length,
-      contentType: file.type || contentTypeForName(filename),
+    // uniqueName + write under the tree lock: serializing the pair also
+    // stops two same-named concurrent uploads (clipboard pastes are always
+    // "image.png") from both picking the same free name and overwriting
+    // each other.
+    return await withLock(TREE(), async () => {
+      const filename = await uniqueName(id, requested);
+      await writeAttachment(id, filename, buf);
+      return c.json({
+        filename,
+        url: `/api/runbooks/${encodeURIComponent(id)}/attachments/${encodeURIComponent(filename)}`,
+        size: buf.length,
+        contentType: file.type || contentTypeForName(filename),
+      });
     });
   } catch (e) {
     if (e instanceof AttachmentError) return c.json({ error: e.message }, e.status as any);
@@ -110,7 +122,7 @@ runbooksRoutes.get("/:id/attachments/:name", async (c) => {
 
 runbooksRoutes.delete("/:id/attachments/:name", async (c) => {
   try {
-    await deleteAttachment(c.req.param("id"), c.req.param("name"));
+    await withLock(TREE(), () => deleteAttachment(c.req.param("id"), c.req.param("name")));
     return c.json({ ok: true });
   } catch (e) {
     if (e instanceof AttachmentError) return c.json({ error: e.message }, e.status as any);
@@ -170,11 +182,11 @@ runbooksRoutes.post("/", async (c) => {
     nodeRefs: Array.isArray(body.nodeRefs) ? body.nodeRefs.filter((v) => typeof v === "string") : [],
     meta: mergeMeta(defaultMeta(), body.meta as Partial<RunbookMeta> | undefined),
   };
-  return withLock(`runbook:${id}`, async () => {
+  return withLock(`runbook:${id}`, () => withLock(TREE(), async () => {
     await writeRow(env.RUNBOOKS_DIR, row);
     await db.insert(runbooks).values(row).onConflictDoNothing();
     return c.json(row, 201);
-  });
+  }));
 });
 
 runbooksRoutes.patch("/:id", async (c) => {
@@ -186,7 +198,7 @@ runbooksRoutes.patch("/:id", async (c) => {
   // would otherwise each write a full document that reverts the other's
   // field (lost update).
   const patch = await c.req.json().catch(() => ({})) as Partial<RunbookRow>;
-  return withLock(`runbook:${id}`, async () => {
+  return withLock(`runbook:${id}`, () => withLock(TREE(), async () => {
     const [cur] = await db.select().from(runbooks).where(eq(runbooks.id, id));
     if (!cur) return c.json({ error: "not found" }, 404);
     const curMeta = (cur.meta as RunbookMeta) ?? defaultMeta();
@@ -205,16 +217,16 @@ runbooksRoutes.patch("/:id", async (c) => {
     await writeRow(env.RUNBOOKS_DIR, next);
     await db.update(runbooks).set({ ...next, updatedAt: new Date() }).where(eq(runbooks.id, id));
     return c.json(next);
-  });
+  }));
 });
 
 runbooksRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
   if (!ID_RE.test(id)) return c.json({ error: "bad id" }, 400);
-  return withLock(`runbook:${id}`, async () => {
+  return withLock(`runbook:${id}`, () => withLock(TREE(), async () => {
     const filePath = path.join(env.RUNBOOKS_DIR, `${id}.md`);
     await unlink(filePath).catch(() => undefined);
     await db.delete(runbooks).where(eq(runbooks.id, id));
     return c.body(null, 204);
-  });
+  }));
 });

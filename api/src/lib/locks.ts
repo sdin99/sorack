@@ -10,6 +10,23 @@
 
 const chains = new Map<string, Promise<unknown>>();
 
+// Lock key for the runbooks working tree as a whole. Held by anything that
+// writes files inside RUNBOOKS_DIR (runbook saves, attachment writes) and by
+// git operations that rewrite the working tree (pull's checkout, branch
+// switch). This is what makes pull's dirty-check → checkout sequence
+// race-free against a concurrent autosave: the editor's write either lands
+// before the check (pull refuses on the dirty tree) or queues until the
+// checkout is done — never in between, where a force checkout would silently
+// wipe it.
+//
+// Lock ordering (deadlock-free by construction):
+//   runbook routes:  runbook:<id> → tree:<dir>
+//   git client:      git:<dir>    → tree:<dir>
+// Nothing acquires in the opposite direction, so no cycle is possible.
+export function treeLockKey(dir: string): string {
+  return `tree:${dir}`;
+}
+
 export function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prev = chains.get(key) ?? Promise.resolve();
   // Stored tails never reject (see below), so chaining with .then is enough.

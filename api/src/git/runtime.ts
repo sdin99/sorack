@@ -45,7 +45,6 @@ export async function bootstrapClone(): Promise<{ cloned: boolean; reason?: stri
 // only when the badge-relevant snapshot actually changed so we don't
 // wake up every connected tab on a no-op tick.
 let timer: NodeJS.Timeout | null = null;
-let warmupTimer: NodeJS.Timeout | null = null;
 let lastSnapshot: string | null = null;
 
 async function tick() {
@@ -69,13 +68,15 @@ async function tick() {
 
 export function startGitBackground() {
   if (timer) return;
-  // First tick after 30s so bootstrap/migrations finish first; subsequent
-  // ticks every 5 min.
-  warmupTimer = setTimeout(() => { void tick(); }, 30_000);
+  // First tick immediately: server.ts awaits runMigrations() and
+  // bootstrapClone() before calling this from the serve() callback, so
+  // there is nothing left to wait for — a delay here only means the badge
+  // shows a stale 0/0 ahead/behind until the first fetch lands. (Fetch is
+  // serialized against user git actions by the client's internal lock.)
+  void tick();
   timer = setInterval(() => { void tick(); }, 5 * 60 * 1000);
 }
 
 export function stopGitBackground() {
-  if (warmupTimer) { clearTimeout(warmupTimer); warmupTimer = null; }
   if (timer) { clearInterval(timer); timer = null; }
 }
