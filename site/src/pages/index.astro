@@ -172,7 +172,7 @@ header.nav {
 
 /* ---- hero ------------------------------------------------- */
 .hero { position:relative; overflow:hidden; border-bottom:1px solid var(--border); }
-.hero-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.02fr); gap:40px; align-items:center; padding:84px 0 88px; }
+.hero-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.02fr); gap:40px; align-items:center; padding:84px 24px 88px; }
 .hero-left { max-width:520px; }
 .hero h1 {
   font-size:clamp(34px,4.6vw,56px); line-height:1.04; letter-spacing:-0.025em; font-weight:700;
@@ -319,7 +319,7 @@ footer.foot { padding:46px 0 56px; }
 
 /* ---- responsive ------------------------------------------- */
 @media (max-width: 920px){
-  .hero-grid { grid-template-columns:1fr; gap:30px; padding:56px 0 64px; }
+  .hero-grid { grid-template-columns:1fr; gap:30px; padding:56px 24px 64px; }
   .topo { height:380px; }
   .feat-grid { grid-template-columns:repeat(2,1fr); }
   .card.wide { grid-column:span 2; }
