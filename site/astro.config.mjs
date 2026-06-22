@@ -39,6 +39,10 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Deploy',
+          items: [{ label: 'Kubernetes', slug: 'docs/kubernetes' }],
+        },
+        {
           label: 'Adapters',
           items: [{ label: 'Probes & adapters', slug: 'docs/adapters' }],
         },

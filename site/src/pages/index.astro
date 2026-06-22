@@ -534,8 +534,8 @@ footer.foot { padding:46px 0 56px; }
   <div class="wrap qs-grid">
     <div>
       <div class="kicker">quickstart</div>
-      <h2 style="font-size:clamp(22px,2.4vw,28px); font-weight:700; letter-spacing:-0.02em; margin:14px 0 0;">Self-host it, open the map.</h2>
-      <p style="color:var(--fg-2); font-size:14.5px; margin:14px 0 0; max-width:380px;">A React + Hono + Postgres app. Kubernetes manifests ship today — the full guide is in the docs.</p>
+      <h2 style="font-size:clamp(22px,2.4vw,28px); font-weight:700; letter-spacing:-0.02em; margin:14px 0 0;">Up and running in minutes.</h2>
+      <p style="color:var(--fg-2); font-size:14.5px; margin:14px 0 0; max-width:380px;">A React + Hono + Postgres app — run it locally, or self-host on Kubernetes. The full guide is in the docs.</p>
       <a class="btn btn-ghost" style="margin-top:22px" href="/docs/">Full guide <span class="arrow">→</span></a>
     </div>
     <div class="term">
@@ -543,15 +543,14 @@ footer.foot { padding:46px 0 56px; }
         <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
         <span class="t">bash — sorack</span>
       </div>
-<pre><span class="cm"># clone, then create the namespace + secrets</span>
-<span class="p">$</span> git clone https://github.com/sdin99/sorack
-<span class="p">$</span> kubectl apply <span class="kw">-f</span> sorack/deploy/dev/namespace.yaml
+<pre><span class="cm"># need Node 22 + any Postgres instance</span>
+<span class="p">$</span> git clone https://github.com/sdin99/sorack && cd sorack
+<span class="p">$</span> pnpm install
 
-<span class="cm"># apply postgres + the app — migrations run on boot</span>
-<span class="p">$</span> kubectl apply <span class="kw">-f</span> sorack/deploy/postgres/
-<span class="p">$</span> kubectl apply <span class="kw">-f</span> sorack/deploy/dev/
-<span class="p">$</span> kubectl <span class="kw">-n</span> sorack port-forward svc/sorack <span class="st">5173:80</span>
-<span class="ok">✓</span> ready on http://localhost:5173
+<span class="cm"># point at your Postgres, then start web + api</span>
+<span class="p">$</span> export POSTGRES_HOST=localhost POSTGRES_PASSWORD=...
+<span class="p">$</span> pnpm dev
+<span class="ok">✓</span> web → <span class="kw">http://localhost:5173</span> · api → :3001
 </pre>
     </div>
   </div>
