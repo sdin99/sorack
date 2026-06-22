@@ -36,8 +36,10 @@ Thumbs.db
 .corepack/
 .pnpm-home/
 
-design/
-docs/
+# Repo-root scratchpads only — leading slash so the pattern doesn't also
+# swallow nested dirs like site/src/content/docs (Starlight content).
+/design/
+/docs/
 
 # user-data: runbook .md files (SORACK_RUNBOOKS_DIR default in dev pod).
 # Content is operator-owned, not part of the codebase. Leading slash so the
