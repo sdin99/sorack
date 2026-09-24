@@ -5,9 +5,13 @@ on:
     branches: [main]
   pull_request:
 
-# Least privilege by default; no job here needs more.
+# Least privilege by default; jobs widen it only where they must.
 permissions:
   contents: read
+
+env:
+  TRIVY_VERSION: "0.70.0"
+  KUBECONFORM_VERSION: "0.7.0"
 
 jobs:
   check:
@@ -32,17 +36,110 @@ jobs:
 
       - run: pnpm build
 
-  # deploy/base/README.md claims this workload is `restricted`-compatible.
-  # A claim in a README rots silently, so it is a gate instead of a sentence:
-  # whoever makes it false has to see it fail here.
-  deploy-hardening:
+  # One job, many steps — deliberately. GitHub bills Actions per job rounded
+  # up to the minute, so six 10-second checks split across six jobs costs six
+  # minutes for ninety seconds of work. Individual red lights are traded for
+  # step names in the aggregate below.
+  #
+  # Every step is continue-on-error so one failure does not hide the others;
+  # the last step turns the collected outcomes into the job result.
+  security:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # gitleaks reads the PR file list
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks scans history, not just the tip
 
-      - run: pip install --no-cache-dir pyyaml
+      - name: Install trivy / kubeconform
+        run: |
+          set -euo pipefail
+          tb="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL -o "$tb" "$base/$tb"
+          curl -fsSL -o trivy-sums.txt "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  ${tb}$" trivy-sums.txt | sha256sum -c -
+          tar xzf "$tb" trivy && sudo mv trivy /usr/local/bin/
 
-      # kubectl ships on the GitHub runner image; `kubectl kustomize` needs no
-      # cluster, so this stays a pure static check.
-      - name: Render and check deploy/base
-        run: kubectl kustomize deploy/base | python3 scripts/check-deploy-hardening.py
+          kb="kubeconform-linux-amd64.tar.gz"
+          kbase="https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}"
+          curl -fsSL -o "$kb" "$kbase/$kb"
+          curl -fsSL -o kc-sums.txt "$kbase/CHECKSUMS"
+          grep "  ${kb}$" kc-sums.txt | sha256sum -c -
+          tar xzf "$kb" kubeconform && sudo mv kubeconform /usr/local/bin/
+
+      - name: gitleaks (secrets)
+        id: gitleaks
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+      - name: trivy (dependency CVEs)
+        id: trivyfs
+        continue-on-error: true
+        run: trivy fs --scanners vuln --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 .
+
+      - name: trivy (k8s misconfig)
+        id: trivyconf
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          rc=0
+          for d in deploy examples; do
+            [ -d "$d" ] || continue
+            echo "::group::trivy config $d"
+            trivy config --severity CRITICAL,HIGH --exit-code 1 "$d" || rc=$?
+            echo "::endgroup::"
+          done
+          exit "$rc"
+
+      - name: kubeconform (schema)
+        id: kubeconform
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # Directories, not globs: kustomization.yaml is a kustomize
+          # directive rather than a resource, and kubeconform rejects it for
+          # having no `kind`.
+          find deploy examples \( -name '*.yaml' -o -name '*.yml' \) -print0 | \
+            xargs -0 kubeconform \
+              -strict -ignore-missing-schemas -summary \
+              -schema-location default \
+              -ignore-filename-pattern '(^|/)kustomization\.ya?ml$'
+
+      - name: deploy/base hardening
+        id: hardening
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          pip install --no-cache-dir pyyaml
+          kubectl kustomize deploy/base | python3 scripts/check-deploy-hardening.py
+
+      - name: actions pinned to a commit SHA (POLICY 5.1)
+        id: pinned
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          if grep -rnE "uses: [^ ]+@(v[0-9]|main|master)" .github/workflows/; then
+            echo "::error::unpinned action above — POLICY 5.1 requires a 40-char commit SHA"
+            exit 1
+          fi
+          echo "all actions pinned"
+
+      - name: aggregate
+        env:
+          R: ${{ steps.gitleaks.outcome }}/${{ steps.trivyfs.outcome }}/${{ steps.trivyconf.outcome }}/${{ steps.kubeconform.outcome }}/${{ steps.hardening.outcome }}/${{ steps.pinned.outcome }}
+        run: |
+          set -uo pipefail
+          names=(gitleaks "trivy(deps)" "trivy(misconfig)" kubeconform "deploy-hardening" "action-pinning")
+          IFS=/ read -ra out <<< "$R"
+          fail=0
+          for i in "${!names[@]}"; do
+            if [ "${out[$i]}" = "failure" ]; then echo "✗ ${names[$i]}"; fail=1; else echo "✓ ${names[$i]}"; fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::security scan failed — see the steps above"; exit 1; }
