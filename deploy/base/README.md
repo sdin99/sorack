@@ -28,19 +28,33 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: sorack
 resources:
-  - github.com/sdin99/sorack//deploy/base?ref=<tag>
+  # A tag, never a branch: a branch ref means someone else's push
+  # silently re-renders your overlay.
+  - github.com/sdin99/sorack//deploy/base?ref=v0.1.0
 images:
   - name: ghcr.io/sdin99/sorack
     newTag: sha-abc1234
 patches:
+  # Strategic merge, not a JSON patch by index. `name` is the merge key for
+  # env entries, so this keeps working when the base adds a variable —
+  # an index-based `/env/0/value` would silently overwrite whatever moved
+  # into slot 0.
   - target: { kind: Deployment, name: sorack }
     patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/env/0/value
-        value: postgres.<namespace>.svc.cluster.local
-      - op: replace
-        path: /spec/template/spec/containers/0/env/2/value
-        value: sorack
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: sorack
+      spec:
+        template:
+          spec:
+            containers:
+              - name: sorack
+                env:
+                  - name: POSTGRES_HOST
+                    value: postgres.<namespace>.svc.cluster.local
+                  - name: POSTGRES_DB
+                    value: sorack
   - target: { kind: PersistentVolumeClaim, name: sorack-runbooks }
     patch: |
       - op: add
