@@ -52,8 +52,10 @@ RUN pnpm --filter sorack-api --prod deploy --legacy \
 FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 WORKDIR /app
 
-# node:*-alpine ships a `node` user (uid 1000). Running as it keeps the
-# image PSA `restricted`-compatible without a numeric-uid-only footgun.
+# node:*-alpine ships a `node` user at uid 1000. Declared numerically, not by
+# name: Kubernetes cannot resolve a username to check `runAsNonRoot`, so a
+# `USER node` image is rejected with "non-numeric user, cannot verify user is
+# non-root" before the container ever starts.
 ENV NODE_ENV=production \
     PORT=3001 \
     SORACK_STATIC_DIR=./public \
@@ -68,7 +70,7 @@ COPY --from=build --chown=node:node /src/web/dist ./public
 # the api can start even when nothing is mounted (empty dir → empty list).
 RUN mkdir -p /runbooks && chown node:node /runbooks
 
-USER node
+USER 1000:1000
 EXPOSE 3001
 
 # No HEALTHCHECK here on purpose — Kubernetes probes the endpoint itself

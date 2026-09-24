@@ -33,6 +33,14 @@ spec:
       automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
+        # Explicit numeric uid. `runAsNonRoot` alone makes the kubelet verify
+        # the image's USER, and it cannot resolve a name — an image built with
+        # `USER node` fails with "non-numeric user" before it starts. Stating
+        # it here means the pod is correct regardless of how the image
+        # declares it.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:

@@ -44,6 +44,14 @@ def check_pod_spec(kind: str, name: str, spec: dict) -> list[str]:
         errs.append(f"{where}: pod securityContext.runAsNonRoot must be true")
     if (pod_sc.get("seccompProfile") or {}).get("type") not in ("RuntimeDefault", "Localhost"):
         errs.append(f"{where}: pod securityContext.seccompProfile.type must be RuntimeDefault")
+    # runAsNonRoot alone is not enough. The kubelet verifies it against the
+    # image's USER and cannot resolve a name, so an image built with
+    # `USER node` is rejected with "non-numeric user, cannot verify user is
+    # non-root" — CreateContainerConfigError, before anything runs. This
+    # manifest passed every other check here while being unstartable.
+    if pod_sc.get("runAsNonRoot") is True and not isinstance(pod_sc.get("runAsUser"), int):
+        errs.append(f"{where}: runAsNonRoot requires a numeric runAsUser "
+                    f"(the kubelet cannot resolve a username)")
 
     for field in ("hostNetwork", "hostPID", "hostIPC"):
         if spec.get(field):
