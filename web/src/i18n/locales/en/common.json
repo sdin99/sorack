@@ -61,7 +61,7 @@
     "titleCreate": "new node",
     "titleEdit": "edit node",
     "name": "name",
-    "namePlaceholder": "e.g. prod-k8s-master",
+    "namePlaceholder": "e.g. prod-cluster-01",
     "id": "id",
     "type": "type",
     "parent": "parent",

@@ -61,7 +61,7 @@
     "titleCreate": "노드 생성",
     "titleEdit": "노드 수정",
     "name": "이름",
-    "namePlaceholder": "예: prod-k8s-master",
+    "namePlaceholder": "예: prod-cluster-01",
     "id": "id",
     "type": "타입",
     "parent": "상위 노드",

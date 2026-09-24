@@ -16,7 +16,7 @@ metadata:
 spec:
   ingressClassName: traefik # or nginx / etc
   rules:
-    - host: dash.sorack.com # CHANGE to your hostname
+    - host: sorack.example.com # CHANGE to your hostname
       http:
         paths:
           - path: /
@@ -28,5 +28,5 @@ spec:
                   number: 80
   tls:
     - hosts:
-        - dash.sorack.com # CHANGE to your hostname
-      secretName: dash-sorack-tls
+        - sorack.example.com # CHANGE to your hostname
+      secretName: sorack-example-tls

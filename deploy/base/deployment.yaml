@@ -1,0 +1,118 @@
+# Sorack production Deployment — one container serving /api/* and the built
+# web bundle on a single port (see the repo Dockerfile).
+#
+# This is the generic base. It deliberately carries NO namespace, NO image
+# tag, NO storage class and NO hostname: those are deployment-specific and
+# belong in an overlay. See deploy/base/README.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sorack
+  labels:
+    app: sorack
+spec:
+  replicas: 1
+  # The runbooks PVC is RWO and the api holds a file watcher plus a git
+  # working tree on it, so two replicas would fight over the same checkout.
+  # Scaling out needs the multi-writer story first (see docs/roadmap.md).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sorack
+  template:
+    metadata:
+      labels:
+        app: sorack
+    spec:
+      # The k8s health adapter reads workload state cluster-wide, so the
+      # token IS needed here — this is the documented exception to the
+      # "automountServiceAccountToken: false" default. The bound role is
+      # strictly get/list on non-secret resources (rbac.yaml).
+      serviceAccountName: sorack
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sorack
+          # Placeholder on purpose: an overlay or CI must pin a digest or a
+          # sha-<git> tag. Left deliberately invalid so a missing pin fails
+          # the pull instead of silently resolving to a mutable tag.
+          image: ghcr.io/sdin99/sorack:REPLACE_ME
+          ports:
+            - name: http
+              containerPort: 3001
+          env:
+            # No defaults here — the overlay decides which database this
+            # instance talks to, so prod and dev can share one postgres
+            # without either one migrating the other's schema.
+            - name: POSTGRES_HOST
+              value: ""
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: ""
+          envFrom:
+            # sorack-db  : POSTGRES_USERNAME / POSTGRES_PASSWORD
+            # sorack-app : SORACK_AUTH_SECRET, SORACK_GIT_TOKEN_KEY, adapter env
+            # Both optional so the pod can start and report a clear error
+            # instead of being stuck Pending before credentials land.
+            - secretRef:
+                name: sorack-db
+                optional: true
+            - secretRef:
+                name: sorack-app
+                optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: runbooks
+              mountPath: /runbooks
+            # readOnlyRootFilesystem: true means the process gets no writable
+            # path by default. Node and isomorphic-git both want a scratch
+            # dir, so give them a small one that dies with the pod.
+            - name: tmp
+              mountPath: /tmp
+          # Migrations run before the listener binds, and a cold cluster can
+          # keep postgres unreachable for a while — the api retries for 60s
+          # rather than crash-looping. Give startup room for that.
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            failureThreshold: 30 # 30 * 5s = 2m30s
+            periodSeconds: 5
+          # Probe the api, not just the port. The failure mode this catches
+          # is the api dying while something else still answers on the
+          # socket — a tcpSocket probe reports Ready right through it.
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: runbooks
+          persistentVolumeClaim:
+            claimName: sorack-runbooks
+        - name: tmp
+          emptyDir: {}

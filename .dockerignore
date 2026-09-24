@@ -1,0 +1,39 @@
+# Keep the build context small and never ship local state or secrets.
+# `COPY . .` in the build stage would otherwise pull in host node_modules
+# (wrong libc), the pnpm store, and any .env the operator left lying around.
+
+node_modules
+*/node_modules
+.pnpm-home
+.corepack
+.git
+.github
+
+# Build outputs — regenerated inside the image.
+api/dist
+web/dist
+site/dist
+site/.astro
+
+# Local state / secrets. api/.env.example is fine to ship but the real one
+# must never enter an image layer.
+.env
+*/.env
+.env.*
+*.key
+*.pem
+
+# Private working docs (gitignored in the repo too) and local runbook data.
+docs
+runbooks
+runbooks-test
+design
+
+# Not part of the app image.
+site
+examples
+deploy
+
+# pnpm deploy scratch dir (created inside the build stage).
+.deploy
+.deploy-test

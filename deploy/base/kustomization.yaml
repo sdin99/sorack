@@ -1,0 +1,18 @@
+# Generic Sorack base. Not meant to be applied directly — it has no
+# namespace, no image pin and no storage class. Reference it from an
+# overlay; see README.md for the minimum an overlay must supply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# includeSelectors defaults to false — the Deployment's own `app: sorack`
+# selector stays untouched, which keeps this label safe to add to an
+# already-running release.
+labels:
+  - pairs:
+      app.kubernetes.io/name: sorack
+
+resources:
+  - rbac.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml

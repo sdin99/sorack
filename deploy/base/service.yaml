@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sorack
+  labels:
+    app: sorack
+spec:
+  type: ClusterIP
+  selector:
+    app: sorack
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
