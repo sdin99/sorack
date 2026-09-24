@@ -46,10 +46,16 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}
+          # `latest` is added by default for semver tags, and {{major}}.{{minor}}
+          # is mutable too. Both contradict POLICY 3.1 and this repo's own
+          # deploy/base/README, which tells people to pin a digest — and a
+          # public repo is exactly where someone copies `:latest` out of a
+          # README. Only immutable references are published.
+          flavor: |
+            latest=false
           tags: |
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
 
       # Skipped for pull_request, where the push step is a no-op anyway.
       - if: github.event_name != 'pull_request'

@@ -52,6 +52,20 @@ Migrations run automatically on api boot. The full self-hosting guide —
 Secrets, adapters, environment reference and troubleshooting — is at
 **[sorack.com/docs](https://sorack.com/docs)**.
 
+## Container image
+
+```
+ghcr.io/sdin99/sorack:0.1.1
+ghcr.io/sdin99/sorack@sha256:...        # what a deployment should pin
+```
+
+Only immutable references are published: an exact version and a `sha-<commit>`
+tag. There is deliberately no `latest` — pinning a mutable tag means a restart
+can silently change what you are running.
+
+> A `latest` tag exists from the first release and points at `0.1.1` forever.
+> It will not be updated. Do not use it.
+
 ## License
 
 [MIT](./LICENSE)
