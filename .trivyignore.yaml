@@ -1,0 +1,51 @@
+# Time-boxed deferrals for findings tracked in SEC-126, not dismissals.
+#
+# Every entry carries `expired_at`. After that date trivy stops honouring it
+# and CI goes red again on its own — nobody has to remember to come back.
+# That is the point: an ignore file without expiry is how a "we'll fix it
+# next sprint" becomes permanent and invisible.
+#
+# NONE of these downgrade a severity. The astro finding is still CRITICAL;
+# what is deferred is the gate, not the rating. Deciding a CVE is harmless
+# because the vulnerable API "looks unused" puts that judgement in a one-line
+# file that nobody re-reads when the code changes six months later.
+#
+# Ticket: SEC-126 (P2, due 2026-10-08) — ~/projects/security/assignments/sorack.md
+# Fixed in this PR and deliberately absent below: hono CVE-2026-54290,
+# drizzle-orm CVE-2026-39356.
+
+vulnerabilities:
+  - id: GHSA-26w7-cxv4-gfx2
+    statement: >-
+      astro 6.4.8 → 7.2.8, RCE via AVIF image optimization. Severity stands at
+      CRITICAL. Deferred because the fix is a major upgrade of the marketing
+      site (site/), which needs its own PR and its own build verification —
+      not because the risk was judged away. Exposure is narrower than the
+      rating suggests (the site is a static build; no astro:assets / <Image> /
+      getImage call appears in site/src), but that observation is a reason to
+      schedule rather than a reason to dismiss: it says the source does not
+      call the API today, not that the code path cannot run.
+    expired_at: 2026-10-08
+
+  - id: CVE-2026-55685
+    statement: >-
+      react-router 7.16.0 → 7.18.0. A cheap minor bump, held back only to keep
+      this PR reviewable — it adds the scanners, and fixing every finding in
+      the same change would make the diff unreadable. Should be the first
+      thing closed under SEC-126.
+    expired_at: 2026-10-08
+
+  - id: CVE-2026-59869
+    statement: >-
+      js-yaml DoS via crafted YAML. Transitive (gray-matter in api, astro in
+      site), so it cannot be bumped directly — it needs either a parent
+      upgrade or a pnpm override. Sorack parses YAML from runbook frontmatter,
+      which is operator-authored content on a volume only the operator writes
+      to, so the untrusted-input path is narrow today. That changes the day
+      runbooks arrive over git sync from a remote someone else can push to.
+    expired_at: 2026-10-08
+
+  - id: CVE-2026-84375
+    statement: >-
+      js-yaml DoS, same package and same remediation path as CVE-2026-59869.
+    expired_at: 2026-10-08

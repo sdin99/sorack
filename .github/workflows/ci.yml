@@ -82,7 +82,26 @@ jobs:
       - name: trivy (dependency CVEs)
         id: trivyfs
         continue-on-error: true
-        run: trivy fs --scanners vuln --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 .
+        run: |
+          set -uo pipefail
+          # Show what was actually parsed before judging it. A repo whose
+          # lockfiles trivy could not read produces the same silent green as
+          # a repo with no vulnerabilities, and the difference matters more
+          # than the result does. Fail when nothing was parsed.
+          trivy fs --scanners vuln --format json --output /tmp/trivy-fs.json . >/dev/null 2>&1 || true
+          targets=$(python3 -c "
+          import json
+          r = json.load(open('/tmp/trivy-fs.json')).get('Results') or []
+          for x in r: print(' -', x.get('Target'), f\"({x.get('Type')})\")
+          print('COUNT', len(r))
+          ")
+          echo "$targets"
+          [ "$(echo "$targets" | awk '/^COUNT/{print $2}')" != "0" ] || {
+            echo "::error::trivy parsed 0 targets — nothing was scanned, which is not the same as clean"
+            exit 1
+          }
+          trivy fs --scanners vuln --ignore-unfixed --severity CRITICAL,HIGH \
+            --ignorefile .trivyignore.yaml --exit-code 1 .
 
       - name: trivy (k8s misconfig)
         id: trivyconf
@@ -93,7 +112,7 @@ jobs:
           for d in deploy examples; do
             [ -d "$d" ] || continue
             echo "::group::trivy config $d"
-            trivy config --severity CRITICAL,HIGH --exit-code 1 "$d" || rc=$?
+            trivy config --severity CRITICAL,HIGH --ignorefile .trivyignore.yaml --exit-code 1 "$d" || rc=$?
             echo "::endgroup::"
           done
           exit "$rc"
