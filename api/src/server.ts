@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { env } from "./lib/env";
@@ -63,6 +64,25 @@ app.route("/api/alerts", alertsRoutes);
 app.route("/api/inventory", inventoryRoutes);
 app.route("/api/events", eventsRoutes);
 app.route("/api/git", gitRoutes);
+
+// ── static web bundle ── ORDER MATTERS: mounted AFTER every /api route so an
+// unmatched /api/* path still 404s as JSON instead of being answered with
+// index.html. Only active when SORACK_STATIC_DIR is set (the packaged image);
+// in dev Vite owns the frontend and this whole block is skipped.
+//
+// Two layers: hashed build assets are served straight from disk, and every
+// other GET falls back to index.html so client-side routes (/runbooks/:id,
+// /settings/:category) survive a page reload or a deep link.
+if (env.STATIC_DIR) {
+  const root = env.STATIC_DIR;
+  app.use("/assets/*", serveStatic({ root }));
+  app.get("/favicon.ico", serveStatic({ root }));
+  app.get("*", async (c, next) => {
+    // Never let the SPA fallback answer for the API surface.
+    if (c.req.path.startsWith("/api/")) return next();
+    return serveStatic({ root, path: "index.html" })(c, next);
+  });
+}
 
 const port = env.PORT;
 

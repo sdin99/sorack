@@ -70,6 +70,12 @@ export const env = {
   // Created at startup if absent. Override per deployment (k8s PV mount,
   // docker -v, or local dir bind).
   RUNBOOKS_DIR: process.env.SORACK_RUNBOOKS_DIR ?? "/runbooks",
+
+  // ── static web bundle ── set only in the packaged image, where the built
+  // `web/dist` is copied next to the api. Unset in dev: Vite serves the
+  // frontend on :5173 and proxies /api here, so the api must NOT also try to
+  // serve a (nonexistent) bundle. Path is relative to the process cwd.
+  STATIC_DIR: process.env.SORACK_STATIC_DIR, // e.g. "./public"
 };
 
 export const DATABASE_URL = `postgres://${env.POSTGRES_USERNAME}:${encodeURIComponent(

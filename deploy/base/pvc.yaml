@@ -1,0 +1,18 @@
+# Runbook storage. The .md files are the source of truth for runbook content
+# (the DB only caches metadata), and when git sync is enabled this volume is
+# also the git working tree — so it must survive pod restarts.
+#
+# No storageClassName here: the overlay picks it. Omitting the field means
+# "use the cluster default", which is rarely what an operator wants and is
+# never what a base should decide for them.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sorack-runbooks
+  labels:
+    app: sorack
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
