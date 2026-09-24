@@ -10,23 +10,17 @@
 # because the vulnerable API "looks unused" puts that judgement in a one-line
 # file that nobody re-reads when the code changes six months later.
 #
+# Scope: application lockfile (pnpm-lock.yaml) only. site/ is gated per-step
+# in ci.yml with the same due date — deliberately NOT listed here, because an
+# entry in this file removes the finding from the report, and the astro
+# finding has to stay visible as CRITICAL. Deferring is allowed; hiding the
+# rating is not.
+#
 # Ticket: SEC-126 (P2, due 2026-10-08) — ~/projects/security/assignments/sorack.md
 # Fixed in this PR and deliberately absent below: hono CVE-2026-54290,
 # drizzle-orm CVE-2026-39356.
 
 vulnerabilities:
-  - id: GHSA-26w7-cxv4-gfx2
-    statement: >-
-      astro 6.4.8 → 7.2.8, RCE via AVIF image optimization. Severity stands at
-      CRITICAL. Deferred because the fix is a major upgrade of the marketing
-      site (site/), which needs its own PR and its own build verification —
-      not because the risk was judged away. Exposure is narrower than the
-      rating suggests (the site is a static build; no astro:assets / <Image> /
-      getImage call appears in site/src), but that observation is a reason to
-      schedule rather than a reason to dismiss: it says the source does not
-      call the API today, not that the code path cannot run.
-    expired_at: 2026-10-08
-
   # trivy lists the same advisory under both its CVE and its GHSA id, as
   # separate rows. Ignoring one does not cover the other — the ids below are
   # aliases of the two app-side entries, not extra findings.
