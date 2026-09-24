@@ -64,28 +64,3 @@ vulnerabilities:
     statement: >-
       js-yaml DoS, same package and same remediation path as CVE-2026-59869.
     expired_at: 2026-10-08
-
-# ── site/ (marketing site) ────────────────────────────────────────────────
-#
-# The remaining findings all sit in site/package-lock.json: nanoid, postcss,
-# sharp, smol-toml, svgo. Every one is a transitive dependency of astro, so
-# they close together when astro 6 -> 7 lands in its own PR (SEC-126). Listing
-# them individually would be noise that goes stale the moment that tree moves.
-#
-# This is the broadest entry in the file and it is deliberately the one with
-# the clearest expiry. It is a deferral of a known, ticketed upgrade — not a
-# statement that site dependencies do not matter.
-#
-# ‼ The better fix is structural, and is with secops: site/ is a static
-# marketing page built by Cloudflare Pages, not part of the shipped image. It
-# has its own lifecycle and its own lockfile, so folding it into the app's
-# gate means site churn blocks app PRs and vice versa. Splitting the scan
-# would let the astro PR close its own gate without a blanket entry here.
-  - id: "*"
-    paths:
-      - "site/package-lock.json"
-    statement: >-
-      astro transitive dependency tree, pending the astro 6 -> 7 major upgrade
-      tracked in SEC-126. Scoped to the site lockfile only — the application
-      lockfile (pnpm-lock.yaml) is NOT covered by this entry.
-    expired_at: 2026-10-08

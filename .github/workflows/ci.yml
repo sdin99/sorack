@@ -79,7 +79,7 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
-      - name: trivy (dependency CVEs)
+      - name: trivy (app dependency CVEs)
         id: trivyfs
         continue-on-error: true
         run: |
@@ -88,7 +88,8 @@ jobs:
           # lockfiles trivy could not read produces the same silent green as
           # a repo with no vulnerabilities, and the difference matters more
           # than the result does. Fail when nothing was parsed.
-          trivy fs --scanners vuln --format json --output /tmp/trivy-fs.json . >/dev/null 2>&1 || true
+          trivy fs --scanners vuln --format json --output /tmp/trivy-fs.json \
+            --skip-dirs site . >/dev/null 2>&1 || true
           targets=$(python3 -c "
           import json
           r = json.load(open('/tmp/trivy-fs.json')).get('Results') or []
@@ -101,7 +102,30 @@ jobs:
             exit 1
           }
           trivy fs --scanners vuln --ignore-unfixed --severity CRITICAL,HIGH \
-            --ignorefile .trivyignore.yaml --exit-code 1 .
+            --skip-dirs site --ignorefile .trivyignore.yaml --exit-code 1 .
+
+      # site/ is the marketing page: its own lockfile, built and deployed by
+      # Cloudflare Pages, not part of the shipped image. Scanning it in the
+      # same gate as the application means each blocks the other, and its
+      # findings are currently one upgrade (astro 6 -> 7, SEC-126).
+      #
+      # Always reported, never silent. Blocking from the SEC-126 due date —
+      # the deadline is in the condition, so nobody has to remember it.
+      - name: trivy (site dependency CVEs)
+        id: trivysite
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          rc=0
+          trivy fs --scanners vuln --ignore-unfixed --severity CRITICAL,HIGH \
+            --ignorefile .trivyignore.yaml --exit-code 1 site || rc=$?
+          [ "$rc" = 0 ] && { echo "site clean"; exit 0; }
+          if [ "$(date -u +%Y-%m-%d)" \> "2026-10-08" ]; then
+            echo "::error::site findings are past the SEC-126 due date (2026-10-08)"
+            exit 1
+          fi
+          echo "::warning::site findings deferred to SEC-126, due 2026-10-08 — not blocking until then"
+          exit 0
 
       - name: trivy (k8s misconfig)
         id: trivyconf
@@ -152,10 +176,10 @@ jobs:
 
       - name: aggregate
         env:
-          R: ${{ steps.gitleaks.outcome }}/${{ steps.trivyfs.outcome }}/${{ steps.trivyconf.outcome }}/${{ steps.kubeconform.outcome }}/${{ steps.hardening.outcome }}/${{ steps.pinned.outcome }}
+          R: ${{ steps.gitleaks.outcome }}/${{ steps.trivyfs.outcome }}/${{ steps.trivysite.outcome }}/${{ steps.trivyconf.outcome }}/${{ steps.kubeconform.outcome }}/${{ steps.hardening.outcome }}/${{ steps.pinned.outcome }}
         run: |
           set -uo pipefail
-          names=(gitleaks "trivy(deps)" "trivy(misconfig)" kubeconform "deploy-hardening" "action-pinning")
+          names=(gitleaks "trivy(app deps)" "trivy(site deps)" "trivy(misconfig)" kubeconform "deploy-hardening" "action-pinning")
           IFS=/ read -ra out <<< "$R"
           fail=0
           for i in "${!names[@]}"; do
