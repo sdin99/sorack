@@ -198,6 +198,17 @@ jobs:
           fi
           echo "all actions pinned"
 
+      # The grep above checks the shape. A 40-hex string that exists nowhere
+      # passes it — two did, transcribed from a truncated listing with the
+      # tails filled in from memory, and the workflow failed at dispatch. The
+      # version comments were wrong by two major releases and nothing said so.
+      - name: pinned SHAs exist and match their version comment
+        id: pinsresolve
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-action-pins.py
+
       # POLICY 3.1/3.2: only immutable image references may be published.
       # Both bugs this catches were found in the registry, not in review — a
       # `latest` that a comment said was disabled, and a `sha-<commit>` tag
@@ -211,10 +222,10 @@ jobs:
 
       - name: aggregate
         env:
-          R: ${{ steps.gitleaks.outcome }}/${{ steps.trivyfs.outcome }}/${{ steps.trivysite.outcome }}/${{ steps.trivyconf.outcome }}/${{ steps.kubeconform.outcome }}/${{ steps.hardening.outcome }}/${{ steps.pinned.outcome }}/${{ steps.reltags.outcome }}
+          R: ${{ steps.gitleaks.outcome }}/${{ steps.trivyfs.outcome }}/${{ steps.trivysite.outcome }}/${{ steps.trivyconf.outcome }}/${{ steps.kubeconform.outcome }}/${{ steps.hardening.outcome }}/${{ steps.pinned.outcome }}/${{ steps.pinsresolve.outcome }}/${{ steps.reltags.outcome }}
         run: |
           set -uo pipefail
-          names=(gitleaks "trivy(app deps)" "trivy(site deps)" "trivy(misconfig)" kubeconform "deploy-hardening" "action-pinning" "release-tags")
+          names=(gitleaks "trivy(app deps)" "trivy(site deps)" "trivy(misconfig)" kubeconform "deploy-hardening" "action-pinning" "action-pins-resolve" "release-tags")
           IFS=/ read -ra out <<< "$R"
           fail=0
           for i in "${!names[@]}"; do
