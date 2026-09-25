@@ -2080,7 +2080,25 @@ export function RunbookScreen({ runbookId, onClose, onJumpNode, onJumpRunbook })
   return (
     <div className="fs-overlay rb-fs" style={rbFsStyle}>
       <header className="fs-head">
-        <button className="fs-back" onClick={onClose} aria-label={t('action.back')}>
+        {/* On mobile the list and a runbook cannot both be on screen, so back
+            goes to the list first and out to the map from there — the usual
+            master-detail behaviour, and the header title already follows it
+            (it shows the runbook's title only while the list is hidden).
+            Without this the list was unreachable from a runbook: the sidebar
+            toggle below is desktop-only, and the sole setShowTree(true) in
+            this file runs after deleting the runbook you are looking at.
+            Desktop keeps closing straight out, where the list never left. */}
+        <button
+          className="fs-back"
+          data-testid="runbook-back"
+          onClick={() => {
+            if (!isDesktop && rb && !showTree) setShowTree(true);
+            else onClose();
+          }}
+          aria-label={!isDesktop && rb && !showTree
+            ? t('runbook.backToList', { defaultValue: 'Back to the runbook list' })
+            : t('action.back')}
+        >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 4l-6 6 6 6" />
           </svg>

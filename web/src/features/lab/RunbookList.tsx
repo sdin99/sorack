@@ -313,6 +313,7 @@ export function RunbookList({ runbookId, runbooks, templates, onJumpRunbook, onC
               return (
                 <button
                   key={r.id}
+                  data-testid={`runbook-item-${r.id}`}
                   className={`rb-item ${r.id === runbookId ? "rb-item--active" : ""}`}
                   onClick={() => onJumpRunbook(r.id)}
                 >

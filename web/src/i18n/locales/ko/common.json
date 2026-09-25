@@ -188,7 +188,8 @@
     "storageLocalHint": "런북이 로컬 볼륨에만 저장됩니다. 아래에서 git remote 설정 시 동기화 활성화.",
     "storageGitHint": "런북이 로컬 볼륨에 저장되며 설정된 git remote와 동기화됩니다.",
     "attach": "파일 첨부",
-    "save": "지금 저장 (⌘S)"
+    "save": "지금 저장 (⌘S)",
+    "backToList": "런북 목록으로"
   },
   "git": {
     "status": "상태",

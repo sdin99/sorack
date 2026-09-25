@@ -1325,17 +1325,26 @@ function SettingsRoute({ theme, setTheme }: { theme: 'dark'|'light'; setTheme: (
   );
 }
 
-// /runbooks with no id: jump to the first one if there is one, otherwise show
-// the list, which has had an empty state ("No runbooks yet") all along.
+// /runbooks with no id.
 //
-// This used to `<Navigate to="/" />` when the list was empty, which — together
-// with the no-op on the toolbar button — meant that empty state was
-// unreachable by either route. It was written, styled, translated, and no
-// installation could ever display it.
+// Desktop jumps straight to the first runbook: the list is a permanent
+// sidebar there, so landing on content loses nothing.
+//
+// ‼ Mobile shows the list. The runbook screen is master-detail and the list
+// is the master; jumping past it on a viewport where the two cannot both be
+// on screen meant the toolbar button opened one runbook and offered no way to
+// reach any other. With fifteen runbooks on the instance, fourteen of them
+// were unreachable from a phone.
+//
+// It also used to `<Navigate to="/" />` when the list was empty, which —
+// together with the no-op on the toolbar button — made the empty state
+// unreachable by either route. It was written, styled and translated, and no
+// installation could display it.
 function RunbookIndexRoute({ onJumpNode, onClose }: { onJumpNode: (id: string) => void; onClose: () => void }) {
   const { RUNBOOKS } = useSorack();
+  const isDesktop = useIsDesktop();
   const first = Object.keys(RUNBOOKS)[0];
-  if (first) return <Navigate to={`/runbooks/${encodeURIComponent(first)}`} replace />;
+  if (first && isDesktop) return <Navigate to={`/runbooks/${encodeURIComponent(first)}`} replace />;
   return <RunbookRoute onJumpNode={onJumpNode} onClose={onClose} />;
 }
 
