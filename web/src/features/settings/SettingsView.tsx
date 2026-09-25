@@ -534,7 +534,7 @@ function ApiKeysPanel() {
           <div className="settings-subcard-title">
             {t("settings.apiKeys.issued", { defaultValue: "Copy this now — it is not shown again" })}
           </div>
-          <code className="settings-key-value">{issued.key}</code>
+          <code className="settings-key-value" data-testid="apikey-value">{issued.key}</code>
           <div className="settings-key-header">
             <span className="settings-key-header-label">
               {t("settings.apiKeys.headerLabel", { defaultValue: "header" })}
@@ -554,12 +554,14 @@ function ApiKeysPanel() {
         <div className="settings-subcard-title">{t("settings.apiKeys.new", { defaultValue: "New key" })}</div>
         <label className="settings-field">
           <span className="settings-input-label">{t("settings.apiKeys.name", { defaultValue: "name" })}</span>
-          <input className="settings-input" value={name} onChange={(e) => setName(e.target.value)}
+          <input className="settings-input" data-testid="apikey-name"
+            value={name} onChange={(e) => setName(e.target.value)}
             placeholder={t("settings.apiKeys.namePlaceholder", { defaultValue: "e.g. topology-sync" })} />
         </label>
         <label className="settings-field">
           <span className="settings-input-label">{t("settings.apiKeys.scope", { defaultValue: "scope" })}</span>
-          <select className="settings-input" value={scope} onChange={(e) => setScope(e.target.value as "read" | "write")}>
+          <select className="settings-input" data-testid="apikey-scope"
+            value={scope} onChange={(e) => setScope(e.target.value as "read" | "write")}>
             <option value="read">read</option>
             <option value="write">write</option>
           </select>
@@ -567,7 +569,8 @@ function ApiKeysPanel() {
             {t("settings.apiKeys.scopeHint", { defaultValue: "read = GET only · write = any change" })}
           </span>
         </label>
-        <button className="settings-btn" disabled={busy || !name.trim()} onClick={create}>
+        <button className="settings-btn" data-testid="apikey-create"
+          disabled={busy || !name.trim()} onClick={create}>
           {t("settings.apiKeys.create", { defaultValue: "Create" })}
         </button>
         {err && <div className="settings-err">{err}</div>}

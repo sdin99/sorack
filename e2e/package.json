@@ -1,0 +1,13 @@
+{
+  "name": "sorack-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report",
+    "preinstall": "node ./scripts/guard-workspace.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

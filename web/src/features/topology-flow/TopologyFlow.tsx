@@ -602,7 +602,7 @@ export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, o
   // the only other way in, and nothing hints that it exists.
   if (!loading && nodes.length === 0) {
     return (
-      <div className="tf-empty">
+      <div className="tf-empty" data-testid="map-empty">
         <div className="tf-empty-card">
           <h2>{t("map.empty.title", { defaultValue: "No nodes yet" })}</h2>
           <p>
@@ -612,7 +612,7 @@ export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, o
             })}
           </p>
           {onCreateFirstNode && (
-            <button className="tf-empty-cta" onClick={onCreateFirstNode}>
+            <button className="tf-empty-cta" data-testid="map-empty-cta" onClick={onCreateFirstNode}>
               {t("map.empty.cta", { defaultValue: "Add your first node" })}
             </button>
           )}

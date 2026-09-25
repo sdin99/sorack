@@ -17,6 +17,12 @@ const LockIcon = (
 
 // Full-screen login gate. Background echoes the topology map (dot grid +
 // accent glow) so the login screen feels part of the product.
+// The `data-testid` hooks here and in the other flows e2e touches are
+// deliberate: the e2e suite must not select on user-visible copy. Every
+// string on this screen is translated and all of it was rewritten once
+// already; a test anchored to it breaks on a copy change, and the usual
+// response to that is to loosen the test until it stops testing anything.
+// See e2e/README.md.
 export function LoginOverlay() {
   const { t } = useTranslation();
   const { login } = useAuth();
@@ -53,6 +59,7 @@ export function LoginOverlay() {
             <span className="login-field-icon">{UserIcon}</span>
             <input
               className="login-field-input"
+              data-testid="login-username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder={t("auth.username")}
@@ -64,6 +71,7 @@ export function LoginOverlay() {
             <span className="login-field-icon">{LockIcon}</span>
             <input
               className="login-field-input"
+              data-testid="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -73,9 +81,14 @@ export function LoginOverlay() {
           </label>
         </div>
 
-        {err && <div className="login-err">{err}</div>}
+        {err && <div className="login-err" data-testid="login-error">{err}</div>}
 
-        <button className="login-submit" type="submit" disabled={busy || !username || !password}>
+        <button
+          className="login-submit"
+          data-testid="login-submit"
+          type="submit"
+          disabled={busy || !username || !password}
+        >
           {busy ? "…" : t("auth.signIn")}
         </button>
       </form>
