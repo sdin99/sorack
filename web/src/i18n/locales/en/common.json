@@ -286,5 +286,13 @@
       "requests": "requests",
       "pods": "pods"
     }
+  },
+  "map": {
+    "empty": {
+      "title": "No nodes yet",
+      "body": "A node is anything you want to see the state of — a host, a VM, a container, a namespace, a service. Add one and attach a probe to it.",
+      "cta": "Add your first node",
+      "hint": "You can also right-click anywhere on the canvas."
+    }
   }
 }

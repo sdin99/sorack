@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import {
   ReactFlow,
   Background,
@@ -130,6 +131,10 @@ interface Props {
   canRedo?: boolean;
   undoIcon?: React.ReactNode;
   redoIcon?: React.ReactNode;
+  // Shown on the empty canvas of a fresh install. Without it the first
+  // thing a new operator sees is a blank pane whose only affordance is a
+  // right-click they have no reason to try.
+  onCreateFirstNode?: () => void;
 }
 
 // ─── Rubber-band selection ────────────────────────────────────────
@@ -233,7 +238,8 @@ function RubberBand({
   );
 }
 
-export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, onPaneContextMenu, onConnect, onEdgeContextMenu, isDimmed, selectedIds, onSelectedIdsChange, onUndo, onRedo, canUndo, canRedo, undoIcon, redoIcon }: Props = {}) {
+export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, onPaneContextMenu, onConnect, onEdgeContextMenu, isDimmed, selectedIds, onSelectedIdsChange, onUndo, onRedo, canUndo, canRedo, undoIcon, redoIcon, onCreateFirstNode }: Props = {}) {
+  const { t } = useTranslation();
   const { NODES, EDGES, loading, updateNode, bulkUpdate } = useSorack();
   const isDesktop = useIsDesktop();
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -586,6 +592,36 @@ export function TopologyFlow({ selectedId = null, onSelect, onNodeContextMenu, o
     return (
       <div style={{ padding: 24, color: "var(--fg-2)", fontFamily: "var(--sans)" }}>
         loading inventory…
+      </div>
+    );
+  }
+
+  // Fresh install: inventory loaded and genuinely empty. "Nothing here" and
+  // "still loading" look identical on a blank canvas, so say which it is and
+  // give the one action that moves things forward — the pane context menu is
+  // the only other way in, and nothing hints that it exists.
+  if (!loading && nodes.length === 0) {
+    return (
+      <div className="tf-empty">
+        <div className="tf-empty-card">
+          <h2>{t("map.empty.title", { defaultValue: "No nodes yet" })}</h2>
+          <p>
+            {t("map.empty.body", {
+              defaultValue:
+                "A node is anything you want to see the state of — a host, a VM, a container, a namespace, a service. Add one and attach a probe to it.",
+            })}
+          </p>
+          {onCreateFirstNode && (
+            <button className="tf-empty-cta" onClick={onCreateFirstNode}>
+              {t("map.empty.cta", { defaultValue: "Add your first node" })}
+            </button>
+          )}
+          <p className="tf-empty-hint">
+            {t("map.empty.hint", {
+              defaultValue: "You can also right-click anywhere on the canvas.",
+            })}
+          </p>
+        </div>
       </div>
     );
   }

@@ -1903,6 +1903,7 @@ export function App() {
           e.preventDefault();
           openActions('pane', { position: { x: e.clientX, y: e.clientY } });
         }}
+        onCreateFirstNode={() => openCreate()}
         onConnect={(conn, position) => {
           openActions('edge_picker', { source: conn.source, target: conn.target, position });
         }}
