@@ -117,6 +117,36 @@ export const k8sAdapter: ProbeAdapter = {
         g<any>(`/apis/networking.k8s.io/v1/namespaces/${ns}/ingresses`),
       ]);
 
+      // CronJobs are fetched separately and tolerantly, for two reasons.
+      //
+      // They were invisible before: between runs a CronJob has no pod, so a
+      // survey of running workloads reports a namespace of nothing but
+      // CronJobs as empty — and empty scored as healthy. Backups, renovate,
+      // certificate renewal and media sync all live here, which is most of
+      // what a homelab actually runs on a schedule.
+      //
+      // Tolerantly, because an existing install's ClusterRole does not grant
+      // batch. Putting this in the Promise.all above would turn one 403 into
+      // a failed probe for every namespace — the monitor going red about
+      // itself, on clusters where nothing is wrong. A permission we do not
+      // have has to read as "not observed", never as zero and never as an
+      // outage.
+      const batch = await Promise.allSettled([
+        g<any>(`/apis/batch/v1/namespaces/${ns}/cronjobs`),
+        g<any>(`/apis/batch/v1/namespaces/${ns}/jobs`),
+      ]);
+      const batchOf = (i: number): { items: any[] } | { denied: string } => {
+        const r = batch[i];
+        if (r.status === "fulfilled") return { items: r.value?.items ?? [] };
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        return { denied: msg };
+      };
+      const cronRes = batchOf(0);
+      const jobRes = batchOf(1);
+      const cronItems: any[] = "items" in cronRes ? cronRes.items : [];
+      const jobItems: any[] = "items" in jobRes ? jobRes.items : [];
+      const batchDenied = "denied" in cronRes || "denied" in jobRes;
+
       const podItems: any[] = pods.items ?? [];
       const depItems: any[] = deploys.items ?? [];
       const stsItems: any[] = sts.items ?? [];
@@ -132,7 +162,29 @@ export const k8sAdapter: ProbeAdapter = {
 
       const notReady =
         podItems.length - podReadyN + (depItems.length - depReadyN) + (stsItems.length - stsReadyN);
-      const status: HealthStatus = notReady > 0 ? "warn" : "ok";
+
+      // Anything at all to judge? Previously `notReady === 0` meant "ok",
+      // which made an empty namespace and a fully healthy one report the
+      // same thing — and "empty" included every namespace whose workloads
+      // this adapter could not enumerate. Finding nothing is not a clean
+      // bill of health; it is the absence of an observation, and it has to
+      // say so.
+      const observedCount =
+        podItems.length + depItems.length + stsItems.length + cronItems.length + jobItems.length;
+
+      let status: HealthStatus;
+      let message: string;
+      if (observedCount === 0) {
+        status = "unknown";
+        message = batchDenied
+          ? `nothing observed in ${ns} (and batch/v1 was denied — the ClusterRole may need cronjobs/jobs)`
+          : `nothing observed in ${ns} — the namespace is empty, or holds only kinds this probe does not read`;
+      } else {
+        status = notReady > 0 ? "warn" : "ok";
+        message = `${podReadyN}/${podItems.length} pods ready`;
+        if (cronItems.length > 0) message += `, ${cronItems.length} cronjob(s)`;
+        if (batchDenied) message += " (cronjobs not readable)";
+      }
 
       const k8s = {
         pods: { ready: podReadyN, total: podItems.length },
@@ -140,15 +192,31 @@ export const k8sAdapter: ProbeAdapter = {
         statefulsets: { ready: stsReadyN, total: stsItems.length },
         services: { count: (svcs.items ?? []).length },
         ingresses: { count: (ings.items ?? []).length },
+        // Deliberately not scored yet. Deciding a CronJob is late needs its
+        // schedule, and guessing a threshold here would invent alerts on
+        // weekly jobs while missing hourly ones. The facts are surfaced so
+        // the freshness work can use them; see docs/STATUS.md.
+        cronjobs: "denied" in cronRes
+          ? { observed: false, reason: "forbidden" }
+          : {
+              observed: true,
+              total: cronItems.length,
+              suspended: cronItems.filter((cj) => cj?.spec?.suspend === true).length,
+              items: cronItems.slice(0, WORKLOAD_CAP).map((cj) => ({
+                name: cj?.metadata?.name ?? "?",
+                schedule: cj?.spec?.schedule ?? null,
+                suspended: cj?.spec?.suspend === true,
+                lastScheduleTime: cj?.status?.lastScheduleTime ?? null,
+                lastSuccessfulTime: cj?.status?.lastSuccessfulTime ?? null,
+              })),
+            },
+        jobs: "denied" in jobRes
+          ? { observed: false, reason: "forbidden" }
+          : { observed: true, total: jobItems.length },
         workloads,
       };
 
-      return {
-        status,
-        latencyMs: latency(),
-        message: `${podReadyN}/${podItems.length} pods ready`,
-        observed: { k8s },
-      };
+      return { status, latencyMs: latency(), message, observed: { k8s } };
     } catch (e) {
       return { status: "err", latencyMs: latency(), message: e instanceof Error ? e.message : String(e) };
     }

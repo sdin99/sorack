@@ -31,6 +31,15 @@ rules:
       - daemonsets
       - replicasets
     verbs: ["get", "list"]
+  # CronJobs and Jobs. Between runs a CronJob has no pod, so without this
+  # a namespace that only runs scheduled work looks empty — and empty used
+  # to score as healthy. The adapter tolerates this grant being absent, so
+  # an older ClusterRole degrades to "not observed" rather than an error.
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: ["get", "list"]
   - apiGroups: ["networking.k8s.io"]
     resources:
       - ingresses
