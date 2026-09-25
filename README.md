@@ -52,6 +52,30 @@ Migrations run automatically on api boot. The full self-hosting guide —
 Secrets, adapters, environment reference and troubleshooting — is at
 **[sorack.com/docs](https://sorack.com/docs)**.
 
+## First login, and losing it
+
+On a database with no users, the api creates an `admin` account. The password
+comes from `SORACK_ADMIN_PASSWORD`, or is generated and printed to the log
+**once**, in whichever pod ran the bootstrap.
+
+Set `SORACK_ADMIN_PASSWORD` if you would rather not depend on that. It is read
+only when there are no users yet — setting it later does nothing, because the
+bootstrap returns early once an account exists.
+
+**There is no reset flow.** If the generated password is gone and no session
+survives, recover it directly against the database:
+
+```sql
+-- prints the hash format the api expects; generate a new one the same way
+-- the app does (scrypt), or simply delete the user and let the next boot
+-- bootstrap a fresh admin:
+DELETE FROM auth.users WHERE username = 'admin';
+```
+
+Then restart the api and read the new password from its log. Every boot logs
+which branch it took (`admin user already exists — bootstrap skipped`), so you
+can tell "never bootstrapped" from "bootstrapped in a pod that is gone".
+
 ## Container image
 
 ```

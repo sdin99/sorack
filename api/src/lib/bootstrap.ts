@@ -9,7 +9,17 @@ import { hashPassword } from "./password.js";
 
 export async function ensureAdminUser(): Promise<void> {
   const existing = await db.select({ id: users.id }).from(users).limit(1);
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    // Say so on every boot. The generated password is printed exactly once,
+    // in whichever pod happened to win the race — and if the first boots
+    // crash-loop, that pod is the first one garbage-collected. Without this
+    // line a later operator reading a later pod's log sees no auth output at
+    // all and cannot tell "never bootstrapped" from "bootstrapped elsewhere,
+    // password already gone".
+    // eslint-disable-next-line no-console
+    console.log("[auth] admin user already exists — bootstrap skipped");
+    return;
+  }
 
   const username = env.ADMIN_USERNAME;
   const generated = !env.ADMIN_PASSWORD;
@@ -30,7 +40,11 @@ export async function ensureAdminUser(): Promise<void> {
         `[auth] Initial admin user created.\n` +
         `[auth]   username: ${username}\n` +
         `[auth]   password: ${password}\n` +
-        `[auth] Set SORACK_ADMIN_PASSWORD to choose your own. Shown once.\n` +
+        `[auth] Set SORACK_ADMIN_PASSWORD to choose your own. Shown once —\n` +
+        `[auth] this pod's log is the only copy. Save it now, or change it\n` +
+        `[auth] under Settings once you are in. There is no reset flow: with\n` +
+        `[auth] a user row present this bootstrap does nothing, so recovery\n` +
+        `[auth] means updating auth.users directly (see docs).\n` +
         "========================================\n",
     );
   }
