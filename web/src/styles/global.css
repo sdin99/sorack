@@ -2789,6 +2789,13 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   background: var(--g-accent-soft);
   border-color: var(--g-accent);
 }
+.gallery-card-check {
+  position: absolute; top: 6px; left: 6px;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--g-accent); color: var(--on-primary);
+  pointer-events: none;
+}
 .gallery-card-icon { display: inline-flex; color: var(--fg-2); }
 .gallery-card--selected .gallery-card-icon { color: var(--g-accent); }
 .gallery-card-name {

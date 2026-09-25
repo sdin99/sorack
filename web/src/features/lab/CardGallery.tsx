@@ -244,6 +244,20 @@ export function CardGallery({ open, mode, title, items, selectedIds, onSelect, o
                           title={cardLabel}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }}
                         >
+                          {/* Top-left check. The selected state was carried
+                              only by a soft background tint and border colour,
+                              which is hard to pick out when scanning a grid —
+                              especially with several attached. Top-right is
+                              taken by the ⚙. */}
+                          {isSelected && (
+                            <span className="gallery-card-check" aria-hidden="true">
+                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none"
+                                stroke="currentColor" strokeWidth="2.4"
+                                strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3.5 8.5l3 3 6-6" />
+                              </svg>
+                            </span>
+                          )}
                           {/* Top-right ⚙ drills into the detail view (secondary
                               affordance — primary is card click = select). */}
                           <button
