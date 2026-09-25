@@ -44,6 +44,16 @@ jobs:
       - name: validator tests
         run: node scripts/test-validate.mjs
 
+      # Not run in CI: it needs a cluster, and the whole point is that it
+      # reads objects from a real one instead of fixtures I wrote. Listed here
+      # so the next person knows it exists and how to run it.
+      #
+      #   node scripts/test-k8s-shapes.mjs      (with a kubeconfig in scope)
+      #
+      # It found the mapping reporting "never run yet" for a CronJob that had
+      # succeeded forty minutes earlier — the kind of thing a fixture agrees
+      # with the code about, because I would have written both.
+
       - name: built api resolves under node
         working-directory: api
         env:

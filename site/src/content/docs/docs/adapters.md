@@ -40,7 +40,37 @@ lines of systemd) and the system probe scrapes `:9100/metrics`.
 ### Kubernetes
 
 Uses the in-cluster ServiceAccount — no env to set. RBAC lives in
-`deploy/dev/rbac.yaml`.
+`deploy/base/rbac.yaml` (read-only: `get`/`list` on non-secret resources).
+
+Three shapes, chosen by what the probe config names:
+
+```jsonc
+{ "type": "k8s", "namespace": "alpha" }                         // the namespace
+{ "type": "k8s", "namespace": "alpha", "service": "gateway" }    // one Service
+{ "type": "k8s", "namespace": "alpha", "cronjob": "db-backup" }  // one CronJob
+```
+
+With only `namespace` — or nothing, in which case the node's name is used —
+it reports the namespace: pod/deployment/statefulset readiness, service and
+ingress counts, and a capped workload list. Finding nothing at all reports
+`unknown`, not `ok`: an empty namespace and a healthy one are different
+answers, and "the probe could not read those kinds" is a third.
+
+`service` fills `svc_type`, `clusterIP`, `ports`, `selector` and `endpoints`
+on the node, and scores on whether anything is behind it — a Service with no
+ready endpoints resolves and answers nothing.
+
+`cronjob` fills `schedule`, `suspend`, `lastScheduleTime`,
+`lastSuccessfulTime` and `lastStatus`, and scores on **the outcome of the last
+run only**. A failed run is a fact. Lateness is not: calling a CronJob overdue
+needs a threshold against its schedule, and a guessed one invents alerts on
+weekly jobs while missing hourly ones. The timestamps are reported so a person
+can judge; the probe does not.
+
+Kubernetes deletes finished Jobs past the history limit, so the last run's
+outcome can be genuinely unavailable while the CronJob still carries its
+timestamps. That reports `unknown` and says which — it is not the same as
+never having run.
 
 ## Writing an adapter
 

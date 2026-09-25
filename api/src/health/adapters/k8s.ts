@@ -95,6 +95,151 @@ function ctrlReady(o: any): boolean {
 
 const WORKLOAD_CAP = 12;
 
+// Ports as a person reads them, not as the API returns them. A detail row is
+// a label and a value; handing it an array of objects puts "[object Object]"
+// on the screen.
+function portsText(ports: any[]): string | undefined {
+  if (!Array.isArray(ports) || ports.length === 0) return undefined;
+  return ports
+    .map((p) => `${p?.port ?? "?"}${p?.nodePort ? `:${p.nodePort}` : ""}/${p?.protocol ?? "TCP"}`)
+    .join(", ");
+}
+
+function selectorText(sel: Record<string, string> | undefined): string | undefined {
+  if (!sel || Object.keys(sel).length === 0) return undefined;
+  return Object.entries(sel).map(([k, v]) => `${k}=${v}`).join(", ");
+}
+
+// ── one CronJob ────────────────────────────────────────────────────────────
+//
+// Exported for scripts/test-k8s-shapes.mjs, which feeds it objects pulled
+// from a live cluster with kubectl. The mistakes in a mapping like this are
+// field paths — `status.lastSuccessfulTime` against the real document, not
+// against what I remember the API returning.
+//
+// The namespace probe already reads these facts, but it writes them into
+// observed.k8s.cronjobs.items[] for the namespace's widgets. A node that IS a
+// CronJob needs them as its own fields, and the detail renderer reads
+// meta.observed[key] flat — so a nested blob never reaches it.
+//
+// ‼ Scored on the outcome of the last run, and only that. A failed run is a
+// fact. Lateness is not: deciding a CronJob is overdue needs a threshold
+// against its schedule, and a guessed one invents alerts on weekly jobs while
+// missing hourly ones. `lastScheduleTime` is reported so a person can judge;
+// the probe does not.
+export async function probeCronJob(
+  ns: string, name: string,
+  g: <T>(p: string) => Promise<T>,
+  latency: () => number,
+): Promise<ProbeResult> {
+  const cj = await g<any>(`/apis/batch/v1/namespaces/${ns}/cronjobs/${name}`);
+  const suspended = cj?.spec?.suspend === true;
+  const uid = cj?.metadata?.uid;
+
+  // Jobs it owns, newest first. ownerReferences is the only reliable link —
+  // the generated names are `<cronjob>-<timestamp>` but nothing guarantees it.
+  let lastStatus: string | undefined;
+  let lastJobFailed = false;
+  let lastJobSucceeded = false;
+  try {
+    const jobs = await g<any>(`/apis/batch/v1/namespaces/${ns}/jobs`);
+    const mine = (jobs?.items ?? [])
+      .filter((j: any) => (j?.metadata?.ownerReferences ?? []).some((o: any) => o?.uid === uid))
+      .sort((a: any, b: any) =>
+        String(b?.metadata?.creationTimestamp ?? "").localeCompare(String(a?.metadata?.creationTimestamp ?? "")));
+    const last = mine[0];
+    if (last) {
+      lastJobFailed = (last?.status?.failed ?? 0) > 0;
+      lastJobSucceeded = (last?.status?.succeeded ?? 0) > 0;
+      lastStatus = lastJobFailed ? "failed" : lastJobSucceeded ? "succeeded" : "running";
+    }
+  } catch {
+    // Jobs unreadable (RBAC, or they have been garbage-collected). The
+    // CronJob's own fields still stand; only the outcome is unknown, and
+    // saying nothing about it beats inferring success from silence.
+  }
+
+  const observed: Record<string, unknown> = {
+    schedule: cj?.spec?.schedule ?? undefined,
+    suspend: suspended ? "yes" : "no",
+    lastScheduleTime: cj?.status?.lastScheduleTime ?? undefined,
+    lastSuccessfulTime: cj?.status?.lastSuccessfulTime ?? undefined,
+    lastStatus,
+  };
+
+  let status: HealthStatus;
+  let message: string;
+  if (lastJobFailed) {
+    status = "err";
+    message = `last run failed (${cj?.status?.lastScheduleTime ?? "unknown time"})`;
+  } else if (lastJobSucceeded) {
+    status = "ok";
+    message = `last run succeeded${cj?.status?.lastSuccessfulTime ? ` (${cj.status.lastSuccessfulTime})` : ""}`;
+  } else if (suspended) {
+    status = "unknown";
+    message = "suspended — the schedule is paused, so there is nothing to judge";
+  } else {
+    // No Job we can read, so the last run's outcome is unavailable. That is
+    // not the same as never having run, and the CronJob's own status says
+    // which: Kubernetes deletes finished Jobs past the history limit while
+    // keeping these timestamps.
+    //
+    // ‼ Found by running this against the live cluster: alpha/db-backup
+    // reported "never run yet" while carrying lastSuccessfulTime from forty
+    // minutes earlier. The message contradicted the field printed beside it.
+    status = "unknown";
+    const last = cj?.status?.lastSuccessfulTime ?? cj?.status?.lastScheduleTime;
+    message = last
+      ? `last run's Job is no longer retained — most recent activity ${last}`
+      : "never run yet";
+  }
+  return { status, latencyMs: latency(), message, observed };
+}
+
+// ── one Service ────────────────────────────────────────────────────────────
+//
+// Same gap as CronJob: k8s_service has declared clusterIP / ports / selector /
+// endpoints since it was written and nothing has ever filled them, because the
+// only k8s probe was namespace-shaped.
+//
+// Scored on whether anything is behind it. A Service with no ready endpoints
+// resolves and answers nothing — which is a fact about now, not a threshold.
+export async function probeService(
+  ns: string, name: string,
+  g: <T>(p: string) => Promise<T>,
+  latency: () => number,
+): Promise<ProbeResult> {
+  const svc = await g<any>(`/api/v1/namespaces/${ns}/services/${name}`);
+  let ready = 0;
+  let endpointsKnown = false;
+  try {
+    const ep = await g<any>(`/api/v1/namespaces/${ns}/endpoints/${name}`);
+    ready = (ep?.subsets ?? []).reduce((n: number, s: any) => n + (s?.addresses?.length ?? 0), 0);
+    endpointsKnown = true;
+  } catch {
+    // Endpoints unreadable — report the Service's own fields and leave the
+    // backing count out rather than printing a zero we did not observe.
+  }
+
+  const observed: Record<string, unknown> = {
+    svc_type: svc?.spec?.type ?? undefined,
+    clusterIP: svc?.spec?.clusterIP ?? undefined,
+    ports: portsText(svc?.spec?.ports),
+    selector: selectorText(svc?.spec?.selector),
+    endpoints: endpointsKnown ? String(ready) : undefined,
+  };
+
+  if (!endpointsKnown) {
+    return { status: "unknown", latencyMs: latency(), message: "service found; endpoints not readable", observed };
+  }
+  if (svc?.spec?.type === "ExternalName") {
+    return { status: "ok", latencyMs: latency(), message: `ExternalName → ${svc?.spec?.externalName}`, observed };
+  }
+  return ready > 0
+    ? { status: "ok", latencyMs: latency(), message: `${ready} endpoint(s)`, observed }
+    : { status: "warn", latencyMs: latency(), message: "no ready endpoints — nothing is behind this service", observed };
+}
+
 export const k8sAdapter: ProbeAdapter = {
   type: "k8s",
   async probe(config: ProbeConfig, ctx: ProbeContext): Promise<ProbeResult> {
@@ -107,6 +252,24 @@ export const k8sAdapter: ProbeAdapter = {
     const start = performance.now();
     const g = <T,>(path: string): Promise<T> => k8sGet<T>(path, ctx.signal, ctx.timeoutMs);
     const latency = (): number => Math.round(performance.now() - start);
+
+    // Three shapes, chosen by what the config names. `namespace` alone keeps
+    // the original behaviour, so nothing that exists today changes.
+    const cronjob = (config as any).cronjob;
+    const service = (config as any).service;
+    if (cronjob || service) {
+      const name = String(cronjob || service);
+      try {
+        return cronjob
+          ? await probeCronJob(ns, name, g, latency)
+          : await probeService(ns, name, g, latency);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // A 404 is a statement about the cluster, not a broken probe: the
+        // thing this node stands for is not there.
+        return { status: /404/.test(msg) ? "err" : "unknown", latencyMs: latency(), message: msg };
+      }
+    }
 
     try {
       const [pods, deploys, sts, svcs, ings] = await Promise.all([
