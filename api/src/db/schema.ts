@@ -155,13 +155,17 @@ export const sessions = auth.table("sessions", {
 // Same storage discipline as sessions: only the hash is kept, so a DB leak
 // cannot be replayed. Unlike sessions these do not expire — revocation is
 // the deletion of the row, which is why lastUsedAt exists: an operator
-// needs to see which tokens are actually in use before removing one.
-export const apiTokens = auth.table("api_tokens", {
+// needs to see which keys are actually in use before removing one.
+// ‼ The symbol says key, the table says token, and that is on purpose. The
+// table was created as `api_tokens` and is in use; renaming it would mean an
+// older image cannot find it, and rolling back to a pinned digest is how this
+// deployment recovers from a bad release. See api/src/lib/api-key.ts.
+export const apiKeys = auth.table("api_tokens", {
   id: uuid("id").primaryKey().defaultRandom(),
-  // Operator-facing label. The raw token is shown once at creation and
-  // never again, so this is the only way to tell two tokens apart.
+  // Operator-facing label. The raw key is shown once at creation and never
+  // again, so this is the only way to tell two keys apart.
   name: varchar("name", { length: 128 }).notNull(),
-  tokenHash: text("token_hash").notNull().unique(),
+  keyHash: text("token_hash").notNull().unique(),
   // "read" | "write". Deliberately two levels: the callers that exist are a
   // sync script (write) and a reconciler (read). Per-resource scopes would
   // be combinations nobody uses yet, and narrowing later is easier than

@@ -309,9 +309,9 @@ export async function uploadRunbookAttachment(runbookId: string, file: File): Pr
 }
 
 // ── API tokens ─────────────────────────────────────────────────────
-// For programmatic callers. `token` comes back only from create — it is
-// stored hashed, so there is no way to show it again.
-export interface ApiToken {
+// For programmatic callers. `key` comes back only from create — it is stored
+// hashed, so there is no way to show it again.
+export interface ApiKey {
   id: string;
   name: string;
   scope: "read" | "write";
@@ -319,17 +319,17 @@ export interface ApiToken {
   lastUsedAt: string | null;
 }
 
-export async function listApiTokens(): Promise<ApiToken[]> {
-  const r = await fetch("/api/tokens", { credentials: "include" });
-  if (!r.ok) throw new Error("failed to load tokens");
+export async function listApiKeys(): Promise<ApiKey[]> {
+  const r = await fetch("/api/keys", { credentials: "include" });
+  if (!r.ok) throw new Error("failed to load API keys");
   return r.json();
 }
 
-export async function createApiToken(
+export async function createApiKey(
   name: string,
   scope: "read" | "write",
-): Promise<ApiToken & { token: string }> {
-  const r = await fetch("/api/tokens", {
+): Promise<ApiKey & { key: string }> {
+  const r = await fetch("/api/keys", {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -337,12 +337,12 @@ export async function createApiToken(
   });
   if (!r.ok) {
     const detail = await r.json().catch(() => ({}));
-    throw new Error(detail.error ?? "failed to create token");
+    throw new Error(detail.error ?? "failed to create API key");
   }
   return r.json();
 }
 
-export async function revokeApiToken(id: string): Promise<void> {
-  const r = await fetch(`/api/tokens/${id}`, { method: "DELETE", credentials: "include" });
-  if (!r.ok) throw new Error("failed to revoke token");
+export async function revokeApiKey(id: string): Promise<void> {
+  const r = await fetch(`/api/keys/${id}`, { method: "DELETE", credentials: "include" });
+  if (!r.ok) throw new Error("failed to revoke API key");
 }

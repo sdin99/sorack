@@ -46,17 +46,21 @@
     "passwordTooShort": "password must be at least 8 characters",
     "currentWrong": "current password is incorrect",
     "runbook": "runbook",
-    "tokens": {
-      "nav": "API tokens",
-      "title": "API tokens",
-      "intro": "Send as `Authorization: Bearer <token>`. Read tokens may only GET; write tokens may change anything the API exposes. Tokens do not expire — revoke them here.",
+    "apiKeys": {
+      "nav": "API keys",
+      "title": "API keys",
+      "intro": "Credentials for callers that are not a person: sync scripts, reconcilers.",
       "issued": "Copy this now — it is not shown again",
-      "new": "New token",
+      "headerLabel": "header",
+      "new": "New key",
       "name": "name",
       "namePlaceholder": "e.g. topology-sync",
       "scope": "scope",
+      "scopeHint": "read = GET only · write = any change",
       "create": "Create",
       "existing": "Issued",
+      "existingHint": "No expiry · revoking cuts access at once",
+      "lastUsed": "last used {{date}}",
       "neverUsed": "never used",
       "revoke": "Revoke"
     }

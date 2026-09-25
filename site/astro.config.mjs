@@ -50,6 +50,7 @@ export default defineConfig({
           label: 'Reference',
           items: [
             { label: 'Configuration', slug: 'docs/configuration' },
+            { label: 'API keys', slug: 'docs/api' },
             { label: 'Troubleshooting', slug: 'docs/troubleshooting' },
           ],
         },

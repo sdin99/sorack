@@ -3446,23 +3446,41 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 .tf-empty-cta:hover { filter: brightness(1.08); }
 .tf-empty-hint { margin: 14px 0 0 !important; font-size: 12px; color: var(--fg-3); }
 
-/* ─── API tokens (Settings) ────────────────────────────────────────── */
-.settings-token-issued { border-color: var(--accent); }
-.settings-token-value {
+/* ─── API keys (Settings) ────────────────────────────────────────── */
+.settings-key-issued { border-color: var(--accent); }
+.settings-key-value {
   display: block; font-family: var(--mono); font-size: 12px;
   word-break: break-all; user-select: all;
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
   padding: 8px 10px; margin: 6px 0 10px; color: var(--fg-1);
 }
-.settings-token-row {
+/* label + value on one line: the header form is something to copy, not a
+   sentence to read. */
+.settings-key-header {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 10px;
+}
+.settings-key-header-label {
+  /* --fg-2, not --fg-3. The design team measured --fg-3 at 4.13:1 on dark
+     surfaces, and 10px uppercase does not qualify for WCAG's large-text
+     exemption (18.66px bold / 24px), so it needs 4.5:1 like body text. Not
+     adding another instance of a value already known to be short. */
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--fg-2); flex: none;
+}
+.settings-key-header code {
+  font-family: var(--mono); font-size: 11.5px; color: var(--fg-2);
+  word-break: break-all;
+}
+.settings-key-row {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 0; border-top: 1px solid var(--border);
   font-size: 12.5px;
 }
-.settings-token-row:first-of-type { border-top: none; }
-.settings-token-name { flex: 1; color: var(--fg-1); }
-.settings-token-scope {
+.settings-key-row:first-of-type { border-top: none; }
+.settings-key-name { flex: 1; color: var(--fg-1); }
+.settings-key-scope {
   font-family: var(--mono); font-size: 11px; color: var(--fg-2);
   border: 1px solid var(--border-strong); border-radius: 3px; padding: 1px 6px;
 }
-.settings-token-used { font-size: 11.5px; color: var(--fg-3); white-space: nowrap; }
+.settings-key-used { font-size: 11.5px; color: var(--fg-3); white-space: nowrap; }

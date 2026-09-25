@@ -8,10 +8,10 @@ import {
   updateGitConfig,
   type GitConfigView,
   type GitFieldSource,
-  listApiTokens,
-  createApiToken,
-  revokeApiToken,
-  type ApiToken,
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
+  type ApiKey,
 } from "@/lib/data-source/api";
 import { useSorack } from "@/lib/data-source/SorackData";
 import { CommitPushModal } from "@/features/git/CommitPushModal";
@@ -19,9 +19,9 @@ import { useGitActions } from "@/features/git/use-git-actions";
 import { BranchPicker } from "@/features/git/BranchPicker";
 import { SUPPORTED_LANGS, type Lang } from "@/i18n";
 
-export type SettingsCategory = "appearance" | "account" | "runbook" | "tokens";
+export type SettingsCategory = "appearance" | "account" | "runbook" | "api-keys";
 
-const KNOWN_CATEGORIES: SettingsCategory[] = ["appearance", "account", "runbook", "tokens"];
+const KNOWN_CATEGORIES: SettingsCategory[] = ["appearance", "account", "runbook", "api-keys"];
 
 interface Props {
   theme: "dark" | "light";
@@ -46,7 +46,7 @@ export function SettingsView({ theme, setTheme, category, onCategoryChange, onCl
     { key: "appearance", label: t("settings.appearance") },
     { key: "account", label: t("settings.account") },
     { key: "runbook", label: t("settings.runbook") },
-    { key: "tokens", label: t("settings.tokens.nav", { defaultValue: "API tokens" }) },
+    { key: "api-keys", label: t("settings.apiKeys.nav", { defaultValue: "API keys" }) },
   ];
 
   return (
@@ -71,7 +71,7 @@ export function SettingsView({ theme, setTheme, category, onCategoryChange, onCl
           {cat === "appearance" && <AppearancePanel theme={theme} setTheme={setTheme} />}
           {cat === "account" && <AccountPanel />}
           {cat === "runbook" && <RunbookPanel />}
-          {cat === "tokens" && <TokensPanel />}
+          {cat === "api-keys" && <ApiKeysPanel />}
         </div>
       </div>
     </div>
@@ -441,9 +441,14 @@ function GitField({
   );
 }
 
-// Token row: writes are one-way (we never read the token back to the
-// UI). Shows "(set)" if a value already exists server-side and the user
-// hasn't typed a new one yet.
+// Git personal access token. Deliberately still "token": this is GitHub's
+// own word for it, and calling it an API key here would send someone
+// looking for one in GitHub's settings, where no such thing exists. Our
+// own credentials are API keys; this one is a token because GitHub says so.
+//
+// Writes are one-way (we never read the token back to the UI). Shows
+// "(set)" if a value already exists server-side and the user has not typed
+// a new one yet.
 function GitTokenField({
   label, hint, src, hasValue, value, onChange,
 }: {
@@ -476,29 +481,34 @@ function GitTokenField({
 // CommitPushModal moved to @/features/git/CommitPushModal — also used by
 // the runbook-screen inline git actions.
 
-// ── API tokens ───────────────────────────────────────────────────────
+// ── API keys ─────────────────────────────────────────────────────────
 // For callers that are not a person with a browser: sync scripts,
-// reconcilers, other tools. Issued here because a token must not be able to
-// mint another one — otherwise revoking the token you know about does not
+// reconcilers, other tools. Issued here because a key must not be able to
+// mint another one — otherwise revoking the key you know about does not
 // actually revoke access.
-function TokensPanel() {
+//
+// The copy here follows web/src/i18n/README.md. It used to be one paragraph
+// answering three questions (how to send it, what the scopes mean, whether
+// it expires), which meant someone looking for one of the three had to read
+// all three. Each answer now sits where its question is asked.
+function ApiKeysPanel() {
   const { t } = useTranslation();
-  const [tokens, setTokens] = useState<ApiToken[]>([]);
+  const [keys, setKeys] = useState<ApiKey[]>([]);
   const [name, setName] = useState("");
   const [scope, setScope] = useState<"read" | "write">("read");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // Held in state, never re-fetchable: the server stores only a hash.
-  const [issued, setIssued] = useState<{ name: string; token: string } | null>(null);
+  const [issued, setIssued] = useState<{ name: string; key: string } | null>(null);
 
-  const reload = () => { listApiTokens().then(setTokens).catch(() => setTokens([])); };
+  const reload = () => { listApiKeys().then(setKeys).catch(() => setKeys([])); };
   useEffect(reload, []);
 
   const create = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await createApiToken(name.trim(), scope);
-      setIssued({ name: r.name, token: r.token });
+      const r = await createApiKey(name.trim(), scope);
+      setIssued({ name: r.name, key: r.key });
       setName("");
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
@@ -506,26 +516,34 @@ function TokensPanel() {
   };
 
   const revoke = async (id: string) => {
-    try { await revokeApiToken(id); reload(); }
+    try { await revokeApiKey(id); reload(); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   };
 
   return (
     <div className="settings-panel">
-      <div className="settings-panel-title">{t("settings.tokens.title", { defaultValue: "API tokens" })}</div>
+      <div className="settings-panel-title">{t("settings.apiKeys.title", { defaultValue: "API keys" })}</div>
       <p className="settings-field-hint">
-        {t("settings.tokens.intro", {
-          defaultValue:
-            "Send as `Authorization: Bearer <token>`. Read tokens may only GET; write tokens may change anything the API exposes. Tokens do not expire — revoke them here.",
+        {t("settings.apiKeys.intro", {
+          defaultValue: "Credentials for callers that are not a person: sync scripts, reconcilers.",
         })}
       </p>
 
       {issued && (
-        <div className="settings-subcard settings-token-issued">
+        <div className="settings-subcard settings-key-issued">
           <div className="settings-subcard-title">
-            {t("settings.tokens.issued", { defaultValue: "Copy this now — it is not shown again" })}
+            {t("settings.apiKeys.issued", { defaultValue: "Copy this now — it is not shown again" })}
           </div>
-          <code className="settings-token-value">{issued.token}</code>
+          <code className="settings-key-value">{issued.key}</code>
+          <div className="settings-key-header">
+            <span className="settings-key-header-label">
+              {t("settings.apiKeys.headerLabel", { defaultValue: "header" })}
+            </span>
+            {/* Not translated: this is the literal text that goes on the
+                wire, so localising the placeholder would only invite someone
+                to type it. */}
+            <code>Authorization: Bearer &lt;key&gt;</code>
+          </div>
           <button className="settings-btn" onClick={() => setIssued(null)}>
             {t("action.close", { defaultValue: "Close" })}
           </button>
@@ -533,39 +551,45 @@ function TokensPanel() {
       )}
 
       <div className="settings-subcard">
-        <div className="settings-subcard-title">{t("settings.tokens.new", { defaultValue: "New token" })}</div>
+        <div className="settings-subcard-title">{t("settings.apiKeys.new", { defaultValue: "New key" })}</div>
         <label className="settings-field">
-          <span className="settings-input-label">{t("settings.tokens.name", { defaultValue: "name" })}</span>
+          <span className="settings-input-label">{t("settings.apiKeys.name", { defaultValue: "name" })}</span>
           <input className="settings-input" value={name} onChange={(e) => setName(e.target.value)}
-            placeholder={t("settings.tokens.namePlaceholder", { defaultValue: "e.g. topology-sync" })} />
+            placeholder={t("settings.apiKeys.namePlaceholder", { defaultValue: "e.g. topology-sync" })} />
         </label>
         <label className="settings-field">
-          <span className="settings-input-label">{t("settings.tokens.scope", { defaultValue: "scope" })}</span>
+          <span className="settings-input-label">{t("settings.apiKeys.scope", { defaultValue: "scope" })}</span>
           <select className="settings-input" value={scope} onChange={(e) => setScope(e.target.value as "read" | "write")}>
             <option value="read">read</option>
             <option value="write">write</option>
           </select>
+          <span className="settings-field-hint">
+            {t("settings.apiKeys.scopeHint", { defaultValue: "read = GET only · write = any change" })}
+          </span>
         </label>
         <button className="settings-btn" disabled={busy || !name.trim()} onClick={create}>
-          {t("settings.tokens.create", { defaultValue: "Create" })}
+          {t("settings.apiKeys.create", { defaultValue: "Create" })}
         </button>
         {err && <div className="settings-err">{err}</div>}
       </div>
 
-      {tokens.length > 0 && (
+      {keys.length > 0 && (
         <div className="settings-subcard">
-          <div className="settings-subcard-title">{t("settings.tokens.existing", { defaultValue: "Issued" })}</div>
-          {tokens.map((tk) => (
-            <div key={tk.id} className="settings-token-row">
-              <span className="settings-token-name">{tk.name}</span>
-              <span className="settings-token-scope">{tk.scope}</span>
-              <span className="settings-token-used">
-                {tk.lastUsedAt
-                  ? t("settings.tokens.lastUsed", { date: new Date(tk.lastUsedAt).toLocaleString(), defaultValue: `last used ${new Date(tk.lastUsedAt).toLocaleString()}` })
-                  : t("settings.tokens.neverUsed", { defaultValue: "never used" })}
+          <div className="settings-subcard-title">{t("settings.apiKeys.existing", { defaultValue: "Issued" })}</div>
+          <span className="settings-field-hint">
+            {t("settings.apiKeys.existingHint", { defaultValue: "No expiry · revoking cuts access at once" })}
+          </span>
+          {keys.map((k) => (
+            <div key={k.id} className="settings-key-row">
+              <span className="settings-key-name">{k.name}</span>
+              <span className="settings-key-scope">{k.scope}</span>
+              <span className="settings-key-used">
+                {k.lastUsedAt
+                  ? t("settings.apiKeys.lastUsed", { date: new Date(k.lastUsedAt).toLocaleString(), defaultValue: "last used {{date}}" })
+                  : t("settings.apiKeys.neverUsed", { defaultValue: "never used" })}
               </span>
-              <button className="settings-btn" onClick={() => revoke(tk.id)}>
-                {t("settings.tokens.revoke", { defaultValue: "Revoke" })}
+              <button className="settings-btn" onClick={() => revoke(k.id)}>
+                {t("settings.apiKeys.revoke", { defaultValue: "Revoke" })}
               </button>
             </div>
           ))}
