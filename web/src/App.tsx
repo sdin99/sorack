@@ -731,7 +731,7 @@ function FlatTreeRow({ node, currentId, onJump, onNodeContextMenu, selectedIds, 
   );
 }
 
-function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSettings, onCollapse, onNodeContextMenu, isDimmed, searchQuery, queryMatchesNode, selectedIds, onSelectedIdsChange }) {
+function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSettings, onCollapse, onNodeContextMenu, isDimmed, searchQuery, queryMatchesNode, selectedIds, onSelectedIdsChange, onCreateNode }) {
   const { t } = useTranslation();
   const { NODES, getChildren, bulkUpdate } = useSorack();
   const isDesktop = useIsDesktop();
@@ -845,6 +845,14 @@ function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSe
       <aside className={`drawer ${open || isDesktop ? 'drawer--open' : ''}`}>
         <header className="drawer-head">
           <div className="drawer-head-title"><strong>{t('drawer.title')}</strong><span>{t('drawer.subtitle')}</span></div>
+          {/* The only pointer path to a new ROOT node. The pane context menu
+              needs a right-click and the `n` shortcut needs a keyboard, so on
+              a touch device both are unreachable — once one node exists you
+              could add children forever but never another root. */}
+          {onCreateNode && (
+            <button className="topbar-icon-btn" onClick={() => onCreateNode()}
+              aria-label={t('nodeActions.addRoot')} title={t('nodeActions.addRoot')}>{Ic.plus}</button>
+          )}
           <button className="topbar-icon-btn" onClick={onClose} aria-label={t('action.close')}>{Ic.close}</button>
         </header>
 
@@ -2001,6 +2009,7 @@ export function App() {
             settingsActive={isSettings}
             onOpenSettings={() => { navigate('/settings/appearance'); if (!isDesktop) setDrawerOpen(false); }}
             onCollapse={() => setDrawerCollapsed(true)}
+            onCreateNode={() => openCreate()}
             onNodeContextMenu={(nodeId, position) => openActions('node', { nodeId, position })}
             isDimmed={hasActiveFilters ? isDimmed : undefined}
             searchQuery={searchQuery}
