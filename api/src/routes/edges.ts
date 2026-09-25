@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { edges } from "../db/schema.js";
 import { validateEdge, ValidationError } from "../lib/validate.js";
@@ -20,6 +20,20 @@ edgesRoutes.post("/", async (c) => {
   } catch (e) {
     if (e instanceof ValidationError) return c.json({ error: e.message }, 400);
     throw e;
+  }
+  // Same relationship twice is a no-op the caller should know about, not a
+  // silent second row. (id is a uuid here, so the collision is semantic
+  // rather than a key violation — the check has to be explicit.)
+  const dupe = await db
+    .select({ id: edges.id })
+    .from(edges)
+    .where(and(
+      eq(edges.sourceId, input.sourceId as string),
+      eq(edges.targetId, input.targetId as string),
+      eq(edges.type, (input.type ?? "contains") as string),
+    ));
+  if (dupe.length > 0) {
+    return c.json({ error: "this edge already exists", id: dupe[0].id }, 409);
   }
   const [row] = await db.insert(edges).values(input as never).returning();
   return c.json(row, 201);

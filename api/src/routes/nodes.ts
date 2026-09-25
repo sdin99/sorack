@@ -32,6 +32,14 @@ nodesRoutes.post("/", async (c) => {
     if (e instanceof ValidationError) return c.json({ error: e.message }, 400);
     throw e;
   }
+  // A duplicate id is the caller's problem, not the server's. A sync script
+  // deciding between "create" and "update" has to tell "already exists" from
+  // "something broke", and a Postgres unique-violation surfacing as a 500
+  // looks exactly like the latter — so it retries, forever.
+  const existing = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, input.id as string));
+  if (existing.length > 0) {
+    return c.json({ error: `node "${input.id}" already exists`, id: input.id }, 409);
+  }
   const [row] = await db.insert(nodes).values(input as never).returning();
   return c.json(row, 201);
 });
