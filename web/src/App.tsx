@@ -256,7 +256,7 @@ function TopBar({ onMenu, onSearch, onAlerts, alertsCount, breadcrumb, onCrumb, 
           aria-label={t('search.title')}
           title={`${t('search.title')} (⌘K)`}
         >{Ic.search}</button>
-        <button className="topbar-icon-btn" onClick={onRunbooks} aria-label={t('runbook.title')}>{Ic.book}</button>
+        <button className="topbar-icon-btn" data-testid="topbar-runbooks" onClick={onRunbooks} aria-label={t('runbook.title')}>{Ic.book}</button>
         <button className="topbar-icon-btn" onClick={onAlerts} aria-label={t('alerts.title')}>
           {Ic.bell}
           {alertsCount.err > 0 && <span className="alert-badge">{alertsCount.err}</span>}
@@ -1325,11 +1325,18 @@ function SettingsRoute({ theme, setTheme }: { theme: 'dark'|'light'; setTheme: (
   );
 }
 
-function RunbookFirstRedirect() {
+// /runbooks with no id: jump to the first one if there is one, otherwise show
+// the list, which has had an empty state ("No runbooks yet") all along.
+//
+// This used to `<Navigate to="/" />` when the list was empty, which — together
+// with the no-op on the toolbar button — meant that empty state was
+// unreachable by either route. It was written, styled, translated, and no
+// installation could ever display it.
+function RunbookIndexRoute({ onJumpNode, onClose }: { onJumpNode: (id: string) => void; onClose: () => void }) {
   const { RUNBOOKS } = useSorack();
   const first = Object.keys(RUNBOOKS)[0];
-  if (!first) return <Navigate to="/" replace />;
-  return <Navigate to={`/runbooks/${encodeURIComponent(first)}`} replace />;
+  if (first) return <Navigate to={`/runbooks/${encodeURIComponent(first)}`} replace />;
+  return <RunbookRoute onJumpNode={onJumpNode} onClose={onClose} />;
 }
 
 function RunbookRoute({ onJumpNode, onClose }: { onJumpNode: (id: string) => void; onClose: () => void }) {
@@ -1972,10 +1979,12 @@ export function App() {
         onMenu={() => setDrawerOpen(true)}
         onSearch={() => setSearchOpen(true)}
         onAlerts={() => setAlertsOpen(true)}
-        onRunbooks={() => {
-          const firstId = Object.keys(RUNBOOKS)[0];
-          if (firstId) navigate(`/runbooks/${encodeURIComponent(firstId)}`);
-        }}
+        // Always navigate; the route decides what to show. This used to be
+        // `if (firstId) navigate(...)` with no else, so on an install with no
+        // runbooks the button did nothing at all — not an empty screen, no
+        // feedback, nothing. A control that is missing and a control that is
+        // broken look the same from the outside, and the second is worse.
+        onRunbooks={() => navigate('/runbooks')}
         alertsCount={alertsCount}
         breadcrumb={breadcrumb}
         onCrumb={(id) => setSelectedId(id)}
@@ -2035,7 +2044,7 @@ export function App() {
           <Route path="/" element={mapPane} />
           <Route path="/settings" element={<Navigate to="/settings/appearance" replace />} />
           <Route path="/settings/:category" element={<SettingsRoute theme={theme} setTheme={setTheme} />} />
-          <Route path="/runbooks" element={<RunbookFirstRedirect />} />
+          <Route path="/runbooks" element={<RunbookIndexRoute onJumpNode={onJumpNode} onClose={onCloseRunbook} />} />
           <Route path="/runbooks/:id" element={<RunbookRoute onJumpNode={onJumpNode} onClose={onCloseRunbook} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

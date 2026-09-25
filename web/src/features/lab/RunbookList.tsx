@@ -288,7 +288,7 @@ export function RunbookList({ runbookId, runbooks, templates, onJumpRunbook, onC
 
       <div className="rb-list-body">
         {filtered.length === 0 && (
-          <div className="rb-list-empty">
+          <div className="rb-list-empty" data-testid="runbooks-empty">
             <div className="rb-list-empty-h">
               {Object.keys(runbooks).length === 0
                 ? t("runbook.empty.none", { defaultValue: "No runbooks yet" })
