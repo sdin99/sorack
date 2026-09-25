@@ -303,6 +303,7 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   padding: 8px;
   border-bottom: 1px solid var(--border);
 }
+.drawer-head-actions { display: flex; align-items: center; gap: 2px; }
 .drawer-head-title { display: flex; flex-direction: column; line-height: 1.2; padding: 0 8px; }
 .drawer-head-title strong { font-size: 14px; }
 .drawer-head-title span { font-family: var(--mono); font-size: 10px; color: var(--fg-3); letter-spacing: 0.1em; text-transform: uppercase; }

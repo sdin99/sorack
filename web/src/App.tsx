@@ -845,15 +845,19 @@ function Drawer({ open, onClose, onJumpNode, currentId, settingsActive, onOpenSe
       <aside className={`drawer ${open || isDesktop ? 'drawer--open' : ''}`}>
         <header className="drawer-head">
           <div className="drawer-head-title"><strong>{t('drawer.title')}</strong><span>{t('drawer.subtitle')}</span></div>
-          {/* The only pointer path to a new ROOT node. The pane context menu
-              needs a right-click and the `n` shortcut needs a keyboard, so on
-              a touch device both are unreachable — once one node exists you
-              could add children forever but never another root. */}
-          {onCreateNode && (
-            <button className="topbar-icon-btn" onClick={() => onCreateNode()}
-              aria-label={t('nodeActions.addRoot')} title={t('nodeActions.addRoot')}>{Ic.plus}</button>
-          )}
-          <button className="topbar-icon-btn" onClick={onClose} aria-label={t('action.close')}>{Ic.close}</button>
+          {/* Grouped: .drawer-head is space-between, so a third direct child
+              lands dead centre instead of beside the close button. */}
+          <div className="drawer-head-actions">
+            {/* The only pointer path to a new ROOT node. The pane context menu
+                needs a right-click and the `n` shortcut needs a keyboard, so on
+                a touch device both are unreachable — once one node exists you
+                could add children forever but never another root. */}
+            {onCreateNode && (
+              <button className="topbar-icon-btn" onClick={() => onCreateNode()}
+                aria-label={t('nodeActions.addRoot')} title={t('nodeActions.addRoot')}>{Ic.plus}</button>
+            )}
+            <button className="topbar-icon-btn" onClick={onClose} aria-label={t('action.close')}>{Ic.close}</button>
+          </div>
         </header>
 
         {/* Health summary — counts by status. Collapse button (desktop) sits
