@@ -1788,6 +1788,23 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
 /* Mobile: tap a runbook → list hides, editor takes the full screen.
    Desktop @media (1024+) restores side-by-side. */
 @media (max-width: 1023px) {
+  /* ‼ Without this the wrapper had no styles at all on mobile — a plain flex
+     item, so `min-height: auto` let it grow to its content and overflow the
+     fixed overlay. Measured on a 839px viewport with twenty runbooks: the
+     wrapper was 1104px tall and the last 265px were off-screen with nothing
+     to scroll. The list body already has `overflow-y: auto`, but it never
+     engaged, because a child that is allowed to grow never overflows.
+     The desktop grid bounds it at ≥1024px; below that nothing did. */
+  .rb-list-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* ‼ Must stay AFTER the rule above: same specificity, so source order
+     decides, and `display: flex` written later would win over this and put
+     the list back on screen behind the runbook. The e2e run caught exactly
+     that when the rules were the other way round. */
   .rb-list-wrap--hidden-on-mobile { display: none; }
 }
 

@@ -106,6 +106,54 @@ test.describe("runbooks", () => {
     await expect(page).toHaveURL(new RegExp(`/runbooks/${first}$`));
   });
 
+  // ‼ Asserted by measurement, not by visibility. `isVisible()` means "in the
+  // DOM and not display:none" — it returns true for an element scrolled past
+  // the bottom of the screen, which is exactly the state this test is about.
+  // Checking it that way would have passed against the bug.
+  //
+  // On mobile the list wrapper had no styles at all: a plain flex item, so
+  // `min-height: auto` let it grow to its content and overflow the fixed
+  // overlay. Measured at 839px with twenty runbooks, the wrapper was 1104px
+  // tall and the last quarter was off-screen with nothing to scroll — the
+  // body's own `overflow-y: auto` never engages when the body is allowed to
+  // grow. The desktop grid bounds it at ≥1024px, so only phones were hit.
+  test("a long list scrolls instead of running off the screen", async ({ page }) => {
+    for (let i = 0; i < 20; i++) {
+      const r = await page.request.post("/api/runbooks", {
+        data: { title: `Check ${String(i).padStart(2, "0")}`, markdown: `# ${i}\n` },
+      });
+      expect(r.status()).toBe(201);
+    }
+    await page.goto("/runbooks");
+    await expect(page.getByTestId("runbook-item-check-00")).toBeAttached();
+
+    const m = await page.evaluate(() => {
+      const wrap = document.querySelector(".rb-list-wrap") as HTMLElement | null;
+      const body = document.querySelector(".rb-list-body") as HTMLElement | null;
+      return {
+        wrapBottom: wrap ? Math.round(wrap.getBoundingClientRect().bottom) : null,
+        viewport: window.innerHeight,
+        bodyClient: body?.clientHeight ?? 0,
+        bodyScroll: body?.scrollHeight ?? 0,
+      };
+    });
+
+    // The list has to be taller than its container, or this test is measuring
+    // a list that happens to fit and proves nothing.
+    expect(m.bodyScroll, "twenty runbooks should overflow the list body")
+      .toBeGreaterThan(m.bodyClient);
+    expect(m.wrapBottom, "the list must not extend past the bottom of the screen")
+      .toBeLessThanOrEqual(m.viewport);
+
+    // And it actually moves.
+    const moved = await page.evaluate(() => {
+      const body = document.querySelector(".rb-list-body") as HTMLElement;
+      body.scrollTop = body.scrollHeight;
+      return body.scrollTop;
+    });
+    expect(moved, "the list body should scroll").toBeGreaterThan(0);
+  });
+
   // Runbooks work with no git configured at all. The file on disk is the
   // source of truth and the database is a cache of it; a remote is an
   // optional layer over that directory, not a prerequisite for having one.
