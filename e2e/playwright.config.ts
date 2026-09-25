@@ -33,6 +33,13 @@ export default defineConfig({
     // in v0.1.4 were reachable only on a touch viewport: a context menu is
     // the only way to do something, and there is no right-click. A desktop
     // run cannot see that class of bug at all.
-    { name: "mobile", use: { ...devices["Pixel 7"] } },
+    //
+    // 05-git-adopt is excluded rather than skipped. It never touches the UI,
+    // and adopting permanently turns the runbook directory into a repository
+    // — so a second project running it would meet an already-adopted
+    // directory and test something else under the same name. Excluding it
+    // here means mobile simply has no such test; a runtime skip would print
+    // beside the passes and read like coverage.
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testIgnore: /05-git-adopt/ },
   ],
 });

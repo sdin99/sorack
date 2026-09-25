@@ -43,22 +43,50 @@ async function readDbRow(): Promise<DbRow | null> {
 // when storage mode is "local file" (enabled=false) or when no remote
 // URL is set anywhere. The caller treats both cases as "git infra
 // idle".
-export async function loadGitConfig(): Promise<GitConfig | null> {
-  if (!(await isGitEnabled())) return null;
-  const row = await readDbRow();
-  const remote = ENV.REMOTE ?? row?.remote ?? "";
-  if (!remote) return null;
+// ‼ The ONE place env and the stored row are combined.
+//
+// There were two, and they disagreed: this one put env first, and
+// GET /api/git/config put the row first. On an instance with both set, the
+// Settings screen showed one remote while git pushed to another — silently,
+// and `remote` is the worst field for that: the commit succeeds and lands in
+// a repository nobody was watching. A row written first with env arriving
+// later, which the "env-pinned fields are read-only" guard does not cover,
+// is a normal order of events and was the state of the dev instance.
+//
+// Both callers go through here now. Which order is right matters less than
+// there being one of them.
+export function resolveFields(row: DbRow | null): {
+  remote: string;
+  branch: string;
+  username?: string;
+  token?: string;
+  authorName?: string;
+  authorEmail?: string;
+} {
   // DB-stored token is encrypted (or legacy plaintext for rows written
   // before the encryption landed). Env-supplied tokens are always raw.
   const dbToken = decryptToken(row?.token ?? null);
   return {
-    remote,
+    remote: ENV.REMOTE ?? row?.remote ?? "",
     branch: ENV.BRANCH ?? row?.branch ?? "main",
     username: ENV.USERNAME ?? row?.username ?? undefined,
     token: ENV.TOKEN ?? dbToken,
     authorName: ENV.AUTHOR_NAME ?? row?.authorName ?? undefined,
     authorEmail: ENV.AUTHOR_EMAIL ?? row?.authorEmail ?? undefined,
   };
+}
+
+// What the UI should display: the same resolution, without the enabled gate,
+// because the form has to show stored values while storage mode is "local".
+export async function getDisplayConfig() {
+  return resolveFields(await readDbRow());
+}
+
+export async function loadGitConfig(): Promise<GitConfig | null> {
+  if (!(await isGitEnabled())) return null;
+  const fields = resolveFields(await readDbRow());
+  if (!fields.remote) return null;
+  return fields;
 }
 
 // Whether the user (or operator) has flipped storage to "git sync".

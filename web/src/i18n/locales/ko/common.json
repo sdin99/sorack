@@ -225,7 +225,12 @@
     "createBranch": "생성",
     "commitAndPush": "commit & push",
     "commitMessage": "commit 메시지",
-    "filesChanged": "개 파일 변경됨"
+    "filesChanged": "개 파일 변경됨",
+    "adopt": "원격에 올리기",
+    "adoptHint": "디스크에 이미 있는 런북을 설정된 원격 저장소에 넣습니다",
+    "adoptOk": "원격에 올렸습니다 ({{count}}건)",
+    "adoptConflict": "원격에 같은 이름이 이미 있습니다: {{files}}. 한쪽 이름을 바꾸고 다시 시도하십시오.",
+    "adoptErr": "올리지 못했습니다: {{reason}}"
   },
   "nd": {
     "synced": "{{count}}건 동기화",

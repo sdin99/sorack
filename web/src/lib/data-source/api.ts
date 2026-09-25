@@ -270,6 +270,14 @@ export const updateGitConfig = (patch: GitConfigPatch) =>
   sendJSON<{ ok: true }>("PATCH", "/api/git/config", patch);
 export const gitPull = () =>
   sendJSON<{ ok: true } | { ok: false; reason: string }>("POST", "/api/git/pull");
+// Turn an existing runbook directory into a repo on the configured remote.
+// `conflicts` lists filenames present on both sides — the one failure the
+// user can act on directly.
+export const gitAdopt = () =>
+  sendJSON<
+    | { ok: true; merged: boolean; filesCommitted: number }
+    | { ok: false; reason: string; conflicts?: string[] }
+  >("POST", "/api/git/adopt");
 export const gitCommitPush = (message: string) =>
   sendJSON<
     | { ok: true; oid: string; filesCommitted: number }

@@ -20,6 +20,12 @@ test.describe("runbooks", () => {
   // 02-first-node ended up skipping itself.
   test.beforeEach(async ({ page }) => {
     await login(page);
+    // Establish the precondition instead of hoping for it. 05-git-adopt runs
+    // before this on the desktop project and leaves git configured; the claim
+    // below is about git being OFF, so turn it off rather than depend on the
+    // order of the files.
+    const off = await page.request.patch("/api/git/config", { data: { enabled: false } });
+    expect(off.ok(), "could not disable git sync").toBeTruthy();
     const res = await page.request.get("/api/runbooks");
     expect(res.ok(), "could not list runbooks to reset them").toBeTruthy();
     for (const rb of await res.json()) {
@@ -53,9 +59,17 @@ test.describe("runbooks", () => {
     // result. Asserting the wrong field compared undefined to false and the
     // test failed for the right reason with the wrong explanation, which is
     // the cheaper half of this mistake to find.
+    // `configured`, not `ok` — /api/git/status answers with a snapshot, not a
+    // result. Asserting the wrong field compared undefined to false and the
+    // test failed for the right reason with the wrong explanation, which is
+    // the cheaper half of this mistake to find.
+    //
+    // Only `configured` is asserted. Whether a .git directory happens to be
+    // lying around is not what this claims — the claim is that a runbook does
+    // not need a configured remote, and a leftover repository from another
+    // spec would make an assertion on `repo` a statement about running order.
     const git = await (await page.request.get("/api/git/status")).json();
     expect(git.configured, "this run is meant to have no git configured").toBe(false);
-    expect(git.repo, "and the runbook directory is not a git repository").toBe(false);
 
     const created = await page.request.post("/api/runbooks", {
       data: {

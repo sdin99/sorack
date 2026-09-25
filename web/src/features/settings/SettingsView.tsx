@@ -273,7 +273,7 @@ function GitPanel() {
   const [tokenDraft, setTokenDraft] = useState<string>("");
   const [savingState, setSavingState] = useState<"idle" | "busy" | "ok" | "err">("idle");
   const [saveErr, setSaveErr] = useState<string>("");
-  const { pulling, pullMsg, pull } = useGitActions();
+  const { pulling, pullMsg, pull, adopt } = useGitActions();
   const [commitOpen, setCommitOpen] = useState(false);
 
   // Mirror server state into the form once on first load (and again when
@@ -344,6 +344,21 @@ function GitPanel() {
         </div>
         {gitStatus?.error && <div className="settings-err">{gitStatus.error}</div>}
         <div className="settings-subcard-actions">
+          {/* Only when there is something to adopt: a remote is set, the
+              directory is not a repository yet. Hidden rather than disabled —
+              a greyed-out button that can never apply to you is a permanent
+              question, and this state is one an installation leaves for good
+              the first time it is used. */}
+          {gitStatus?.configured && !gitStatus?.repo && (
+            <button
+              className="settings-btn settings-btn--primary"
+              onClick={adopt}
+              disabled={pulling}
+              title={t("git.adoptHint", {
+                defaultValue: "Put the runbooks already on disk into the configured remote",
+              })}
+            >{pulling ? "…" : t("git.adopt", { defaultValue: "Adopt into remote" })}</button>
+          )}
           <button
             className="settings-btn"
             onClick={pull}

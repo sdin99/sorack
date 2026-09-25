@@ -7,11 +7,8 @@
 // the UI can render them as in-place messages rather than generic 500s.
 
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
-import { db } from "../db/index.js";
-import { gitConfig } from "../db/schema.js";
 import { getGitClient } from "../git/runtime.js";
-import { getConfigSource, isGitEnabled, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config.js";
+import { getConfigSource, getDisplayConfig, isGitEnabled, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config.js";
 import { encryptToken } from "../git/crypto.js";
 
 export const gitRoutes = new Hono();
@@ -32,20 +29,21 @@ gitRoutes.get("/status", async (c) => {
 // env-pinned fields render read-only. Token itself is never returned;
 // the UI shows a "(set)" placeholder when source !== null.
 gitRoutes.get("/config", async (c) => {
-  // We read the DB row directly so the form shows the user's stored
-  // values even when storage mode is currently "local" (loadGitConfig
-  // returns null in that case).
-  const [row] = await db.select().from(gitConfig).where(eq(gitConfig.id, 1)).limit(1);
+  // Shows what git actually uses. Resolution lives in one place
+  // (config.ts resolveFields) because it used to live in two and they
+  // disagreed — see the note there. `source` says which field came from env
+  // so the UI can label it, rather than this endpoint deciding differently.
+  const cfg = await getDisplayConfig();
   const enabled = await isGitEnabled();
   const source = await getConfigSource();
   return c.json({
     enabled,
-    remote: row?.remote ?? process.env.SORACK_GIT_REMOTE ?? "",
-    branch: row?.branch ?? process.env.SORACK_GIT_BRANCH ?? "main",
-    username: row?.username ?? process.env.SORACK_GIT_USERNAME ?? "",
-    authorName: row?.authorName ?? process.env.SORACK_GIT_AUTHOR_NAME ?? "",
-    authorEmail: row?.authorEmail ?? process.env.SORACK_GIT_AUTHOR_EMAIL ?? "",
-    tokenSet: Boolean(row?.token || process.env.SORACK_GIT_TOKEN),
+    remote: cfg.remote,
+    branch: cfg.branch,
+    username: cfg.username ?? "",
+    authorName: cfg.authorName ?? "",
+    authorEmail: cfg.authorEmail ?? "",
+    tokenSet: Boolean(cfg.token),
     source,
   });
 });
@@ -84,6 +82,21 @@ gitRoutes.post("/pull", async (c) => {
   } catch (e) {
     return c.json({ ok: false, reason: String((e as Error)?.message ?? e) }, 500);
   }
+});
+
+// Promote a directory that already has runbooks into a repo on the configured
+// remote. Separate from /pull on purpose: pull moves a repo forward, this one
+// creates it, and conflating them would mean a failed pull silently deciding
+// to initialise something.
+gitRoutes.post("/adopt", async (c) => {
+  const client = await getGitClient();
+  if (!client.cfg) return c.json({ ok: false, reason: "not configured" }, 412);
+  // 200 with `{ok:false, reason, conflicts}` on a known failure, like every
+  // other write action in this file — the convention at the top of it. A 409
+  // reads better on its own, but the client here throws on any non-2xx and
+  // discards the body, so the conflicting filenames would be lost exactly
+  // when they are the whole point of the response.
+  return c.json(await client.adopt());
 });
 
 gitRoutes.get("/branches", async (c) => {

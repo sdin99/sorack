@@ -225,7 +225,12 @@
     "createBranch": "create",
     "commitAndPush": "commit & push",
     "commitMessage": "commit message",
-    "filesChanged": "file(s) changed"
+    "filesChanged": "file(s) changed",
+    "adopt": "Adopt into remote",
+    "adoptHint": "Put the runbooks already on disk into the configured remote",
+    "adoptOk": "Adopted ({{count}} file(s))",
+    "adoptConflict": "The remote already has: {{files}}. Rename one side and try again.",
+    "adoptErr": "Could not adopt: {{reason}}"
   },
   "nd": {
     "synced": "{{count}} synced",

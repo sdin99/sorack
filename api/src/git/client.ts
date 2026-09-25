@@ -295,6 +295,179 @@ export class GitClient {
     });
   }
 
+  // Turn a directory that already has runbooks in it into a git repository
+  // pointed at the configured remote, and get its contents onto that remote.
+  //
+  // The gap this fills: `bootstrapClone` only clones into an EMPTY directory,
+  // and nothing else in this file creates a repository. So an operator who
+  // used sorack locally first — which is a supported way to run it — had no
+  // way to start backing those runbooks up short of `git init` by hand inside
+  // the container. `pull` does not rescue them either: on a non-repo it fails
+  // in dirtyCount() with a raw git error.
+  //
+  // Three outcomes, because the remote decides which one applies:
+  //
+  //   remote empty          init, commit, push. Nothing to reconcile.
+  //   remote has commits    merge the two unrelated histories, then push.
+  //   same filename on both REFUSE, and name the files.
+  //
+  // The third is not a limitation, it is the whole reason this can be
+  // automatic. git tells us exactly which paths collide before anything is
+  // written, so the dangerous case is the one case we never guess at. Two
+  // files called `welcome.md` with different contents have no correct
+  // resolution that a program can pick.
+  //
+  // ‼ All-or-nothing. Every failure path removes the .git we created, so a
+  // refused adopt leaves the directory exactly as it was — a half-adopted
+  // directory is a repo with a local-only history, which is a worse place to
+  // be than not having started.
+  async adopt(): Promise<
+    | { ok: true; merged: boolean; filesCommitted: number }
+    | { ok: false; reason: string; conflicts?: string[] }
+  > {
+    return withLock(this.gitKey, () => this.adoptInner());
+  }
+
+  private async adoptInner(): Promise<
+    | { ok: true; merged: boolean; filesCommitted: number }
+    | { ok: false; reason: string; conflicts?: string[] }
+  > {
+    if (!this.cfg) return { ok: false, reason: "git is not configured" };
+    if (await this.isRepo()) return { ok: false, reason: "already a git repository" };
+    if (!(await dirHasContent(this.dir))) {
+      // Deliberately not falling through to clone(). One operation, one
+      // meaning: a caller that gets "nothing to adopt" knows the directory is
+      // empty, rather than being handed a clone it did not ask for.
+      return { ok: false, reason: "nothing to adopt — the runbook directory is empty" };
+    }
+
+    const branch = this.cfg.branch;
+    const author = {
+      name: this.cfg.authorName || "sorack",
+      email: this.cfg.authorEmail || "sorack@localhost",
+    };
+    const gitDir = path.join(this.dir, ".git");
+    const undo = async () => {
+      await fs.promises.rm(gitDir, { recursive: true, force: true });
+    };
+
+    try {
+      await git.init({ fs, dir: this.dir, defaultBranch: branch });
+      await git.addRemote({ fs, dir: this.dir, remote: "origin", url: this.cfg.remote });
+
+      const matrix = await git.statusMatrix({ fs, dir: this.dir });
+      const paths = matrix.map(([filepath]) => filepath);
+      for (const filepath of paths) await git.add({ fs, dir: this.dir, filepath });
+      if (paths.length === 0) {
+        await undo();
+        return { ok: false, reason: "nothing to adopt — no files to commit" };
+      }
+      const adoptedOid = await git.commit({
+        fs, dir: this.dir, message: "adopt existing runbooks", author,
+      });
+
+      // Does the remote already have this branch? Asking the server is
+      // cheaper than cloning and is the only way to tell an empty remote from
+      // one we are about to collide with.
+      const refs = await git.listServerRefs({
+        http,
+        url: this.cfg.remote,
+        prefix: `refs/heads/${branch}`,
+        onAuth: onAuth(this.cfg),
+      });
+
+      let merged = false;
+      if (refs.length > 0) {
+        await this.fetchInner();
+        try {
+          await git.merge({
+            fs,
+            dir: this.dir,
+            ours: branch,
+            theirs: `refs/remotes/origin/${branch}`,
+            allowUnrelatedHistories: true,
+            author,
+          });
+        } catch (e) {
+          const conflicts = (e as { data?: { bothModified?: string[]; filepaths?: string[] } })
+            .data?.bothModified ?? (e as { data?: { filepaths?: string[] } }).data?.filepaths;
+          await undo();
+          if (conflicts?.length) {
+            return {
+              ok: false,
+              reason:
+                `the remote already has ${conflicts.length} file(s) with the same name(s). ` +
+                "Rename yours or the remote's, then try again.",
+              conflicts,
+            };
+          }
+          throw e;
+        }
+        merged = true;
+
+        // ‼ merge writes the commit and the tree, NOT the working directory.
+        // Measured: straight after a successful merge the merged-in files are
+        // absent from disk and statusMatrix reports them as deleted. Without
+        // this checkout the directory would disagree with HEAD, the runbook
+        // watcher would never see the files that arrived, and the next pull
+        // would refuse on a tree that looks dirty.
+        //
+        // The tree lock + re-check are the same pattern as pull(): a force
+        // checkout against an autosave in flight silently wipes it, and
+        // sorack writes to this directory every 1.5 seconds.
+        const failed = await withLock(this.treeKey, async () => {
+          const changed = await this.workdirChangesSince(adoptedOid);
+          if (changed.length > 0) {
+            return `working tree changed during the merge (${changed.length} file(s)) — try again`;
+          }
+          await git.checkout({ fs, dir: this.dir, ref: branch, force: true });
+          return null;
+        });
+        if (failed) {
+          await undo();
+          return { ok: false, reason: failed };
+        }
+      }
+
+      const pushed = await git.push({
+        fs,
+        http,
+        dir: this.dir,
+        remote: "origin",
+        ref: branch,
+        onAuth: onAuth(this.cfg),
+      });
+      if (!pushed.ok) {
+        await undo();
+        return { ok: false, reason: pushed.error ?? "push rejected" };
+      }
+
+      this.lastError = undefined;
+      return { ok: true, merged, filesCommitted: paths.length };
+    } catch (e) {
+      await undo();
+      return { ok: false, reason: String((e as Error)?.message ?? e) };
+    }
+  }
+
+  // Files on disk that no longer match the commit we made from them.
+  //
+  // Not dirtyCount(): that compares against HEAD, which after a merge is the
+  // merge commit, so every file the merge brought in reads as a difference —
+  // and those are precisely what the checkout is about to write. Measured:
+  // the first version of this guard refused every successful merge, blaming
+  // a concurrent write for the state it was supposed to allow.
+  //
+  // ‼ The stage column is ignored on purpose. merge updates the index, so a
+  // merged-in file is staged but absent from the working tree (h=0, w=0,
+  // s=1) and comparing stage to HEAD flags it. What matters before a force
+  // checkout is only the working tree: a file that changed under us (h=1,
+  // w=2) or appeared under us (h=0, w=2).
+  private async workdirChangesSince(ref: string): Promise<string[]> {
+    const matrix = await git.statusMatrix({ fs, dir: this.dir, ref });
+    return matrix.filter(([, h, w]) => w !== h).map(([filepath]) => filepath);
+  }
+
   // statusMatrix walk shared by status(), pull() and checkoutBranch().
   // Tuple semantics documented on status() above.
   private async dirtyCount(): Promise<number> {

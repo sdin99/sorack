@@ -89,6 +89,9 @@ jobs:
         working-directory: e2e
         env:
           SORACK_E2E_URL: http://127.0.0.1:3099
+          # 05-git-adopt resets this directory to its pre-adoption state; see
+          # the comment in that spec. Same path the server was given above.
+          SORACK_E2E_RUNBOOKS_DIR: ${{ runner.temp }}/runbooks
         run: pnpm exec playwright test
 
       # The app log is where a failure that is not the browser's fault shows

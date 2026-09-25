@@ -7,12 +7,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { gitPull } from "@/lib/data-source/api";
+import { gitAdopt, gitPull } from "@/lib/data-source/api";
 
 export interface GitActions {
   pulling: boolean;
   pullMsg: string;
   pull: () => Promise<void>;
+  adopt: () => Promise<void>;
 }
 
 export function useGitActions(): GitActions {
@@ -38,5 +39,41 @@ export function useGitActions(): GitActions {
     }
   };
 
-  return { pulling, pullMsg, pull };
+  // Adopt: only offered when the directory has content, a remote is set and
+  // it is not a repo yet. Shares pullMsg so the panel has one message line
+  // rather than two competing for the same corner.
+  const adopt = async () => {
+    setPulling(true);
+    setPullMsg("");
+    try {
+      const r = await gitAdopt();
+      if (r.ok) {
+        setPullMsg(t("git.adoptOk", {
+          count: r.filesCommitted,
+          defaultValue: r.merged
+            ? "Adopted and merged with the remote ({{count}} file(s))"
+            : "Adopted ({{count}} file(s))",
+        }));
+      } else if (r.conflicts?.length) {
+        // Name the files. "Conflict" on its own leaves the user to go and
+        // find out which, and they cannot see the remote from here.
+        setPullMsg(t("git.adoptConflict", {
+          files: r.conflicts.join(", "),
+          defaultValue: "The remote already has: {{files}}. Rename one side and try again.",
+        }));
+      } else {
+        setPullMsg(t("git.adoptErr", { reason: r.reason, defaultValue: "Could not adopt: {{reason}}" }));
+      }
+    } catch (ex: any) {
+      setPullMsg(t("git.adoptErr", { reason: String(ex?.message ?? ex), defaultValue: "Could not adopt: {{reason}}" }));
+    } finally {
+      setPulling(false);
+      qc.invalidateQueries({ queryKey: ["git-status"] });
+      // Longer than pull's 4s: a conflict message names files the user has
+      // to act on, and four seconds is not long enough to read and copy them.
+      setTimeout(() => setPullMsg(""), 15000);
+    }
+  };
+
+  return { pulling, pullMsg, pull, adopt };
 }
