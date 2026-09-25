@@ -67,10 +67,15 @@ needs a threshold against its schedule, and a guessed one invents alerts on
 weekly jobs while missing hourly ones. The timestamps are reported so a person
 can judge; the probe does not.
 
-Kubernetes deletes finished Jobs past the history limit, so the last run's
-outcome can be genuinely unavailable while the CronJob still carries its
-timestamps. That reports `unknown` and says which — it is not the same as
-never having run.
+Kubernetes deletes finished Jobs past the history limit — three successes and
+one failure by default — so for most of the gap between runs there is no Job
+left to ask. The CronJob's own status covers that: `lastSuccessfulTime` at or
+after `lastScheduleTime` means the most recent scheduled run finished, and
+that reads `ok` without needing the Job.
+
+What stays `unknown` is a run that started after the last success and whose
+Job is gone: failed, still running and cleaned-up are different, and nothing
+available separates them. The message says so rather than picking one.
 
 ## Writing an adapter
 

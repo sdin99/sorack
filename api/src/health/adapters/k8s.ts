@@ -179,19 +179,38 @@ export async function probeCronJob(
     status = "unknown";
     message = "suspended — the schedule is paused, so there is nothing to judge";
   } else {
-    // No Job we can read, so the last run's outcome is unavailable. That is
-    // not the same as never having run, and the CronJob's own status says
-    // which: Kubernetes deletes finished Jobs past the history limit while
-    // keeping these timestamps.
+    // No Job left to read. That is the normal state, not an edge case:
+    // successfulJobsHistoryLimit defaults to 3 and failedJobsHistoryLimit to
+    // 1, so for most of the gap between runs there is nothing to ask. A probe
+    // that answered `unknown` here would spend most of its life saying
+    // nothing about a job that is running perfectly.
     //
-    // ‼ Found by running this against the live cluster: alpha/db-backup
-    // reported "never run yet" while carrying lastSuccessfulTime from forty
-    // minutes earlier. The message contradicted the field printed beside it.
-    status = "unknown";
-    const last = cj?.status?.lastSuccessfulTime ?? cj?.status?.lastScheduleTime;
-    message = last
-      ? `last run's Job is no longer retained — most recent activity ${last}`
-      : "never run yet";
+    // The CronJob's own status answers the common case.
+    // lastSuccessfulTime >= lastScheduleTime means the most recent scheduled
+    // run finished successfully — a fact from the cluster, not an inference
+    // about timing. Both are ISO-8601 in UTC, so lexical order is
+    // chronological.
+    //
+    // ‼ Found by running this against a live cluster: alpha/db-backup said
+    // "never run yet" while carrying a lastSuccessfulTime from forty minutes
+    // earlier. "Could not determine" had been written as "did not happen",
+    // which is the failure this file keeps being about.
+    const sched = cj?.status?.lastScheduleTime;
+    const succ = cj?.status?.lastSuccessfulTime;
+    if (succ && (!sched || succ >= sched)) {
+      status = "ok";
+      message = `last scheduled run succeeded (${succ})`;
+    } else if (sched) {
+      // Something started after the last success and its Job is gone. It
+      // failed, or it is still running, or it was cleaned up — those differ
+      // and nothing available here separates them.
+      status = "unknown";
+      message = `started ${sched}, outcome unknown — its Job is no longer retained` +
+        (succ ? ` (last success ${succ})` : "");
+    } else {
+      status = "unknown";
+      message = "never run yet";
+    }
   }
   return { status, latencyMs: latency(), message, observed };
 }

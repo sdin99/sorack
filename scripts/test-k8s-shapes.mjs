@@ -52,6 +52,36 @@ for (const cj of (cronjobs.items ?? []).slice(0, 5)) {
   }
 }
 
+// The branches a healthy cluster does not show. Derived from a live object
+// with one field changed each time — inventing a CronJob from scratch would
+// make every other field my guess too, and the guesses would agree with the
+// code because I wrote both.
+{
+  const real = (cronjobs.items ?? [])[0];
+  if (real) {
+    const variant = (mutate, label, want) => ({ mutate, label, want });
+    const cases = [
+      variant((cj) => { delete cj.status.lastScheduleTime; delete cj.status.lastSuccessfulTime; },
+        "never run", /never run yet/),
+      variant((cj) => { cj.status.lastScheduleTime = "2030-01-01T00:00:00Z"; },
+        "started after the last success, Job gone", /outcome unknown/),
+      variant((cj) => { cj.spec.suspend = true; delete cj.status.lastSuccessfulTime; delete cj.status.lastScheduleTime; },
+        "suspended", /suspended|never run yet/),
+    ];
+    for (const { mutate, label, want } of cases) {
+      const cj = JSON.parse(JSON.stringify(real));
+      mutate(cj);
+      // No owned Jobs: that is the state these branches describe.
+      const r = await probeCronJob(cj.metadata.namespace, cj.metadata.name,
+        readerFor([[/\/cronjobs\//, cj], [/\/jobs$/, { items: [] }]]), () => 0);
+      checked++;
+      const ok = want.test(r.message);
+      console.log(`  ${ok ? " " : "✗"} variant "${label}": ${r.status} — ${r.message}`);
+      if (!ok) problems.push(`variant "${label}" said "${r.message}"`);
+    }
+  }
+}
+
 const services = kubectl(["get", "services", "-A", "-o", "json"]) ?? { items: [] };
 for (const svc of (services.items ?? []).filter((s) => s.spec?.type !== "ExternalName").slice(0, 5)) {
   const ns = svc.metadata.namespace, name = svc.metadata.name;
