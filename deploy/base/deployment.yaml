@@ -63,13 +63,25 @@ spec:
             - name: POSTGRES_DB
               value: ""
           envFrom:
-            # sorack-db  : POSTGRES_USERNAME / POSTGRES_PASSWORD
-            # sorack-app : SORACK_AUTH_SECRET, SORACK_GIT_TOKEN_KEY, adapter env
-            # Both optional so the pod can start and report a clear error
-            # instead of being stuck Pending before credentials land.
+            # The two differ on purpose, and the difference is the point.
+            #
+            # sorack-db holds POSTGRES_USERNAME / POSTGRES_PASSWORD, which
+            # env.ts marks required() — there is no sensible default for
+            # them. NOT optional, so a missing secret fails at admission with
+            # `CreateContainerConfigError: secret "sorack-db" not found`,
+            # which names what is missing in `kubectl get pods`. Marking it
+            # optional moves the failure into the app: the pod starts, throws
+            # on the first read, and shows up as a CrashLoopBackOff you have
+            # to read logs to explain. Worse, it only fails at all because
+            # required() happens to be there — any future env read without it
+            # would quietly see undefined.
             - secretRef:
                 name: sorack-db
-                optional: true
+            # sorack-app is genuinely optional: SORACK_AUTH_SECRET and
+            # SORACK_GIT_TOKEN_KEY generate a random value when unset (logged,
+            # and sessions/stored PATs then do not survive a restart), and the
+            # Proxmox variables only matter if you use that adapter. A minimal
+            # install can run without this secret existing at all.
             - secretRef:
                 name: sorack-app
                 optional: true

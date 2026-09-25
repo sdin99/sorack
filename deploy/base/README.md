@@ -76,6 +76,13 @@ patches:
 - **`replicas: 1` is a correctness constraint, not a resource choice.** The
   runbooks volume is RWO and the api holds a file watcher and a git working
   tree on it.
+- **`sorack-db` is not an optional secretRef; `sorack-app` is.** The database
+  credentials have no default, so a missing secret should fail at admission —
+  `CreateContainerConfigError` names the missing secret, while `optional: true`
+  turns it into a CrashLoopBackOff you have to read logs to explain, and only
+  fails at all because the code happens to check. `sorack-app` really can be
+  absent: its values either self-generate or belong to an adapter you may not
+  use.
 - **Egress policy:** four of the five health adapters connect to targets the
   operator configures at runtime, so an egress allowlist cannot be derived
   ahead of time. Blocking a probe makes Sorack paint the *monitored* node
