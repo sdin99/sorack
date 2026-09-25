@@ -6,6 +6,8 @@
 // script cannot tell "my request is wrong" from "the server broke" unless
 // bad input reliably produces a 400 that names the field, and "reliably" is
 // only true if something checks.
+import { readFileSync } from "node:fs";
+import { NODE_TYPES } from "../api/dist/lib/node-types.js";
 import { validateNode, validateEdge, ValidationError } from "../api/dist/lib/validate.js";
 
 let pass = 0;
@@ -49,6 +51,48 @@ rejects("null body", () => validateNode(null), "body must be a JSON object");
 rejects("array body", () => validateNode([]), "body must be a JSON object");
 rejects("self-referencing edge", () => validateEdge({ sourceId: "a", targetId: "a" }), "must differ");
 rejects("edge without a source", () => validateEdge({ targetId: "b" }), "sourceId is required");
+
+// The type that started this: the infra sync sent its own vocabulary and 9 of
+// 13 nodes landed as something nothing recognises — a fallback icon and an
+// empty detail panel, with no error anywhere.
+rejects("a type from somebody else's vocabulary",
+  () => validateNode({ id: "a", type: "app", name: "x" }), "type must be one of");
+rejects("a type that is merely plausible",
+  () => validateNode({ id: "a", type: "service", name: "x" }), "type must be one of");
+accepts("a short-form type", () => validateNode({ id: "a", type: "svc", name: "x" }));
+
+// ── the api's type list vs the schemas it claims to describe ──────────────
+// api/src/lib/node-types.ts is a copy: the two packages share nothing. A type
+// accepted here with no schema in the web package is the exact failure the
+// validation was added to prevent, reintroduced from the other side.
+{
+  const schema = readFileSync(
+    new URL("../web/src/features/lab/node-detail-schema.ts", import.meta.url), "utf8");
+  const detail = schema.slice(schema.indexOf("export const TYPE_DETAIL"),
+                              schema.indexOf("export interface SoftwareTemplate"));
+  const canonical = [...detail.matchAll(/^ {2}([a-z0-9_]+):\s*\[/gm)].map((m) => m[1]);
+  const aliasBlock = schema.slice(schema.indexOf("export const TYPE_ALIAS"));
+  const aliases = [...aliasBlock.slice(0, aliasBlock.indexOf("}")).matchAll(/^ {2}([a-z0-9_]+):/gm)]
+    .map((m) => m[1]);
+
+  if (canonical.length === 0 || aliases.length === 0) {
+    // Parsed nothing is not the same as found no drift.
+    failures.push(`type drift: parsed ${canonical.length} canonical and ${aliases.length} alias types from the web schema — the parse is broken, not the lists`);
+  } else {
+    const want = [...canonical, ...aliases].sort();
+    const have = [...NODE_TYPES].sort();
+    const missing = want.filter((t) => !have.includes(t));
+    const extra = have.filter((t) => !want.includes(t));
+    if (missing.length || extra.length) {
+      failures.push(
+        `type drift: api NODE_TYPES vs web schemas — ` +
+        `${missing.length ? `web has ${missing.join(", ")} and the api rejects them; ` : ""}` +
+        `${extra.length ? `the api accepts ${extra.join(", ")} with no detail schema` : ""}`);
+    } else {
+      pass++;
+    }
+  }
+}
 
 if (failures.length) {
   console.error(`validate: ${failures.length} failure(s), ${pass} passed\n`);

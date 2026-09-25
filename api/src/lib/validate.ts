@@ -18,6 +18,8 @@ export class ValidationError extends Error {
   }
 }
 
+import { NODE_TYPES } from "./node-types.js";
+
 const NODE_ID = /^[a-z0-9][a-z0-9/_-]{0,127}$/;
 const STATUSES = ["ok", "warn", "err", "unknown"] as const;
 
@@ -95,7 +97,18 @@ export function validateNode(body: unknown, { partial = false } = {}): NodeInput
     }
     out.id = id;
   }
-  if (!partial || b.type !== undefined) out.type = str(b.type, "type", 64);
+  if (!partial || b.type !== undefined) {
+    const type = str(b.type, "type", 64);
+    // Checked like status, not like a free-text label. An unrecognised type
+    // does not fail anywhere: the icon falls back and the detail panel comes
+    // up empty, so the node looks fine until somebody reads it. Naming the
+    // vocabulary in the error is the point — the caller that got this wrong
+    // was a script, and a script cannot go and look.
+    if (type && !NODE_TYPES.includes(type)) {
+      throw new ValidationError(`type must be one of: ${NODE_TYPES.join(", ")}`);
+    }
+    out.type = type;
+  }
   if (!partial || b.name !== undefined) out.name = str(b.name, "name", 256);
 
   if (b.parentId !== undefined) {

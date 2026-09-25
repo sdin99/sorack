@@ -456,10 +456,34 @@ export function softwareIds(node: any): string[] {
   if (Array.isArray(s)) return s.filter(Boolean);
   return s ? [s] : [];
 }
+// Short forms that have always been accepted by the icon map. They used to
+// stop there: a node typed `svc` got a service icon and an EMPTY detail
+// panel, because TYPE_DETAIL had no such key. Same outcome as a type nobody
+// recognises, dressed as a type we do.
+export const TYPE_ALIAS: Record<string, string> = {
+  ct: "container",
+  ns: "k8s_namespace",
+  pvc: "k8s_pvc",
+  svc: "k8s_service",
+};
+
+// The whole vocabulary — what /api/nodes accepts for `type`. Canonical names
+// plus the aliases above, and every member resolves to a detail schema.
+export const NODE_TYPES: readonly string[] = [
+  ...Object.keys(TYPE_DETAIL),
+  ...Object.keys(TYPE_ALIAS),
+];
+
+export function canonicalType(type?: string): string | undefined {
+  if (!type) return undefined;
+  return TYPE_ALIAS[type] ?? type;
+}
+
 // Infra-only detail entries — software lives in its own sections, not merged
 // into the spec.
 export function infraEntries(node: any): DetailEntry[] {
-  return TYPE_DETAIL[node?.type] || TYPE_DETAIL[node?.kind] || [];
+  const t = canonicalType(node?.type) ?? canonicalType(node?.kind);
+  return (t ? TYPE_DETAIL[t] : undefined) || [];
 }
 // Software still addable to this node (compatible with its infra + not already
 // present).
