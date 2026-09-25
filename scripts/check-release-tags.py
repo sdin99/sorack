@@ -36,10 +36,24 @@ except ImportError:
 
 DEFAULT_PATH = ".github/workflows/release.yml"
 
-# Tag types whose rendered value is the same string on a branch push and a tag
-# push of the same commit. If the workflow answers to both triggers, these must
-# be gated or they collide.
-COMMIT_SCOPED = ("type=sha", "type=raw")
+# Inverted on purpose: this lists the tag types that CANNOT collide, and
+# everything else must carry an `enable=` gate when the workflow answers to
+# both branch and tag pushes.
+#
+# The first version enumerated the dangerous types instead — ("type=sha",
+# "type=raw") — which is the same mistake in miniature as the bug this file
+# exists to catch. A hand-written list of what to watch for looks correct
+# because the entries in it are correct; it is the absent entry that is the
+# defect, and nothing reports an absence. A type added to metadata-action
+# later, or simply one I did not think of, would have been skipped silently.
+#
+# These are safe by construction, not by inspection: each carries its own
+# event restriction, so a branch push and a tag push cannot render the same
+# string from them.
+#   type=semver  needs a semver ref, so it renders only on a tag push
+#   type=ref     is explicitly scoped by its own event= parameter
+#   type=pep440  same as semver
+SELF_SCOPED = ("type=semver", "type=ref", "type=pep440")
 
 
 def find_meta_steps(doc: dict) -> list[dict]:
@@ -98,14 +112,16 @@ def check(path: str) -> int:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                if not line.startswith(COMMIT_SCOPED):
+                if line.startswith(SELF_SCOPED):
                     continue
                 if "enable=" not in line:
                     errors.append(
-                        f"`{line}` is not gated but this workflow runs on both "
-                        "branch and tag pushes, so a release publishes it "
-                        "twice from two different builds and the tag moves. "
-                        "Add enable=${{ github.ref_type != 'tag' }}")
+                        f"`{line}` is not gated and is not one of the types "
+                        "that scope themselves by event, but this workflow "
+                        "runs on both branch and tag pushes — so a release "
+                        "builds twice and both builds claim this tag. Add "
+                        "enable=${{ github.ref_type != 'tag' }}, or add the "
+                        "type to SELF_SCOPED if it cannot collide.")
 
     if errors:
         print(f"release tags: {len(errors)} problem(s) in {path}\n", file=sys.stderr)
