@@ -8,6 +8,10 @@ import {
   updateGitConfig,
   type GitConfigView,
   type GitFieldSource,
+  listApiTokens,
+  createApiToken,
+  revokeApiToken,
+  type ApiToken,
 } from "@/lib/data-source/api";
 import { useSorack } from "@/lib/data-source/SorackData";
 import { CommitPushModal } from "@/features/git/CommitPushModal";
@@ -15,9 +19,9 @@ import { useGitActions } from "@/features/git/use-git-actions";
 import { BranchPicker } from "@/features/git/BranchPicker";
 import { SUPPORTED_LANGS, type Lang } from "@/i18n";
 
-export type SettingsCategory = "appearance" | "account" | "runbook";
+export type SettingsCategory = "appearance" | "account" | "runbook" | "tokens";
 
-const KNOWN_CATEGORIES: SettingsCategory[] = ["appearance", "account", "runbook"];
+const KNOWN_CATEGORIES: SettingsCategory[] = ["appearance", "account", "runbook", "tokens"];
 
 interface Props {
   theme: "dark" | "light";
@@ -42,6 +46,7 @@ export function SettingsView({ theme, setTheme, category, onCategoryChange, onCl
     { key: "appearance", label: t("settings.appearance") },
     { key: "account", label: t("settings.account") },
     { key: "runbook", label: t("settings.runbook") },
+    { key: "tokens", label: t("settings.tokens.nav", { defaultValue: "API tokens" }) },
   ];
 
   return (
@@ -66,6 +71,7 @@ export function SettingsView({ theme, setTheme, category, onCategoryChange, onCl
           {cat === "appearance" && <AppearancePanel theme={theme} setTheme={setTheme} />}
           {cat === "account" && <AccountPanel />}
           {cat === "runbook" && <RunbookPanel />}
+          {cat === "tokens" && <TokensPanel />}
         </div>
       </div>
     </div>
@@ -469,3 +475,102 @@ function GitTokenField({
 
 // CommitPushModal moved to @/features/git/CommitPushModal — also used by
 // the runbook-screen inline git actions.
+
+// ── API tokens ───────────────────────────────────────────────────────
+// For callers that are not a person with a browser: sync scripts,
+// reconcilers, other tools. Issued here because a token must not be able to
+// mint another one — otherwise revoking the token you know about does not
+// actually revoke access.
+function TokensPanel() {
+  const { t } = useTranslation();
+  const [tokens, setTokens] = useState<ApiToken[]>([]);
+  const [name, setName] = useState("");
+  const [scope, setScope] = useState<"read" | "write">("read");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // Held in state, never re-fetchable: the server stores only a hash.
+  const [issued, setIssued] = useState<{ name: string; token: string } | null>(null);
+
+  const reload = () => { listApiTokens().then(setTokens).catch(() => setTokens([])); };
+  useEffect(reload, []);
+
+  const create = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await createApiToken(name.trim(), scope);
+      setIssued({ name: r.name, token: r.token });
+      setName("");
+      reload();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+
+  const revoke = async (id: string) => {
+    try { await revokeApiToken(id); reload(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+
+  return (
+    <div className="settings-panel">
+      <div className="settings-panel-title">{t("settings.tokens.title", { defaultValue: "API tokens" })}</div>
+      <p className="settings-field-hint">
+        {t("settings.tokens.intro", {
+          defaultValue:
+            "Send as `Authorization: Bearer <token>`. Read tokens may only GET; write tokens may change anything the API exposes. Tokens do not expire — revoke them here.",
+        })}
+      </p>
+
+      {issued && (
+        <div className="settings-subcard settings-token-issued">
+          <div className="settings-subcard-title">
+            {t("settings.tokens.issued", { defaultValue: "Copy this now — it is not shown again" })}
+          </div>
+          <code className="settings-token-value">{issued.token}</code>
+          <button className="settings-btn" onClick={() => setIssued(null)}>
+            {t("action.close", { defaultValue: "Close" })}
+          </button>
+        </div>
+      )}
+
+      <div className="settings-subcard">
+        <div className="settings-subcard-title">{t("settings.tokens.new", { defaultValue: "New token" })}</div>
+        <label className="settings-field">
+          <span className="settings-input-label">{t("settings.tokens.name", { defaultValue: "name" })}</span>
+          <input className="settings-input" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder={t("settings.tokens.namePlaceholder", { defaultValue: "e.g. topology-sync" })} />
+        </label>
+        <label className="settings-field">
+          <span className="settings-input-label">{t("settings.tokens.scope", { defaultValue: "scope" })}</span>
+          <select className="settings-input" value={scope} onChange={(e) => setScope(e.target.value as "read" | "write")}>
+            <option value="read">read</option>
+            <option value="write">write</option>
+          </select>
+        </label>
+        <button className="settings-btn" disabled={busy || !name.trim()} onClick={create}>
+          {t("settings.tokens.create", { defaultValue: "Create" })}
+        </button>
+        {err && <div className="settings-err">{err}</div>}
+      </div>
+
+      {tokens.length > 0 && (
+        <div className="settings-subcard">
+          <div className="settings-subcard-title">{t("settings.tokens.existing", { defaultValue: "Issued" })}</div>
+          {tokens.map((tk) => (
+            <div key={tk.id} className="settings-token-row">
+              <span className="settings-token-name">{tk.name}</span>
+              <span className="settings-token-scope">{tk.scope}</span>
+              <span className="settings-token-used">
+                {tk.lastUsedAt
+                  ? t("settings.tokens.lastUsed", { date: new Date(tk.lastUsedAt).toLocaleString(), defaultValue: `last used ${new Date(tk.lastUsedAt).toLocaleString()}` })
+                  : t("settings.tokens.neverUsed", { defaultValue: "never used" })}
+              </span>
+              <button className="settings-btn" onClick={() => revoke(tk.id)}>
+                {t("settings.tokens.revoke", { defaultValue: "Revoke" })}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

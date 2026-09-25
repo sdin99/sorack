@@ -43,6 +43,13 @@
       "when": 1780489800000,
       "tag": "0005_git_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790298491523,
+      "tag": "0006_api_tokens",
+      "breakpoints": true
     }
   ]
 }

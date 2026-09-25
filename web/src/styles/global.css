@@ -3444,3 +3444,24 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   padding: 8px 16px; cursor: pointer; transition: filter 0.12s; }
 .tf-empty-cta:hover { filter: brightness(1.08); }
 .tf-empty-hint { margin: 14px 0 0 !important; font-size: 12px; color: var(--fg-3); }
+
+/* ─── API tokens (Settings) ────────────────────────────────────────── */
+.settings-token-issued { border-color: var(--accent); }
+.settings-token-value {
+  display: block; font-family: var(--mono); font-size: 12px;
+  word-break: break-all; user-select: all;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  padding: 8px 10px; margin: 6px 0 10px; color: var(--fg-1);
+}
+.settings-token-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.settings-token-row:first-of-type { border-top: none; }
+.settings-token-name { flex: 1; color: var(--fg-1); }
+.settings-token-scope {
+  font-family: var(--mono); font-size: 11px; color: var(--fg-2);
+  border: 1px solid var(--border-strong); border-radius: 3px; padding: 1px 6px;
+}
+.settings-token-used { font-size: 11.5px; color: var(--fg-3); white-space: nowrap; }

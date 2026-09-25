@@ -41,6 +41,9 @@ jobs:
       # plain node with ERR_MODULE_NOT_FOUND — tsx papers over it in dev, and
       # the first place it showed up was a CrashLoopBackOff in the cluster.
       # Load the built entrypoint for real and fail on resolution errors.
+      - name: validator tests
+        run: node scripts/test-validate.mjs
+
       - name: built api resolves under node
         working-directory: api
         env:

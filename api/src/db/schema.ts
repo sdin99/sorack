@@ -150,6 +150,27 @@ export const sessions = auth.table("sessions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ── auth.api_tokens ─────────────────────────────────────────────────
+// Long-lived tokens for programmatic callers (sync scripts, other tools).
+// Same storage discipline as sessions: only the hash is kept, so a DB leak
+// cannot be replayed. Unlike sessions these do not expire — revocation is
+// the deletion of the row, which is why lastUsedAt exists: an operator
+// needs to see which tokens are actually in use before removing one.
+export const apiTokens = auth.table("api_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Operator-facing label. The raw token is shown once at creation and
+  // never again, so this is the only way to tell two tokens apart.
+  name: varchar("name", { length: 128 }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  // "read" | "write". Deliberately two levels: the callers that exist are a
+  // sync script (write) and a reconciler (read). Per-resource scopes would
+  // be combinations nobody uses yet, and narrowing later is easier than
+  // removing a permission somebody started relying on.
+  scope: varchar("scope", { length: 16 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at"),
+});
+
 // ── docs.git_config ─────────────────────────────────────────────────
 // Single-row table holding the operator's Git settings (remote URL,
 // branch, PAT, commit author). "Single row" is enforced by a CHECK on

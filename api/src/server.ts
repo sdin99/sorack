@@ -8,7 +8,7 @@ import { ensureAdminUser } from "./lib/bootstrap.js";
 import { runMigrations } from "./db/migrate.js";
 import { startCollector, stopCollector } from "./health/collector.js";
 import { initialScan, startWatcher, stopWatcher } from "./runbooks/sync.js";
-import { requireAuth } from "./middleware/auth.js";
+import { requireAuth, requireWrite } from "./middleware/auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { nodesRoutes } from "./routes/nodes.js";
 import { edgesRoutes } from "./routes/edges.js";
@@ -17,6 +17,7 @@ import { alertsRoutes } from "./routes/alerts.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { eventsRoutes } from "./routes/events.js";
 import { gitRoutes } from "./routes/git.js";
+import { tokensRoutes } from "./routes/tokens.js";
 import { bootstrapClone, startGitBackground, stopGitBackground } from "./git/runtime.js";
 
 const app = new Hono();
@@ -56,6 +57,9 @@ app.route("/api/auth", authRoutes); // login/logout public; /me self-guards
 // ── auth gate ── ORDER MATTERS: everything mounted below requires a valid
 // session. New data routes MUST be added after this line.
 app.use("/api/*", requireAuth);
+// Read-only tokens may GET; everything else needs write scope. Method-keyed
+// so a route added later is covered without anyone remembering to add it.
+app.use("/api/*", requireWrite);
 
 app.route("/api/nodes", nodesRoutes);
 app.route("/api/edges", edgesRoutes);
@@ -64,6 +68,7 @@ app.route("/api/alerts", alertsRoutes);
 app.route("/api/inventory", inventoryRoutes);
 app.route("/api/events", eventsRoutes);
 app.route("/api/git", gitRoutes);
+app.route("/api/tokens", tokensRoutes);
 
 // ── static web bundle ── ORDER MATTERS: mounted AFTER every /api route so an
 // unmatched /api/* path still 404s as JSON instead of being answered with

@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { nodes } from "../db/schema.js";
 import { getAdapter } from "../health/registry.js";
 import { env } from "../lib/env.js";
+import { validateNode, ValidationError } from "../lib/validate.js";
 
 export const nodesRoutes = new Hono();
 
@@ -20,14 +21,33 @@ nodesRoutes.get("/:id", async (c) => {
 });
 
 nodesRoutes.post("/", async (c) => {
-  const body = await c.req.json();
-  const [row] = await db.insert(nodes).values(body).returning();
+  // Validate before touching the database. Unvalidated input reached
+  // `values(body)` directly, so a malformed request came back as a Postgres
+  // error in a 500 — indistinguishable, to a client with retry logic, from
+  // the server being briefly unwell.
+  let input;
+  try {
+    input = validateNode(await c.req.json().catch(() => null));
+  } catch (e) {
+    if (e instanceof ValidationError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
+  const [row] = await db.insert(nodes).values(input as never).returning();
   return c.json(row, 201);
 });
 
 nodesRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id");
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  // Shape check only. The meta merge below is deliberate and stays as it is;
+  // this just refuses obviously wrong input with a 400 that names the field,
+  // instead of letting it reach Postgres and come back as a 500.
+  try {
+    validateNode(body, { partial: true });
+  } catch (e) {
+    if (e instanceof ValidationError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
   const { meta: incomingMeta, ...rest } = body as Record<string, unknown>;
 
   // meta needs a merge, not a wholesale replace: a partial PATCH (e.g. just

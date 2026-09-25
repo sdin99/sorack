@@ -45,7 +45,21 @@
     "passwordMismatch": "비밀번호가 일치하지 않습니다",
     "passwordTooShort": "비밀번호는 8자 이상이어야 합니다",
     "currentWrong": "현재 비밀번호가 올바르지 않습니다",
-    "runbook": "런북"
+    "runbook": "런북",
+    "tokens": {
+      "nav": "API 토큰",
+      "title": "API 토큰",
+      "intro": "`Authorization: Bearer <토큰>` 으로 보냅니다. read 토큰은 GET 만, write 토큰은 API 가 노출하는 모든 변경이 가능합니다. 만료되지 않으니 여기서 취소하십시오.",
+      "issued": "지금 복사하십시오 — 다시 보여주지 않습니다",
+      "new": "새 토큰",
+      "name": "이름",
+      "namePlaceholder": "예: topology-sync",
+      "scope": "범위",
+      "create": "만들기",
+      "existing": "발급됨",
+      "neverUsed": "사용 이력 없음",
+      "revoke": "취소"
+    }
   },
   "topbar": {
     "searchTrigger": "인프라·런북 검색"

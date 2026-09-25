@@ -45,7 +45,21 @@
     "passwordMismatch": "passwords don't match",
     "passwordTooShort": "password must be at least 8 characters",
     "currentWrong": "current password is incorrect",
-    "runbook": "runbook"
+    "runbook": "runbook",
+    "tokens": {
+      "nav": "API tokens",
+      "title": "API tokens",
+      "intro": "Send as `Authorization: Bearer <token>`. Read tokens may only GET; write tokens may change anything the API exposes. Tokens do not expire — revoke them here.",
+      "issued": "Copy this now — it is not shown again",
+      "new": "New token",
+      "name": "name",
+      "namePlaceholder": "e.g. topology-sync",
+      "scope": "scope",
+      "create": "Create",
+      "existing": "Issued",
+      "neverUsed": "never used",
+      "revoke": "Revoke"
+    }
   },
   "topbar": {
     "searchTrigger": "search infra, runbooks"

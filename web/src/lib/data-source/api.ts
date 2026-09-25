@@ -307,3 +307,42 @@ export async function uploadRunbookAttachment(runbookId: string, file: File): Pr
   }
   return r.json();
 }
+
+// ── API tokens ─────────────────────────────────────────────────────
+// For programmatic callers. `token` comes back only from create — it is
+// stored hashed, so there is no way to show it again.
+export interface ApiToken {
+  id: string;
+  name: string;
+  scope: "read" | "write";
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export async function listApiTokens(): Promise<ApiToken[]> {
+  const r = await fetch("/api/tokens", { credentials: "include" });
+  if (!r.ok) throw new Error("failed to load tokens");
+  return r.json();
+}
+
+export async function createApiToken(
+  name: string,
+  scope: "read" | "write",
+): Promise<ApiToken & { token: string }> {
+  const r = await fetch("/api/tokens", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, scope }),
+  });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => ({}));
+    throw new Error(detail.error ?? "failed to create token");
+  }
+  return r.json();
+}
+
+export async function revokeApiToken(id: string): Promise<void> {
+  const r = await fetch(`/api/tokens/${id}`, { method: "DELETE", credentials: "include" });
+  if (!r.ok) throw new Error("failed to revoke token");
+}
