@@ -3,16 +3,24 @@ title: Deploy on Kubernetes
 description: Self-host sorack on a Kubernetes cluster using the included manifests.
 ---
 
-The repo ships manifests that run sorack as a **dev pod** — it mounts the
-checked-out source via `hostPath` and runs `pnpm dev` inside. It's the simplest
-way to self-host today; a production, image-based deployment is on the roadmap.
-(To just try sorack, the local path in the [Quickstart](/docs/) is quicker.)
+Install from the published image: `deploy/base` is a Kustomize base you point
+an overlay at. Everything site-specific — namespace, image digest, storage
+class, hostname — is deliberately absent from the base, so applying it without
+an overlay fails loudly rather than guessing.
+
+:::caution
+This page used to lead with the **dev pod** under `deploy/dev`, which mounts a
+checkout from the cluster node via `hostPath` and says an image-based install
+"is on the roadmap". That has not been true since v0.1.0, and the dev pod was
+never an install path: it needs the source on the node, and `hostPath` is one
+of the volume types the project's own hardening check rejects. It is a
+development setup and is now documented as one, at the bottom of this page.
+:::
 
 ## Prerequisites
 
 - A Kubernetes cluster with a default `StorageClass`.
-- A clone of this repo on the cluster node that will host the dev pod (the pod
-  mounts the source via `hostPath`).
+- `kubectl` with Kustomize (built in since 1.14).
 - Optional: an ingress controller + cert-manager if you want HTTPS via an
   Ingress; otherwise `kubectl port-forward` works fine.
 
@@ -36,24 +44,57 @@ kubectl apply -f /tmp/sorack-db.yaml
 kubectl apply -f /tmp/sorack-app.yaml
 ```
 
-## 2. Point the dev pod at your checkout
+## 2. Write an overlay
 
-`deploy/dev/deployment.yaml` mounts a `hostPath`. Change it to wherever you
-cloned the repo on the node:
+The base carries no namespace, no image pin, no storage class and no hostname.
+The full annotated template — including why the image is pinned by digest and
+not by tag — is in
+[`deploy/base/README.md`](https://github.com/sdin99/sorack/blob/main/deploy/base/README.md).
+The shape:
 
 ```yaml
-volumes:
-  - name: src
-    hostPath:
-      path: /home/youruser/projects/sorack
-      type: Directory
+# kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: sorack
+resources:
+  # A released tag, never a branch: a branch ref means someone else's push
+  # silently re-renders your overlay.
+  - github.com/sdin99/sorack//deploy/base?ref=v0.1.8
+images:
+  # A digest, not a tag. `newTag: sha-abc1234` looks equally specific and is
+  # not — a tag is a mutable pointer, and this project has had one move
+  # between two digests within a minute of a release.
+  - name: ghcr.io/sdin99/sorack
+    digest: sha256:...   # from the GHCR package page for that version
+patches:
+  - target: { kind: Deployment, name: sorack }
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: sorack }
+      spec:
+        template:
+          spec:
+            containers:
+              - name: sorack
+                env:
+                  - name: POSTGRES_HOST
+                    value: sorack-postgres.sorack.svc.cluster.local
+                  - name: POSTGRES_DB
+                    value: sorack
+  - target: { kind: PersistentVolumeClaim, name: sorack-runbooks }
+    patch: |
+      - op: add
+        path: /spec/storageClassName
+        value: <your-storage-class>
 ```
 
-## 3. Apply the rest
+## 3. Apply
 
 ```bash
 kubectl apply -f deploy/postgres/
-kubectl apply -f deploy/dev/
+kubectl apply -k path/to/your/overlay
 ```
 
 Migrations run automatically when the api boots — there's no separate migrate
@@ -61,9 +102,11 @@ step.
 
 ## 4. Open the UI
 
+The image serves the api and the web bundle on one port.
+
 ```bash
-kubectl port-forward -n sorack svc/sorack 5173:80
-# then open http://localhost:5173
+kubectl port-forward -n sorack svc/sorack 8080:80
+# then open http://localhost:8080
 ```
 
 :::tip
@@ -76,5 +119,37 @@ The initial admin password is printed to the api log once on first boot if you
 didn't pin `SORACK_ADMIN_PASSWORD`:
 
 ```bash
-kubectl logs -n sorack deploy/sorack -c dev | grep -i password
+kubectl logs -n sorack deploy/sorack | grep -i password
 ```
+
+## Developing on sorack
+
+`deploy/dev` is a different thing and not an install path. It mounts a
+checkout from the cluster node over `hostPath` and runs `pnpm dev` inside, so
+edits on the node are live in the pod — useful if you are changing sorack, and
+unsuitable for running it:
+
+- it needs the source present on the node the pod lands on,
+- `hostPath` is one of the volume types the project's own hardening check
+  rejects, and a namespace with `pod-security.kubernetes.io/enforce=restricted`
+  will not admit it,
+- it serves Vite on 5173 rather than the single-port bundle, so the port and
+  the container name differ from everything above.
+
+Point it at your checkout and apply:
+
+```yaml
+volumes:
+  - name: src
+    hostPath:
+      path: /home/youruser/projects/sorack
+      type: Directory
+```
+
+```bash
+kubectl apply -f deploy/postgres/
+kubectl apply -f deploy/dev/
+kubectl port-forward -n sorack svc/sorack 5173:80
+```
+
+The container is named `dev`, so logs need `-c dev`.

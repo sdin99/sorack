@@ -79,9 +79,11 @@ spec:
             # Two Secrets, two concerns:
             #   - sorack-db  : POSTGRES_USERNAME / POSTGRES_PASSWORD
             #   - sorack-app : SORACK_AUTH_SECRET + optional adapter env
-            # See deploy/postgres/secret.example.yaml and
-            # deploy/secret.example.yaml for the expected keys. Both are
-            # optional so the pod can boot before credentials land.
+            # See examples/secret-db.yaml and examples/secret-app.yaml for
+            # the expected keys. Both are optional here so the pod can boot
+            # before credentials land — that is a development convenience and
+            # deliberately not what deploy/base does, where a missing
+            # sorack-db fails at admission and names itself.
             - secretRef:
                 name: sorack-db
                 optional: true

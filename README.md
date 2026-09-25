@@ -37,16 +37,25 @@ node-linked runbooks alongside it — in one open-source dashboard.
 ## Quickstart
 
 ```bash
-git clone https://github.com/sdin99/sorack
-kubectl apply -f sorack/deploy/dev/namespace.yaml
+git clone https://github.com/sdin99/sorack && cd sorack
+kubectl create namespace sorack
 
-# create the sorack-db / sorack-app Secrets (see the docs), then:
-kubectl apply -f sorack/deploy/postgres/
-kubectl apply -f sorack/deploy/dev/
+# create the sorack-db / sorack-app Secrets (examples/ has templates), then:
+kubectl apply -f deploy/postgres/
 
-kubectl -n sorack port-forward svc/sorack 5173:80
-# open http://localhost:5173
+# deploy/base is a Kustomize base — write an overlay that supplies your
+# namespace, image digest and storage class. Template and rationale:
+#   deploy/base/README.md
+kubectl apply -k path/to/your/overlay
+
+kubectl -n sorack port-forward svc/sorack 8080:80
+# open http://localhost:8080
 ```
+
+> `deploy/dev` is **not** this. It mounts a checkout from the cluster node over
+> `hostPath` to give you live reload while working on sorack — it needs the
+> source on the node, and `hostPath` is rejected by this project's own
+> hardening check. See [Developing on sorack](https://sorack.com/docs/kubernetes/).
 
 Migrations run automatically on api boot. The full self-hosting guide —
 Secrets, adapters, environment reference and troubleshooting — is at
