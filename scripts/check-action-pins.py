@@ -37,6 +37,17 @@ from pathlib import Path
 API = "https://api.github.com"
 PIN = re.compile(r"uses:\s+([\w.-]+/[\w.-]+)@([0-9a-f]{40})\s*#\s*(\S+)")
 
+# A comment must name an exact release. `# v4` is a floating tag: it moves
+# with every release in that major line, so resolving it and comparing to the
+# pin marks correct pins as wrong the moment upstream ships v4.3.2.
+#
+# Rejecting the loose form rather than relaxing the comparison for it, because
+# the looser check would pass `# v4` beside a commit that was never in v4 at
+# all — and because `# v4` is the same thing POLICY 3.2 objects to in image
+# tags: a reference that looks fixed and is not. The pin is the fixed part;
+# the comment is for the human, and "v4" does not tell them which v4.
+EXACT_VERSION = re.compile(r"^v?\d+\.\d+\.\d+")
+
 
 def api(path: str) -> dict | None:
     req = urllib.request.Request(f"{API}{path}", headers={
@@ -86,6 +97,13 @@ def main(paths: list[str]) -> int:
             where = f"{f.name}: {repo}@{sha[:12]}… # {ver}"
             if not api(f"/repos/{repo}/commits/{sha}"):
                 errors.append(f"{where} — that commit does not exist in {repo}")
+                continue
+            if not EXACT_VERSION.match(ver):
+                errors.append(
+                    f"{where} — `{ver}` is a floating tag, not a release. It "
+                    "points somewhere else after the next release in that "
+                    "line, so it cannot say which commit this is. Use the "
+                    "exact version (vX.Y.Z).")
                 continue
             tagged = resolve_tag(repo, ver)
             if tagged is None:
