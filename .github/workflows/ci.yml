@@ -36,6 +36,27 @@ jobs:
 
       - run: pnpm build
 
+      # Building is not running. tsc emits ESM that keeps import specifiers
+      # verbatim, so `from "../lib/env"` compiles fine and then dies under
+      # plain node with ERR_MODULE_NOT_FOUND — tsx papers over it in dev, and
+      # the first place it showed up was a CrashLoopBackOff in the cluster.
+      # Load the built entrypoint for real and fail on resolution errors.
+      - name: built api resolves under node
+        working-directory: api
+        env:
+          POSTGRES_USERNAME: ci
+          POSTGRES_PASSWORD: ci
+        run: |
+          node -e "
+          import('./dist/server.js').catch(e => {
+            const m = String(e && e.message || e);
+            if (m.includes('ERR_MODULE_NOT_FOUND')) { console.error('unresolved import:', m); process.exit(1); }
+            console.log('import chain resolved; stopped later at:', m.split('\n')[0]);
+            process.exit(0);
+          });
+          setTimeout(() => { console.log('import chain resolved'); process.exit(0); }, 20000);
+          "
+
   # One job, many steps — deliberately. GitHub bills Actions per job rounded
   # up to the minute, so six 10-second checks split across six jobs costs six
   # minutes for ninety seconds of work. Individual red lights are traded for

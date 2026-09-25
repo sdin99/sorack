@@ -12,7 +12,7 @@
 // lib/env.ts — missing → random + warn (same model as AUTH_SECRET).
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { env } from "../lib/env";
+import { env } from "../lib/env.js";
 
 const ALGO = "aes-256-gcm";
 const IV_BYTES = 12;

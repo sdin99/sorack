@@ -15,7 +15,7 @@ import git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { withLock, treeLockKey } from "../lib/locks";
+import { withLock, treeLockKey } from "../lib/locks.js";
 
 export interface GitConfig {
   remote: string;

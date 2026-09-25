@@ -8,11 +8,11 @@
 
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { gitConfig } from "../db/schema";
-import { getGitClient } from "../git/runtime";
-import { getConfigSource, isGitEnabled, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config";
-import { encryptToken } from "../git/crypto";
+import { db } from "../db/index.js";
+import { gitConfig } from "../db/schema.js";
+import { getGitClient } from "../git/runtime.js";
+import { getConfigSource, isGitEnabled, loadGitConfig, saveGitConfig, type SaveablePatch } from "../git/config.js";
+import { encryptToken } from "../git/crypto.js";
 
 export const gitRoutes = new Hono();
 

@@ -2,8 +2,8 @@
 // initial topology + sidebar. Web side ends up calling this once on load
 // and then uses smaller endpoints for mutations.
 import { Hono } from "hono";
-import { db } from "../db";
-import { nodes, edges } from "../db/schema";
+import { db } from "../db/index.js";
+import { nodes, edges } from "../db/schema.js";
 
 export const inventoryRoutes = new Hono();
 

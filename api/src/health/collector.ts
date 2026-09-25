@@ -13,11 +13,11 @@
 // clobber what we persist here.
 
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { nodes } from "../db/schema";
-import { env } from "../lib/env";
-import { getAdapter } from "./registry";
-import type { HealthRecord, ProbeConfig } from "./types";
+import { db } from "../db/index.js";
+import { nodes } from "../db/schema.js";
+import { env } from "../lib/env.js";
+import { getAdapter } from "./registry.js";
+import type { HealthRecord, ProbeConfig } from "./types.js";
 
 type NodeRow = typeof nodes.$inferSelect;
 

@@ -4,8 +4,8 @@
 // route.
 import type { MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
-import { SESSION_COOKIE } from "../lib/cookie";
-import { readSession, type SessionUser } from "../lib/session";
+import { SESSION_COOKIE } from "../lib/cookie.js";
+import { readSession, type SessionUser } from "../lib/session.js";
 
 declare module "hono" {
   interface ContextVariableMap {

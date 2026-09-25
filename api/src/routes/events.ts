@@ -8,7 +8,7 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { eventBus, type SorackEvent } from "../events";
+import { eventBus, type SorackEvent } from "../events.js";
 
 export const eventsRoutes = new Hono();
 

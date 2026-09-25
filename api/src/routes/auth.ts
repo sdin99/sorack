@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { users } from "../db/schema";
-import { hashPassword, verifyPassword } from "../lib/password";
-import { createSession, destroySession, destroyAllSessions } from "../lib/session";
-import { setSessionCookie, clearSessionCookie, SESSION_COOKIE } from "../lib/cookie";
+import { db } from "../db/index.js";
+import { users } from "../db/schema.js";
+import { hashPassword, verifyPassword } from "../lib/password.js";
+import { createSession, destroySession, destroyAllSessions } from "../lib/session.js";
+import { setSessionCookie, clearSessionCookie, SESSION_COOKIE } from "../lib/cookie.js";
 import { getCookie } from "hono/cookie";
-import { rateLimit, rateLimitReset } from "../lib/ratelimit";
-import { requireAuth } from "../middleware/auth";
+import { rateLimit, rateLimitReset } from "../lib/ratelimit.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const authRoutes = new Hono();
 

@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { nodes } from "../db/schema";
-import { getAdapter } from "../health/registry";
-import { env } from "../lib/env";
+import { db } from "../db/index.js";
+import { nodes } from "../db/schema.js";
+import { getAdapter } from "../health/registry.js";
+import { env } from "../lib/env.js";
 
 export const nodesRoutes = new Hono();
 

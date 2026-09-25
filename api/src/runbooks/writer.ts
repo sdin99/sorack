@@ -5,7 +5,7 @@
 import { writeFile, rename, mkdir } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
-import type { RunbookRow } from "./loader";
+import type { RunbookRow } from "./loader.js";
 
 export function pathForId(dir: string, id: string): string {
   return path.join(dir, `${id}.md`);

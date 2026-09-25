@@ -3,7 +3,7 @@
 // secure is on by default (https), toggled off only for local http debug.
 import type { Context } from "hono";
 import { setCookie, deleteCookie } from "hono/cookie";
-import { env } from "./env";
+import { env } from "./env.js";
 
 export const SESSION_COOKIE = "sorack_session";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days, matches session TTL

@@ -9,10 +9,10 @@
 // the input is locked.
 
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { gitConfig } from "../db/schema";
-import type { GitConfig } from "./client";
-import { decryptToken } from "./crypto";
+import { db } from "../db/index.js";
+import { gitConfig } from "../db/schema.js";
+import type { GitConfig } from "./client.js";
+import { decryptToken } from "./crypto.js";
 
 const ENV = {
   ENABLED: process.env.SORACK_GIT_ENABLED, // string "true" | "false" | undefined

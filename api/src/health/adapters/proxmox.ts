@@ -24,7 +24,7 @@
 // TLS verification stays ON unless SORACK_PROXMOX_INSECURE=true.
 
 import https from "node:https";
-import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types";
+import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
 
 interface ProxmoxProbe extends ProbeConfig {
   node?: string; // PVE node name; falls back to SORACK_PROXMOX_NODE

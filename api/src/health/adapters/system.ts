@@ -25,7 +25,7 @@
 // just the metrics we need with one regex per line.
 
 import http from "node:http";
-import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types";
+import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
 
 interface SystemProbe extends ProbeConfig {
   host?: string;

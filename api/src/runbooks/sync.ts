@@ -11,12 +11,12 @@ import { readdir, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { eq, notInArray } from "drizzle-orm";
-import { db } from "../db";
-import { runbooks } from "../db/schema";
-import { env } from "../lib/env";
-import { loadFile, idFromPath, defaultMeta, type RunbookRow, type RunbookMeta } from "./loader";
-import { writeRow, pathForId } from "./writer";
-import { emitEvent } from "../events";
+import { db } from "../db/index.js";
+import { runbooks } from "../db/schema.js";
+import { env } from "../lib/env.js";
+import { loadFile, idFromPath, defaultMeta, type RunbookRow, type RunbookMeta } from "./loader.js";
+import { writeRow, pathForId } from "./writer.js";
+import { emitEvent } from "../events.js";
 
 let watcher: FSWatcher | null = null;
 

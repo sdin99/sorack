@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { desc } from "drizzle-orm";
-import { db } from "../db";
-import { alerts } from "../db/schema";
+import { db } from "../db/index.js";
+import { alerts } from "../db/schema.js";
 
 export const alertsRoutes = new Hono();
 

@@ -13,7 +13,7 @@
 
 import { readFile, readdir, writeFile, unlink, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { env } from "../lib/env";
+import { env } from "../lib/env.js";
 
 const SAFE_NAME = /^[^/\\]+$/; // anything but path separators
 

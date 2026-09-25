@@ -2,7 +2,7 @@
 // portable stand-in for ICMP ping (which needs raw sockets / CAP_NET_RAW).
 
 import net from "node:net";
-import type { ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types";
+import type { ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
 
 interface TcpProbe extends ProbeConfig {
   host: string;

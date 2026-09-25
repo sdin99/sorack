@@ -3,12 +3,12 @@
 // Adding a source is one import + one register() call here (plus the
 // adapter file). The collector never changes.
 
-import type { ProbeAdapter } from "./types";
-import { httpAdapter } from "./adapters/http";
-import { tcpAdapter } from "./adapters/tcp";
-import { k8sAdapter } from "./adapters/k8s";
-import { proxmoxAdapter } from "./adapters/proxmox";
-import { systemAdapter } from "./adapters/system";
+import type { ProbeAdapter } from "./types.js";
+import { httpAdapter } from "./adapters/http.js";
+import { tcpAdapter } from "./adapters/tcp.js";
+import { k8sAdapter } from "./adapters/k8s.js";
+import { proxmoxAdapter } from "./adapters/proxmox.js";
+import { systemAdapter } from "./adapters/system.js";
 
 const adapters = new Map<string, ProbeAdapter>();
 

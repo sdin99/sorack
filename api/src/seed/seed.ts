@@ -9,8 +9,8 @@
 // adapter output (health, metrics, k8s counts) is written at runtime under
 // meta.observed.* — never seeded. Root config keys (probe / iconKind /
 // softwareProbes / statusPrimary) likewise aren't seeded here.
-import { db } from "../db";
-import { nodes, runbooks, alerts } from "../db/schema";
+import { db } from "../db/index.js";
+import { nodes, runbooks, alerts } from "../db/schema.js";
 
 const seedNodes = [
   {

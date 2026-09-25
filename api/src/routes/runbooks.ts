@@ -7,19 +7,19 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
-import { db } from "../db";
-import { runbooks } from "../db/schema";
-import { env } from "../lib/env";
-import { withLock, treeLockKey } from "../lib/locks";
+import { db } from "../db/index.js";
+import { runbooks } from "../db/schema.js";
+import { env } from "../lib/env.js";
+import { withLock, treeLockKey } from "../lib/locks.js";
 
 // Working-tree gate shared with GitClient (see lib/locks.ts for the lock
 // ordering contract). Every file write below takes runbook:<id> first, then
 // this — so a save can't land inside pull's dirty-check → force-checkout
 // window.
 const TREE = () => treeLockKey(env.RUNBOOKS_DIR);
-import { writeRow } from "../runbooks/writer";
-import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader";
-import { TEMPLATES } from "../runbooks/templates";
+import { writeRow } from "../runbooks/writer.js";
+import { defaultMeta, type RunbookRow, type RunbookMeta } from "../runbooks/loader.js";
+import { TEMPLATES } from "../runbooks/templates.js";
 import {
   AttachmentError,
   contentTypeForName,
@@ -28,7 +28,7 @@ import {
   readAttachment,
   uniqueName,
   writeAttachment,
-} from "../runbooks/attachments";
+} from "../runbooks/attachments.js";
 
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
 

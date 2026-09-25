@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { edges } from "../db/schema";
+import { db } from "../db/index.js";
+import { edges } from "../db/schema.js";
 
 export const edgesRoutes = new Hono();
 

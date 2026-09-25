@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { DATABASE_URL } from "../lib/env";
-import * as schema from "./schema";
+import { DATABASE_URL } from "../lib/env.js";
+import * as schema from "./schema.js";
 
 // `prepare: false` — required for runtime statements with drizzle-orm
 // when the connection pool may reset (k8s rolling restart).

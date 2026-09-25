@@ -7,10 +7,10 @@
 // `startGitBackground()`), parallel to how the health collector wires
 // in.
 
-import { env } from "../lib/env";
-import { emitEvent } from "../events";
-import { GitClient, dirHasContent } from "./client";
-import { loadGitConfig } from "./config";
+import { env } from "../lib/env.js";
+import { emitEvent } from "../events.js";
+import { GitClient, dirHasContent } from "./client.js";
+import { loadGitConfig } from "./config.js";
 
 let client: GitClient | null = null;
 

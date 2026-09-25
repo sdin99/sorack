@@ -1,7 +1,7 @@
 // HTTP probe — the most universal health check (any service with a URL).
 // Uses the global fetch + the collector's AbortSignal for timeout/shutdown.
 
-import type { ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types";
+import type { ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
 
 interface HttpProbe extends ProbeConfig {
   url: string;

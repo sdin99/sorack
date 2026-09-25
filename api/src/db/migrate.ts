@@ -14,7 +14,7 @@ import { dirname, resolve } from "node:path";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import { DATABASE_URL } from "../lib/env";
+import { DATABASE_URL } from "../lib/env.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_FOLDER = resolve(HERE, "./migrations");

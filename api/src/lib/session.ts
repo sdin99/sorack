@@ -5,9 +5,9 @@
 // JWT).
 import { createHash, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { sessions, users } from "../db/schema";
-import { env } from "./env";
+import { db } from "../db/index.js";
+import { sessions, users } from "../db/schema.js";
+import { env } from "./env.js";
 
 const TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 

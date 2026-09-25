@@ -5,7 +5,7 @@
 // This keeps adapters trivial to add: a new source (k8s, proxmox, …) is one
 // file implementing ProbeAdapter plus one line in registry.ts.
 
-import type { nodes } from "../db/schema";
+import type { nodes } from "../db/schema.js";
 
 type NodeRow = typeof nodes.$inferSelect;
 

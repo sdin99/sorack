@@ -12,7 +12,7 @@
 
 import https from "node:https";
 import { readFileSync } from "node:fs";
-import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types";
+import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
 
 const SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount";
 

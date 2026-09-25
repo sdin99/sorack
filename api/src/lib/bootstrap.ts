@@ -2,10 +2,10 @@
 // admin account. Password comes from SORACK_ADMIN_PASSWORD, or is randomly
 // generated and printed to the log exactly once.
 import { randomBytes } from "node:crypto";
-import { db } from "../db";
-import { users } from "../db/schema";
-import { env } from "./env";
-import { hashPassword } from "./password";
+import { db } from "../db/index.js";
+import { users } from "../db/schema.js";
+import { env } from "./env.js";
+import { hashPassword } from "./password.js";
 
 export async function ensureAdminUser(): Promise<void> {
   const existing = await db.select({ id: users.id }).from(users).limit(1);
