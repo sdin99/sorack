@@ -20,11 +20,17 @@
 
   --fg-1: #e6edf3;
   --fg-2: #aab4c0;
-  --fg-3: #6e7886;
+  /* 4.51:1 on --bg. #6e7886 was 3.62 and this is body-size text. */
+  --fg-3: #7e8896;
   --fg-4: #4a5360;
 
   --accent:       #58a6ff;
   --accent-soft:  #1b2c44;
+  /* Keyboard focus ring. Additive — drawn outside the element's own border
+     so it works on fields that already wear an accent border at rest, where
+     changing border-color has nothing left to say. Derived from --accent so
+     it follows the theme. */
+  --focus-ring:   color-mix(in oklab, #58a6ff 55%, transparent);
   /* Primary action button (Save / Submit / Finish). Distinct from --accent so
      text/link accent stays independent of button styling. Stays saturated in
      both themes — white text reads on it in both. */
@@ -68,13 +74,20 @@
   --hover-bg:     #ecebe4;
   --fg-1: #1a1a1a;
   --fg-2: #4a4a4a;
-  --fg-3: #6e6e6e;
+  /* 4.56:1 on --surface-3, the worst of the three light backgrounds. #6e6e6e
+     cleared 4.75 on --bg and only 4.43 there — a tinted surface is the case
+     a measurement against the page background does not cover. */
+  --fg-3: #6c6c6c;
   --fg-4: #9a9a9a;
   --accent:       #2058c8;
   --accent-soft:  #e0ebff;
+  --focus-ring:   color-mix(in oklab, #2058c8 55%, transparent);
   /* Same saturated blue as dark — white text still reads on it. */
-  --ok:           #1f8a5b;
-  --warn:         #c08a2e;
+  /* 4.54:1 on the lightest surface. #1f8a5b was 3.76. */
+  --ok:           #117c4d;
+  /* 4.53:1 on the lightest surface. #c08a2e was 2.64 and this colour
+     carries meaning as text, not just as a dot. */
+  --warn:         #976105;
   --err:          #b14a3a;
   /* Lighter, less inky shadows for the paper-like light surface. */
   --scrim:      rgba(30,30,30,0.32);
@@ -3445,6 +3458,40 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   padding: 8px 16px; cursor: pointer; transition: filter 0.12s; }
 .tf-empty-cta:hover { filter: brightness(1.08); }
 .tf-empty-hint { margin: 14px 0 0 !important; font-size: 12px; color: var(--fg-3); }
+
+/* ─── Keyboard focus on inline editors ─────────────────── */
+/* These eight fields drop the UA outline, and the house focus pattern
+   elsewhere in this file — `:focus { border-color: var(--accent) }` — cannot
+   replace it for them: they already wear the accent border at rest, because
+   that border is what marks them as an open editor. The pattern's result was
+   applied permanently, so focus had nothing left to change, and `outline:
+   none` removed the only remaining signal.
+
+   It shows when two editors are open at once. A runbook heading and its
+   summary look identical, and nothing says which one the keystrokes reach.
+
+   A ring is additive and does not move layout.
+
+   ‼ `:focus-visible` is NOT doing what its name suggests here. A text field
+   always matches it once focused, however focus was gained, because it takes
+   keyboard input — measured: click and Tab both produce the ring. It differs
+   only for .nd-health-select, which is a <select>. It is still the right
+   selector (it is correct for the one case where the two diverge), but do not
+   reach for it expecting mouse clicks to stay quiet. */
+.sheet-head-kind-input:focus-visible,
+.sheet-head-name-input:focus-visible,
+.nd-health-select:focus-visible,
+.spec-v-input:focus-visible,
+.rb-create-title:focus-visible,
+.rb-h1--input:focus-visible,
+.rb-summary--input:focus-visible,
+.nd-tags-input:focus-visible {
+  /* A gap before the ring, not a thicker border. Without it the ring sits
+     flush against the accent border the field already has and the two read
+     as one slightly-heavier edge — measured: at 2px flush, the focused and
+     unfocused fields were hard to tell apart side by side. */
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
+}
 
 /* ─── API keys (Settings) ────────────────────────────────────────── */
 .settings-key-issued { border-color: var(--accent); }
