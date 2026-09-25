@@ -58,6 +58,37 @@ is not reaching sorack — something in front of it is answering. An identity
 proxy that returns its login page with `200` is the usual cause, and it looks
 like a working request to most clients.
 
+## Attaching software to a node
+
+Software running on a host or VM is not a node. It lives on the node it runs
+on, under `meta.software` (which ids are present) and `meta.softwareProbes`
+(how to check each one). Both go through the node's own `PATCH`:
+
+```bash
+curl -X PATCH .../api/nodes/k8s-master -H 'content-type: application/json' -d '{
+  "meta": {
+    "software": ["containerd", "kubelet", "cnpg"],
+    "softwareProbes": { "cnpg": { "type": "tcp", "host": "10.0.0.10", "port": 5432 } }
+  }
+}'
+```
+
+`meta` is merged, not replaced, so a `PATCH` that touches one key keeps the
+others. Two exceptions matter to a script:
+
+- **`meta.software` is an array and is replaced wholesale.** It is the list,
+  not an addition to it.
+- **Sending `software` deletes the probes of anything absent from it.** That
+  is deliberate — unchecking software in the UI should not leave its probe and
+  its collected metrics behind forever — but it means one `PATCH` per software
+  does not accumulate. Measured: `{"software":["containerd"],…}` followed by
+  `{"software":["kubelet"],…}` leaves `kubelet` alone, with no error.
+
+So **send every software for a node in one `PATCH`**, with the complete list.
+
+`meta.observed.*` is owned by the collector and is kept from the database on
+every write, so a caller cannot clobber it and does not need to send it back.
+
 ## Notes for callers
 
 - Keys do not expire. Revocation is the only way out, which is why

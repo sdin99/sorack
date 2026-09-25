@@ -176,6 +176,49 @@ export const TYPE_DETAIL: Record<string, DetailEntry[]> = {
     { key: "phase", label: "phase", source: "k8s", hint: { en: "PVC lifecycle phase", ko: "PVC 라이프사이클 단계" } },
     { widget: "gauges", header: "nd.widget.requests", source: "prom", metrics: ["disk"] },
   ],
+  // A CronJob is not a Service. The k8s_service bundle — clusterIP, ports,
+  // selector, endpoints — describes nothing about one, which is how the
+  // infra team's backups ended up with no usable type at all.
+  //
+  // ‼ The health collector already reads batch/v1 and has schedule,
+  // lastScheduleTime and lastSuccessfulTime in hand (v0.1.7); it just had
+  // nowhere to put them. It deliberately does NOT score them: a threshold
+  // guessed without knowing the period invents alerts on a weekly job and
+  // misses an hourly one. This is the first type that is shown and not
+  // judged, and `lastStatus` is reported, not graded.
+  k8s_cronjob: [
+    { key: "schedule", label: "schedule", source: "k8s", hint: { en: "Cron expression", ko: "cron 표현식" } },
+    { key: "lastScheduleTime", label: "last run", source: "k8s", hint: { en: "When it last started", ko: "마지막으로 시작한 시각" } },
+    { key: "lastSuccessfulTime", label: "last success", source: "k8s", hint: { en: "When it last completed successfully", ko: "마지막으로 성공한 시각" } },
+    { key: "lastStatus", label: "last status", source: "k8s", hint: { en: "Outcome of the most recent run", ko: "가장 최근 실행의 결과" } },
+    { key: "suspend", label: "suspended", source: "k8s", hint: { en: "Whether the schedule is paused", ko: "스케줄이 일시 중지됐는지" } },
+    { key: "target", label: "target", source: "manual", hint: { en: "What this job acts on (e.g. which database)", ko: "이 작업의 대상 (예: 어느 데이터베이스)" } },
+  ],
+  // Something we depend on and do not run. A registrar, a CDN, an identity
+  // provider. Typing one as `host` puts it among our own machines and leaves
+  // ip / os / kernel / uptime permanently blank — and empty fields are how a
+  // wrong type shows itself.
+  //
+  // ‼ Not for something of ours that merely runs elsewhere. A Worker we
+  // deploy and fix is ours; the platform under it is not. The line is whether
+  // we can change it, not where it runs.
+  external_service: [
+    { key: "provider", label: "provider", source: "manual", hint: { en: "Who operates it", ko: "누가 운영하는가" } },
+    { key: "scope", label: "scope", source: "manual", hint: { en: "What we depend on it for", ko: "무엇을 의존하고 있는가" } },
+    { key: "endpoint", label: "endpoint", source: "manual", hint: { en: "Public endpoint or console URL", ko: "공개 엔드포인트 또는 콘솔 주소" } },
+    { key: "account", label: "account", source: "manual", hint: { en: "Account or tenant identifier", ko: "계정 또는 테넌트 식별자" } },
+    { key: "support", label: "support", source: "manual", hint: { en: "Where to go when it breaks", ko: "장애 시 연락 경로" } },
+  ],
+  // Ours, deployed by us, running on somebody else's platform — a Cloudflare
+  // Worker, a managed function. Kept apart from external_service because the
+  // distinction that matters in an incident is whether we can fix it, and
+  // these have a version and a deploy that answer to us.
+  hosted_app: [
+    { key: "platform", label: "platform", source: "manual", hint: { en: "Where it runs (e.g. Cloudflare Workers)", ko: "어디서 도는가 (예: Cloudflare Workers)" } },
+    { key: "url", label: "URL", source: "manual", hint: { en: "Public address", ko: "공개 주소" } },
+    { key: "repo", label: "repo", source: "manual", hint: { en: "Source repository", ko: "소스 저장소" } },
+    { key: "deployedVersion", label: "version", source: "manual", hint: { en: "Version currently deployed", ko: "현재 배포된 버전" } },
+  ],
   share: [
     { key: "protocol", label: "protocol", source: "manual", hint: { en: "Share protocol (NFS, SMB)", ko: "공유 프로토콜 (NFS, SMB)" } },
     { key: "size", label: "size", source: "manual", hint: { en: "Total share capacity", ko: "전체 공유 용량" } },
@@ -315,6 +358,57 @@ export const SOFTWARE: Record<string, SoftwareTemplate> = {
       { key: "promVersion", label: "version", source: "manual", hint: { en: "Prometheus version", ko: "Prometheus 버전" } },
       { key: "retention", label: "retention", source: "manual", hint: { en: "Metric retention period", ko: "메트릭 보존 기간" } },
       { key: "targets", label: "targets", source: "manual", hint: { en: "Scrape targets count", ko: "스크레이프 타겟 수" } },
+    ],
+  },
+  containerd: {
+    name: "containerd",
+    category: "Runtime",
+    description: "Container runtime that actually starts the containers a kubelet asks for.",
+    appliesTo: COMPUTE,
+    probe: "tcp",
+    allowedProbeTypes: ["tcp"],
+    entries: [
+      { key: "containerdVersion", label: "version", source: "manual", hint: { en: "containerd version", ko: "containerd 버전" } },
+      { key: "socket", label: "socket", source: "manual", hint: { en: "CRI socket path", ko: "CRI 소켓 경로" } },
+      { key: "cgroupDriver", label: "cgroup driver", source: "manual", hint: { en: "systemd or cgroupfs", ko: "systemd 또는 cgroupfs" } },
+    ],
+  },
+  kubelet: {
+    name: "kubelet",
+    category: "Kubernetes",
+    description: "Node agent. If it stops, the node stops being a node long before the pods notice.",
+    appliesTo: COMPUTE,
+    probe: "http",
+    allowedProbeTypes: ["http", "tcp"],
+    entries: [
+      { key: "kubeletVersion", label: "version", source: "manual", hint: { en: "kubelet version", ko: "kubelet 버전" } },
+      { key: "healthzPort", label: "healthz port", source: "manual", hint: { en: "Port serving /healthz (usually 10248)", ko: "/healthz 포트 (보통 10248)" } },
+      { key: "nodeName", label: "registers as", source: "manual", hint: { en: "Node name it registers under", ko: "등록되는 노드 이름" } },
+    ],
+  },
+  cnpg: {
+    name: "CloudNativePG",
+    category: "Kubernetes",
+    description: "Postgres operator. Not a service — it is the thing that creates them.",
+    appliesTo: COMPUTE,
+    probe: "http",
+    allowedProbeTypes: ["http", "tcp"],
+    entries: [
+      { key: "cnpgVersion", label: "version", source: "manual", hint: { en: "Operator version", ko: "오퍼레이터 버전" } },
+      { key: "clusters", label: "clusters", source: "manual", hint: { en: "Postgres clusters it manages", ko: "관리 중인 Postgres 클러스터" } },
+      { key: "backupTarget", label: "backup target", source: "manual", hint: { en: "Where backups are written", ko: "백업이 쓰이는 곳" } },
+    ],
+  },
+  "claude-rc": {
+    name: "Claude runtime",
+    category: "Tooling",
+    description: "Agent runtime on the host. Shares the host PID namespace, which is worth remembering before matching processes by name.",
+    appliesTo: COMPUTE,
+    probe: "tcp",
+    allowedProbeTypes: ["tcp"],
+    entries: [
+      { key: "rcVersion", label: "version", source: "manual", hint: { en: "Runtime version", ko: "런타임 버전" } },
+      { key: "workdir", label: "workdir", source: "manual", hint: { en: "Working directory it operates in", ko: "작업 디렉토리" } },
     ],
   },
   argocd: {

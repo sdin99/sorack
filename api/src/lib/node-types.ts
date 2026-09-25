@@ -24,6 +24,9 @@ export const NODE_TYPES: readonly string[] = [
   "k8s_cluster",
   "k8s_service",
   "k8s_pvc",
+  "k8s_cronjob",
+  "external_service",
+  "hosted_app",
   "share",
   // short forms, accepted and resolved to the canonical schema
   "ct",

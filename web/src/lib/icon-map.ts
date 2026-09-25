@@ -30,6 +30,12 @@ const TYPE_TO_ICON: Record<string, IconKind> = {
   svc: "svc",
   k8s_pvc: "pvc",
   pvc: "pvc",
+  // No dedicated glyphs for these yet, so they borrow the closest shape
+  // rather than silently landing on the generic fallback. Listed explicitly
+  // so the omission is a decision someone can find, not an absence.
+  k8s_cronjob: "svc",
+  external_service: "router",
+  hosted_app: "svc",
   share: "share",
 };
 
