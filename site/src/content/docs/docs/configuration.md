@@ -43,5 +43,50 @@ the highlights are below.
 | `SORACK_RUNBOOKS_DIR`  | —       | Directory for runbook `.md` files (file backend).|
 | `PORT`                 | `3001`  | API port.                                        |
 
+## Git sync for runbooks
+
+Optional. Runbooks work with no git at all — the files in `SORACK_RUNBOOKS_DIR`
+are the source of truth and the database is a cache of them. A remote is a
+layer over that directory, not a requirement for having one.
+
+| Variable                   | Default  | Notes                                              |
+| -------------------------- | -------- | -------------------------------------------------- |
+| `SORACK_GIT_ENABLED`       | —        | **Required if you configure git by env.** See below.|
+| `SORACK_GIT_REMOTE`        | —        | Clone/push URL.                                     |
+| `SORACK_GIT_BRANCH`        | `main`   |                                                     |
+| `SORACK_GIT_USERNAME`      | —        | Any non-empty value for GitHub; the token authenticates. |
+| `SORACK_GIT_TOKEN`         | —        | Personal access token, write scope on the repo.     |
+| `SORACK_GIT_AUTHOR_NAME`   | `sorack` | Commit author.                                      |
+| `SORACK_GIT_AUTHOR_EMAIL`  | —        |                                                     |
+
+:::caution[`SORACK_GIT_ENABLED` is not optional when you use env]
+Storage mode is a toggle, and the toggle lives in the database row the
+Settings screen writes. With no row — which is the normal state for a
+deployment configured entirely by environment — it reads `false`, and git
+stays off no matter what else you set.
+
+Setting `SORACK_GIT_REMOTE` and `SORACK_GIT_TOKEN` and nothing else produces
+an instance that looks configured and is idle: `/api/git/pull` answers `412
+not configured` and nothing tells you why.
+:::
+
+Env wins over the stored row, field by field, and the Settings screen greys
+out the fields env has pinned. A field you set in the UI first and by env
+later becomes the env value, so check the screen — it shows what git actually
+uses, and labels where each value came from.
+
+`SORACK_GIT_TOKEN_KEY` is unrelated: it encrypts a token *stored in the
+database* by the Settings screen. An env-configured deployment never decrypts
+anything and does not need it. If you do set it, it must be exactly 32 bytes
+of base64 (`openssl rand -base64 32`) or the api refuses to start.
+
+### Already have runbooks and want a remote now?
+
+Settings → Runbook shows an **Adopt into remote** button when the directory
+has files, a remote is configured, and it is not a repository yet. It commits
+what is there and pushes it. If the remote already has commits, the two are
+merged; if both sides have a file with the same name it refuses and names the
+files, having written nothing.
+
 Optional adapter credentials (Proxmox, etc.) are covered in
 [Probes & adapters](/docs/adapters/).
