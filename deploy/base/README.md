@@ -14,7 +14,7 @@ intentional: a missing pin should be loud.
 | | Why it is not in the base |
 |---|---|
 | `namespace` | Site-specific. Also patch the ClusterRoleBinding subject namespace if it is not `sorack`. |
-| image pin (`images:`) | A base must not carry a mutable tag. Pin a digest or `sha-<git>`. |
+| image pin (`images:`) | A base must not carry a mutable tag. Pin a digest. `sha-<git>` reads like a content address but is still a pointer the registry can move. |
 | `POSTGRES_HOST` / `POSTGRES_DB` | Deliberately empty so one postgres can host several instances without either migrating the other's schema. Migrations run on boot. |
 | `storageClassName` on `sorack-runbooks` | Omitting it silently means "cluster default", which is rarely what you want. |
 | Secrets `sorack-db`, `sorack-app` | Never in Git as plaintext. Use SealedSecrets / External Secrets / your own tooling. Keys: `examples/secret-db.yaml`, `examples/secret-app.yaml`. |
@@ -32,8 +32,11 @@ resources:
   # silently re-renders your overlay.
   - github.com/sdin99/sorack//deploy/base?ref=v0.1.0
 images:
+  # A digest, not a tag. `newTag: sha-abc1234` looks equally specific and is
+  # not: a tag is a mutable pointer, and this project has already had one
+  # move between two digests within a minute of a release.
   - name: ghcr.io/sdin99/sorack
-    newTag: sha-abc1234
+    digest: sha256:...
 patches:
   # Strategic merge, not a JSON patch by index. `name` is the merge key for
   # env entries, so this keeps working when the base adds a variable —

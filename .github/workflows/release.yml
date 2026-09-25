@@ -2,7 +2,16 @@
 #
 # Two triggers, two kinds of tag:
 #   push to main  → sha-<short>   — what a homelab overlay pins day to day
-#   push of v*    → v1.2.3, 1.2   — release tags
+#   push of v*    → v1.2.3        — release tags
+#
+# That split is enforced in the `tags:` block below, not just described here.
+# It used to be only described: `type=sha` ran on every event, so a release
+# built the image twice — once from the main push, once from the tag push —
+# and both builds claimed `sha-<short>`. Measured on v0.1.7 (5f45fc5): the
+# tag pointed at sha256:4eb3f96b… at 01:32 and sha256:e04584c1… at 01:33,
+# and the displaced digest was left with no tags at all, so a pin written by
+# tag name could later resolve to a GC candidate. `sha-<commit>` reads like a
+# content address and was not one.
 #
 # There is deliberately no `latest`: POLICY [3.1] forbids deploying a mutable
 # tag, and publishing one just invites someone to use it.
@@ -53,8 +62,20 @@ jobs:
           # README. Only immutable references are published.
           flavor: |
             latest=false
+          # The `enable=` below is load-bearing, not decoration: without it the
+          # sha- line also fires on the tag push and overwrites the main
+          # build's tag (see the header). A release commit therefore ends up
+          # with two digests — sha-<commit> from main, <version> from the tag.
+          # That is correct. The builds are not reproducible, so one name
+          # covering both would have to lie about one of them.
+          #
+          # Kept as a YAML comment rather than a `#` line inside `tags:`. The
+          # action does strip those, but the value of that stripping is a
+          # behaviour of a third-party action, and the last two bugs in this
+          # file were both a metadata-action behaviour differing from what the
+          # comment beside it claimed.
           tags: |
-            type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-,format=short,enable=${{ github.ref_type != 'tag' }}
             type=semver,pattern={{version}}
 
       # Skipped for pull_request, where the push step is a no-op anyway.
