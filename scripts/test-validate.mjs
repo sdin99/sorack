@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { NODE_TYPES } from "../api/dist/lib/node-types.js";
 import { isMonitored, withMonitored } from "../api/dist/lib/monitored.js";
-import { coordinateId, probeClaims } from "../api/dist/health/coordinates.js";
+import { coordinateId, probeClaims, probeForCoordinate } from "../api/dist/health/coordinates.js";
 import { validateNode, validateEdge, ValidationError } from "../api/dist/lib/validate.js";
 
 let pass = 0;
@@ -127,6 +127,16 @@ accepts("a short-form type", () => validateNode({ id: "a", type: "svc", name: "x
     const got = probeClaims(meta, name, coord);
     if (got === want) pass++;
     else failures.push(`probeClaims: ${label} → ${got}, expected ${want}`);
+  }
+
+  // A discovered node arrives already watched. The pair that matters is that
+  // the probe it gets is one that would claim its own coordinate — otherwise
+  // a re-sweep would fail to recognise the node it just made and create a
+  // second one beside it.
+  for (const [, , , coord] of claims.slice(0, 2)) {
+    const probe = probeForCoordinate(coord);
+    if (probeClaims({ probe }, "irrelevant", coord)) pass++;
+    else failures.push(`probeForCoordinate: ${JSON.stringify(coord)} produced a probe that does not claim it`);
   }
 }
 

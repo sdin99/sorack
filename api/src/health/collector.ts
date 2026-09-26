@@ -126,12 +126,12 @@ async function probeNode(node: NodeRow): Promise<void> {
   if (infra?.discovered?.nodes) {
     try {
       const r = await reconcileDiscovered(node.id, infra.discovered.nodes, infra.discovered.kindsRead ?? []);
-      const changed = r.created.length + r.returned.length + r.gone.length;
+      const changed = r.created.length + r.equipped.length + r.returned.length + r.gone.length;
       if (changed > 0) {
         // eslint-disable-next-line no-console
         console.log(
-          `[discovery] ${node.id}: +${r.created.length} created, ${r.returned.length} returned, ` +
-          `${r.gone.length} marked gone, ${r.claimed.length} already owned`,
+          `[discovery] ${node.id}: +${r.created.length} created, ${r.equipped.length} given a probe, ` +
+          `${r.returned.length} returned, ${r.gone.length} marked gone, ${r.claimed.length} already owned`,
         );
       }
     } catch (e) {

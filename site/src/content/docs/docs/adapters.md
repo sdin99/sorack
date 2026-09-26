@@ -99,6 +99,9 @@ Only kinds a probe can judge on their own become nodes. A Deployment has no
 probe mode, so it stays in the namespace's counts rather than becoming a node
 that nothing can ever say anything about.
 
+A discovered node arrives already probed — discovery knows the coordinate, and
+that coordinate is exactly what a Service or CronJob probe takes.
+
 Discovered ids are the cluster coordinate — `apps/cronjob/nightly-backup` —
 so a second sweep finds the same node rather than making another. If a node
 you already had points a probe at that object, discovery leaves it alone: **a

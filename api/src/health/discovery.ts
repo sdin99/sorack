@@ -33,10 +33,11 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { nodes } from "../db/schema.js";
 import type { DiscoveredNode } from "./types.js";
-import { coordinateId, probeClaims } from "./coordinates.js";
+import { coordinateId, probeClaims, probeForCoordinate } from "./coordinates.js";
 
 export interface ReconcileResult {
   created: string[];
+  equipped: string[]; // discovered earlier, probe attached now
   returned: string[]; // had goneAt, seen again
   gone: string[];
   claimed: string[]; // an existing node already owns this coordinate
@@ -47,7 +48,7 @@ export async function reconcileDiscovered(
   found: DiscoveredNode[],
   kindsRead: string[],
 ): Promise<ReconcileResult> {
-  const out: ReconcileResult = { created: [], returned: [], gone: [], claimed: [] };
+  const out: ReconcileResult = { created: [], equipped: [], returned: [], gone: [], claimed: [] };
   const all = await db.select().from(nodes);
   const byId = new Map(all.map((n) => [n.id, n]));
   const seen = new Set<string>();
@@ -72,7 +73,20 @@ export async function reconcileDiscovered(
         name: d.name,
         parentId,
         status: "unknown",
-        meta: { discovered: { by: parentId, coordinate: d.coordinate, firstSeenAt: new Date().toISOString() } },
+        meta: {
+          probe: probeForCoordinate(d.coordinate),
+          discovered: {
+            by: parentId,
+            coordinate: d.coordinate,
+            firstSeenAt: new Date().toISOString(),
+            // Marks that discovery put the probe there. Used only to decide
+            // whether an existing node without one is a node created before
+            // probes were attached, or one whose probe an operator removed
+            // on purpose — the two look identical otherwise, and re-adding a
+            // probe someone deliberately took off is its own annoyance.
+            probeAttached: true,
+          },
+        },
       } as never).onConflictDoNothing();
       out.created.push(id);
       continue;
@@ -82,6 +96,24 @@ export async function reconcileDiscovered(
     // person undo what a permission error did.
     const meta = (existing.meta ?? {}) as Record<string, unknown>;
     const disc = (meta.discovered ?? {}) as Record<string, unknown>;
+
+    // Heal nodes discovered before probes were attached. Bounded by the
+    // marker: a node discovery has already equipped once is never touched
+    // again, so removing its probe stays removed.
+    if (!disc.probeAttached && !meta.probe) {
+      await db.update(nodes)
+        .set({
+          meta: {
+            ...meta,
+            probe: probeForCoordinate(d.coordinate),
+            discovered: { ...disc, probeAttached: true },
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(nodes.id, id));
+      out.equipped.push(id);
+    }
+
     if (disc.goneAt) {
       const { goneAt: _cleared, ...rest } = disc;
       await db.update(nodes)

@@ -36,3 +36,16 @@ export function probeClaims(
   const named = probe[c.kind];
   return typeof named === "string" && named === c.name;
 }
+
+// The probe that watches this coordinate. Discovery already knows where the
+// object is, and a Service or a CronJob each has a probe mode keyed on that
+// same address — so a discovered node can arrive already being watched.
+//
+// ‼ Without this, discovery produced nodes that contradicted the rule that
+// justified creating them. The rule is "only kinds a probe can judge become
+// nodes, because a node nothing can say anything about sits grey forever";
+// the first implementation then created thirteen Services and left every one
+// of them grey. It had the reason for promoting them and did not act on it.
+export function probeForCoordinate(c: DiscoveredNode["coordinate"]): Record<string, unknown> {
+  return { type: "k8s", namespace: c.namespace, [c.kind]: c.name };
+}

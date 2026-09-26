@@ -88,4 +88,23 @@ console.log("   gone:", JSON.stringify(r.gone), "|", JSON.stringify(await show()
 console.log("8) and it returns");
 r = await reconcileDiscovered("ns-pace", [D("pace","cronjob","renovate","k8s_cronjob")], ["service","cronjob"]);
 console.log("   returned:", JSON.stringify(r.returned), "|", JSON.stringify(await show()));
+console.log("9) a discovered node arrives already probed");
+const probed = (await db.select().from(nodes)).find(n => n.id === "pace/cronjob/renovate");
+console.log("   probe:", JSON.stringify(probed?.meta?.probe), "| probeAttached:", probed?.meta?.discovered?.probeAttached);
+
+console.log("10) a node discovered before probes existed gets one; one whose probe was removed does not");
+await db.insert(nodes).values([
+  { id: "old/service/legacy", type: "k8s_service", name: "legacy", status: "unknown",
+    meta: { discovered: { by: "ns-old", coordinate: { namespace: "old", kind: "service", name: "legacy" } } } },
+  { id: "old/service/deliberate", type: "k8s_service", name: "deliberate", status: "unknown",
+    meta: { discovered: { by: "ns-old", coordinate: { namespace: "old", kind: "service", name: "deliberate" }, probeAttached: true } } },
+]);
+r = await reconcileDiscovered("ns-old", [
+  D("old","service","legacy","k8s_service"), D("old","service","deliberate","k8s_service"),
+], ["service"]);
+console.log("   equipped:", JSON.stringify(r.equipped));
+for (const id of ["old/service/legacy", "old/service/deliberate"]) {
+  const n = (await db.select().from(nodes)).find(x => x.id === id);
+  console.log(`   ${id}: probe=${JSON.stringify(n?.meta?.probe ?? null)}`);
+}
 process.exit(0);
