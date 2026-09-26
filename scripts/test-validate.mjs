@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { NODE_TYPES } from "../api/dist/lib/node-types.js";
 import { isMonitored, withMonitored } from "../api/dist/lib/monitored.js";
+import { coordinateId, probeClaims } from "../api/dist/health/coordinates.js";
 import { validateNode, validateEdge, ValidationError } from "../api/dist/lib/validate.js";
 
 let pass = 0;
@@ -84,6 +85,49 @@ accepts("a short-form type", () => validateNode({ id: "a", type: "svc", name: "x
   const w = withMonitored({ id: "x", meta: { probe: { type: "tcp" } } });
   if (w.monitored === true && w.id === "x") pass++;
   else failures.push("monitored: withMonitored dropped fields or the flag");
+}
+
+// ── discovery: coordinates, and who claims them ───────────────────────────
+// The reconciler's database half is exercised in scripts/test-discovery.mjs
+// (it needs a Postgres). These are the two pure decisions inside it, and both
+// were wrong in an earlier draft: ids built from names rather than
+// coordinates, and a claim test that compared names.
+{
+  const cases = [
+    [{ namespace: "portal", kind: "cronjob", name: "portal-backup" }, "portal/cronjob/portal-backup"],
+    [{ namespace: "pace", kind: "cronjob", name: "db-backup" }, "pace/cronjob/db-backup"],
+    [{ namespace: "kube-system", kind: "service", name: "kube-dns" }, "kube-system/service/kube-dns"],
+  ];
+  for (const [coord, want] of cases) {
+    const got = coordinateId(coord);
+    if (got !== want) failures.push(`coordinateId: ${JSON.stringify(coord)} → ${got}`);
+    // And the result has to be a legal node id, or discovery writes rows the
+    // api would reject from anyone else.
+    else if (!/^[a-z0-9][a-z0-9/_-]{0,127}$/.test(got)) failures.push(`coordinateId: ${got} is not a valid node id`);
+    else pass++;
+  }
+
+  // Claiming is by coordinate, not by name. The case that matters is the one
+  // where the two differ: an inventory entry called `portal-backup` whose
+  // probe points at a CronJob actually named `db-backup`.
+  const claims = [
+    ["matching names", { probe: { type: "k8s", namespace: "portal", cronjob: "portal-backup" } }, "portal backup",
+      { namespace: "portal", kind: "cronjob", name: "portal-backup" }, true],
+    ["differing names", { probe: { type: "k8s", namespace: "pace", cronjob: "db-backup" } }, "pace backup",
+      { namespace: "pace", kind: "cronjob", name: "db-backup" }, true],
+    ["right name, wrong namespace", { probe: { type: "k8s", namespace: "other", cronjob: "db-backup" } }, "x",
+      { namespace: "pace", kind: "cronjob", name: "db-backup" }, false],
+    ["right name, wrong kind", { probe: { type: "k8s", namespace: "pace", service: "db-backup" } }, "x",
+      { namespace: "pace", kind: "cronjob", name: "db-backup" }, false],
+    ["namespace probe defaults to the node name", { probe: { type: "k8s" } }, "pace",
+      { namespace: "pace", kind: "cronjob", name: "db-backup" }, false],
+    ["no probe at all", {}, "x", { namespace: "pace", kind: "cronjob", name: "db-backup" }, false],
+  ];
+  for (const [label, meta, name, coord, want] of claims) {
+    const got = probeClaims(meta, name, coord);
+    if (got === want) pass++;
+    else failures.push(`probeClaims: ${label} → ${got}, expected ${want}`);
+  }
 }
 
 // ── the api's type list vs the schemas it claims to describe ──────────────

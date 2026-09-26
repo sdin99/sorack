@@ -17,7 +17,8 @@ import { db } from "../db/index.js";
 import { nodes } from "../db/schema.js";
 import { env } from "../lib/env.js";
 import { getAdapter } from "./registry.js";
-import type { HealthRecord, ProbeConfig } from "./types.js";
+import type { DiscoveredNode, HealthRecord, ProbeConfig } from "./types.js";
+import { reconcileDiscovered } from "./discovery.js";
 
 type NodeRow = typeof nodes.$inferSelect;
 
@@ -68,7 +69,11 @@ function isProbeConfig(p: unknown): p is ProbeConfig {
 // Run one probe (infra or one software's). Returns the health record plus any
 // adapter-provided observed extras (e.g. observed.k8s for the k8s adapter,
 // observed.metrics for proxmox).
-async function runProbe(node: NodeRow, cfg: ProbeConfig): Promise<{ record: HealthRecord; extra?: Record<string, unknown> }> {
+async function runProbe(node: NodeRow, cfg: ProbeConfig): Promise<{
+  record: HealthRecord;
+  extra?: Record<string, unknown>;
+  discovered?: { nodes?: DiscoveredNode[]; kindsRead?: string[] };
+}> {
   const adapter = getAdapter(cfg.type);
   const timeoutMs = typeof cfg.timeoutMs === "number" ? cfg.timeoutMs : env.HEALTH_TIMEOUT_MS;
   const now = (): string => new Date().toISOString();
@@ -82,6 +87,7 @@ async function runProbe(node: NodeRow, cfg: ProbeConfig): Promise<{ record: Heal
     return {
       record: { status: r.status, latencyMs: r.latencyMs, message: r.message, lastCheckedAt: now(), source: cfg.type },
       extra: r.observed,
+      discovered: r.discovered,
     };
   } catch (e) {
     return { record: { status: "err", message: e instanceof Error ? e.message : String(e), lastCheckedAt: now(), source: cfg.type } };
@@ -112,6 +118,26 @@ async function probeNode(node: NodeRow): Promise<void> {
 
   const [infra, ...swResults] = await Promise.all([infraTask, ...swTasks]);
   await persist(node, infra, swResults as Array<readonly [string, { record: HealthRecord; extra?: Record<string, unknown> }]>);
+
+  // Reconcile after persisting, and never instead of it: a discovery that
+  // throws must not cost this node its health reading. Failures are logged
+  // and the next tick tries again — the reconciler is idempotent by
+  // construction, since ids come from coordinates.
+  if (infra?.discovered?.nodes) {
+    try {
+      const r = await reconcileDiscovered(node.id, infra.discovered.nodes, infra.discovered.kindsRead ?? []);
+      const changed = r.created.length + r.returned.length + r.gone.length;
+      if (changed > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[discovery] ${node.id}: +${r.created.length} created, ${r.returned.length} returned, ` +
+          `${r.gone.length} marked gone, ${r.claimed.length} already owned`,
+        );
+      }
+    } catch (e) {
+      console.warn(`[discovery] ${node.id} failed:`, e instanceof Error ? e.message : e);
+    }
+  }
 }
 
 // Persist all aspects' results in one write. observed.* is owned entirely

@@ -12,7 +12,7 @@
 
 import https from "node:https";
 import { readFileSync } from "node:fs";
-import type { HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
+import type { DiscoveredNode, HealthStatus, ProbeAdapter, ProbeConfig, ProbeContext, ProbeResult } from "../types.js";
 
 const SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount";
 
@@ -454,7 +454,38 @@ export const k8sAdapter: ProbeAdapter = {
         workloads,
       };
 
-      return { status, latencyMs: latency(), message, observed: { k8s } };
+      // Discovery is opt-in per probe. Pointing a probe at a namespace and
+      // having sorack start creating nodes would be a surprise, and one that
+      // writes to the map. Off unless asked.
+      //
+      // Only kinds a probe can judge on their own become nodes: a Service
+      // and a CronJob each have a probe mode, a Deployment does not. A node
+      // nothing can say anything about sits grey forever, and a map that is
+      // mostly grey is one nobody reads — see the counts above, which is
+      // where Deployments and StatefulSets stay.
+      let discovered: ProbeResult["discovered"];
+      if ((config as { discover?: unknown }).discover === true) {
+        const found: DiscoveredNode[] = [];
+        const kindsRead: string[] = ["service"];
+        for (const svc of svcs.items ?? []) {
+          const name = svc?.metadata?.name;
+          if (name) found.push({ coordinate: { namespace: ns, kind: "service", name }, type: "k8s_service", name });
+        }
+        // ‼ Only claim to have read cronjobs when we did. batch/v1 is denied
+        // on installs whose ClusterRole predates it, and a denied read looks
+        // exactly like an empty namespace — the difference decides whether
+        // the reconciler is allowed to mark anything gone.
+        if (!("denied" in cronRes)) {
+          kindsRead.push("cronjob");
+          for (const cj of cronItems) {
+            const name = cj?.metadata?.name;
+            if (name) found.push({ coordinate: { namespace: ns, kind: "cronjob", name }, type: "k8s_cronjob", name });
+          }
+        }
+        discovered = { nodes: found, kindsRead };
+      }
+
+      return { status, latencyMs: latency(), message, observed: { k8s }, discovered };
     } catch (e) {
       return { status: "err", latencyMs: latency(), message: e instanceof Error ? e.message : String(e) };
     }

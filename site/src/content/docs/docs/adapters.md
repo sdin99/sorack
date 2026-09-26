@@ -86,6 +86,34 @@ needs a threshold against its schedule, and a guessed one invents alerts on
 weekly jobs while missing hourly ones. The timestamps are reported so a person
 can judge; the probe does not.
 
+### Discovery
+
+Off unless asked. Add `discover: true` to a namespace probe and it creates a
+node for each Service and CronJob it finds:
+
+```jsonc
+{ "type": "k8s", "namespace": "apps", "discover": true }
+```
+
+Only kinds a probe can judge on their own become nodes. A Deployment has no
+probe mode, so it stays in the namespace's counts rather than becoming a node
+that nothing can ever say anything about.
+
+Discovered ids are the cluster coordinate — `apps/cronjob/nightly-backup` —
+so a second sweep finds the same node rather than making another. If a node
+you already had points a probe at that object, discovery leaves it alone: **a
+node claims an object by probing it.** Your own names and the cluster's
+routinely differ, and matching on names would duplicate exactly the nodes you
+cared enough to name.
+
+‼ **Discovery never deletes.** When an object is gone it sets
+`meta.discovered.goneAt` and leaves the node for you to remove. A probe
+refused by RBAC, or pointed at an API server having a bad minute, sees what a
+probe of an emptied namespace sees — if that could delete nodes, one bad
+afternoon would erase your map and report success. A node that reappears
+clears its own mark, and a sweep that could not read a kind never marks that
+kind at all.
+
 Kubernetes deletes finished Jobs past the history limit — three successes and
 one failure by default — so for most of the gap between runs there is no Job
 left to ask. The CronJob's own status covers that: `lastSuccessfulTime` at or

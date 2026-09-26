@@ -33,11 +33,25 @@ export interface ProbeResult {
   // (http/tcp) leave this undefined. Keys here are collector-owned and the
   // UI never writes them.
   observed?: Record<string, unknown>;
-  // Reserved for future auto-discovery adapters (k8s/proxmox may report
-  // child nodes/edges they found). Phase-1 adapters leave this undefined;
-  // the shape is intentionally loose so adding it later isn't a breaking
-  // interface change.
-  discovered?: { nodes?: unknown[]; edges?: unknown[] };
+  // What the probe saw that could stand as a node of its own. Consumed by
+  // health/discovery.ts; adapters that do not discover leave it undefined.
+  //
+  // `kindsRead` is not decoration. A sweep that could not read a kind — RBAC,
+  // an API server having a bad minute — sees exactly what a sweep of a
+  // namespace with none of that kind sees. Without knowing which kinds were
+  // actually read, the reconciler cannot tell "gone" from "not looked at",
+  // and would mark things gone on the strength of a permission error.
+  discovered?: {
+    nodes?: DiscoveredNode[];
+    kindsRead?: string[];
+  };
+}
+
+// A cluster object, addressed by where it is rather than what anyone calls it.
+export interface DiscoveredNode {
+  coordinate: { namespace: string; kind: string; name: string };
+  type: string;
+  name: string;
 }
 
 // Context handed to every probe. `signal` carries the collector-level
