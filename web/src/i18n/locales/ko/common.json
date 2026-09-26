@@ -310,7 +310,8 @@
       "requests": "리소스 요청",
       "pods": "파드"
     },
-    "notMonitoredShort": "감시 안 함"
+    "notMonitoredShort": "감시 안 함",
+    "relatedDecisions": "관련 결정"
   },
   "map": {
     "empty": {

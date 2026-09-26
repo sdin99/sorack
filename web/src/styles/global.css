@@ -3510,6 +3510,24 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
 }
 
+/* ─── Related decisions (node detail) ───────────────────────────── */
+.nd-adr-list { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px; }
+.nd-adr {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 8px; border-radius: var(--radius-sm);
+  color: var(--fg-1); text-decoration: none; font-size: 13px;
+}
+a.nd-adr:hover { background: var(--surface-2); }
+a.nd-adr:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring); }
+/* Not a link: no hover, no pointer — the difference has to be visible, or a
+   decision with no URL looks clickable and does nothing. */
+.nd-adr--plain { color: var(--fg-2); }
+.nd-adr-id {
+  font-family: var(--mono); font-size: 11px; color: var(--fg-2);
+  flex: none; letter-spacing: 0.02em;
+}
+.nd-adr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ─── API keys (Settings) ────────────────────────────────────────── */
 .settings-key-issued { border-color: var(--accent); }
 .settings-key-value {

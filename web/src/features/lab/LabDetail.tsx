@@ -1832,6 +1832,8 @@ export function NodeDetail({ nodeId, onJumpNode, onOpenRunbook, onIdChange, onOp
           drill-down view, not a glanceable summary. */}
       <TypeWidgets node={node} only={['workloadList']} />
 
+      <RelatedDecisions node={node} />
+
       <section className="nd-section">
         <div className="nd-section-h">
           <span>{t('nd.notesTags')}</span>
@@ -1978,6 +1980,56 @@ function RefsRow({ label, items, options, onAdd, onRemove, onJump }: {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Related decisions ────────────────────────────────────────────────
+// Why this node is here, linking out to the ADR that decided it.
+//
+// Links only, deliberately — no free-text field in sorack for the reasoning
+// itself. The decision lives in one place, in the repository that owns it and
+// where it is reviewed; a box here would be a second home for the same fact,
+// and two homes diverge. That is the same rule as `manual` values shadowing
+// observed ones: whoever owns a fact should be the only one writing it down.
+//
+// Self-hiding. A node with no decisions attached shows nothing rather than an
+// empty "related decisions" heading, which reads as "there are none" when it
+// usually means nobody has linked them yet.
+function RelatedDecisions({ node }: { node: any }) {
+  const { t } = useTranslation();
+  const raw = node?.meta?.adr;
+  const items = (Array.isArray(raw) ? raw : []).filter(
+    (a: any) => a && typeof a === "object" && typeof a.id === "string" && a.id,
+  );
+  if (items.length === 0) return null;
+  return (
+    <section className="nd-section">
+      <div className="nd-section-h">
+        <span>
+          {t("nd.relatedDecisions", { defaultValue: "Related decisions" })}{" "}
+          <span className="nd-section-c">{items.length}</span>
+        </span>
+      </div>
+      <div className="nd-adr-list">
+        {items.map((a: any) => {
+          const label = typeof a.title === "string" && a.title ? a.title : a.id;
+          // A link only when there is somewhere to go. A dead anchor claims
+          // the decision is one click away when it is not, and the repository
+          // holding these is usually private.
+          return typeof a.url === "string" && /^https?:\/\//.test(a.url) ? (
+            <a key={a.id} className="nd-adr" href={a.url} target="_blank" rel="noreferrer">
+              <span className="nd-adr-id">{a.id}</span>
+              <span className="nd-adr-title">{label}</span>
+            </a>
+          ) : (
+            <span key={a.id} className="nd-adr nd-adr--plain">
+              <span className="nd-adr-id">{a.id}</span>
+              <span className="nd-adr-title">{label}</span>
+            </span>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

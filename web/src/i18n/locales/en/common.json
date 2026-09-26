@@ -310,7 +310,8 @@
       "requests": "requests",
       "pods": "pods"
     },
-    "notMonitoredShort": "not monitored"
+    "notMonitoredShort": "not monitored",
+    "relatedDecisions": "Related decisions"
   },
   "map": {
     "empty": {
