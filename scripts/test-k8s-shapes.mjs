@@ -8,7 +8,7 @@
 // Skips (loudly, exit 0) when no cluster is reachable — it is a check you run
 // against a cluster, not a gate every commit must pass.
 import { execFileSync } from "node:child_process";
-import { probeCronJob, probeService } from "../api/dist/health/adapters/k8s.js";
+import { probeCronJob, probeService, tallyNamespace } from "../api/dist/health/adapters/k8s.js";
 
 const kubectl = (args) => {
   try { return JSON.parse(execFileSync("kubectl", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })); }
@@ -78,6 +78,53 @@ for (const cj of (cronjobs.items ?? []).slice(0, 5)) {
       const ok = want.test(r.message);
       console.log(`  ${ok ? " " : "✗"} variant "${label}": ${r.status} — ${r.message}`);
       if (!ok) problems.push(`variant "${label}" said "${r.message}"`);
+    }
+  }
+}
+
+// ── namespace tally against live namespaces ───────────────────────────────
+// The bug this guards: a Job's failed first attempt counted as a not-ready
+// pod, so one retry turned a whole namespace yellow until Kubernetes
+// collected the pod — and the finished Job pods counted as *ready*, so the
+// "46/47 pods ready" said nothing about what was serving.
+{
+  const nsList = kubectl(["get", "namespaces", "-o", "json"]) ?? { items: [] };
+  const names = (nsList.items ?? []).map((n) => n.metadata.name);
+  // Prefer a namespace that actually runs scheduled work — that is where the
+  // two kinds of pod coexist and the mistake shows.
+  const scored = names.map((ns) => {
+    const pods = kubectl(["get", "pods", "-n", ns, "-o", "json"]) ?? { items: [] };
+    const jobPods = (pods.items ?? []).filter((p) =>
+      (p.metadata.ownerReferences ?? []).some((o) => o.kind === "Job")).length;
+    return { ns, pods, jobPods };
+  }).sort((a, b) => b.jobPods - a.jobPods).slice(0, 3);
+
+  for (const { ns, pods, jobPods } of scored) {
+    const deps = kubectl(["get", "deployments", "-n", ns, "-o", "json"]) ?? { items: [] };
+    const sts = kubectl(["get", "statefulsets", "-n", ns, "-o", "json"]) ?? { items: [] };
+    const jobs = kubectl(["get", "jobs", "-n", ns, "-o", "json"]) ?? { items: [] };
+    const t = tallyNamespace(pods.items ?? [], deps.items ?? [], sts.items ?? [], jobs.items ?? []);
+    checked++;
+    console.log(`  namespace ${ns}: ${t.podReadyN}/${t.servicePods.length} service pods ready` +
+      ` (${t.jobPods} job pods excluded) · jobs ${JSON.stringify(t.jobs)} · notReady=${t.notReady}`);
+
+    // No pod that a Job created may be inside the service tally.
+    if (t.servicePods.some((p) => (p.metadata.ownerReferences ?? []).some((o) => o.kind === "Job"))) {
+      problems.push(`${ns}: a Job pod leaked into the service pod tally`);
+    }
+    // A Job that Kubernetes has not given up on must not count as not-ready,
+    // however many attempts it took.
+    const retried = (jobs.items ?? []).filter((j) =>
+      (j.status?.failed ?? 0) > 0 && (j.status?.succeeded ?? 0) > 0);
+    if (retried.length > 0 && t.jobs.failed > 0) {
+      const reallyFailed = (jobs.items ?? []).filter((j) =>
+        (j.status?.conditions ?? []).some((c) => c.type === "Failed" && c.status === "True"));
+      if (reallyFailed.length !== t.jobs.failed) {
+        problems.push(`${ns}: counted ${t.jobs.failed} failed jobs, ${reallyFailed.length} have a Failed condition`);
+      }
+    }
+    if (jobPods > 0 && t.podReadyN > t.servicePods.length) {
+      problems.push(`${ns}: more ready pods than service pods`);
     }
   }
 }

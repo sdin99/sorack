@@ -79,6 +79,56 @@ function podReady(p: any): boolean {
   const cs = p?.status?.containerStatuses ?? [];
   return cs.length > 0 && cs.every((c: any) => c.ready);
 }
+
+// ‼ A pod that a Job created is not a service instance, and counting it as
+// one gets both numbers wrong.
+//
+// Measured on a namespace with 31 CronJobs: 7 pods Running, 39 Completed, 1
+// Failed. The tally read "46/47 pods ready" — the 39 finished ones counted as
+// ready, so the number said nothing about how much was actually serving — and
+// the 1 Failed pod put the whole namespace into warn. That pod was the first
+// attempt of a Job that then succeeded on its retry: `succeeded=1 failed=1`,
+// backoffLimit 2, a Job that worked. The warning stayed until Kubernetes got
+// round to garbage-collecting the failed attempt.
+//
+// So: one retry anywhere turned a namespace yellow for hours, and the more
+// scheduled work a namespace did, the more often it happened. "A pod failed"
+// is a fact; "the Job failed" is not the same fact, and the second is the one
+// worth reporting.
+function isJobPod(p: any): boolean {
+  return (p?.metadata?.ownerReferences ?? []).some((o: any) => o?.kind === "Job");
+}
+
+// A Job's own verdict, from its conditions rather than its retry counters.
+// `failed` counts attempts; a Job with failed=1 succeeded=1 is a success that
+// needed two goes. The Failed condition is Kubernetes saying it gave up.
+function jobOutcome(j: any): "succeeded" | "failed" | "active" {
+  const conds = j?.status?.conditions ?? [];
+  if (conds.some((c: any) => c?.type === "Failed" && c?.status === "True")) return "failed";
+  if ((j?.status?.succeeded ?? 0) > 0) return "succeeded";
+  return "active";
+}
+
+// The namespace tally, separated from the fetching so it can be checked
+// against objects pulled from a real cluster.
+export function tallyNamespace(podItems: any[], depItems: any[], stsItems: any[], jobItems: any[]) {
+  const servicePods = podItems.filter((p) => !isJobPod(p));
+  const jobPods = podItems.length - servicePods.length;
+  const podReadyN = servicePods.filter(podReady).length;
+  const depReadyN = depItems.filter(ctrlReady).length;
+  const stsReadyN = stsItems.filter(ctrlReady).length;
+
+  const jobs = { succeeded: 0, failed: 0, active: 0 };
+  for (const j of jobItems) jobs[jobOutcome(j)]++;
+
+  const notReady =
+    servicePods.length - podReadyN +
+    (depItems.length - depReadyN) +
+    (stsItems.length - stsReadyN) +
+    jobs.failed;
+
+  return { servicePods, jobPods, podReadyN, depReadyN, stsReadyN, jobs, notReady };
+}
 function podStatus(p: any): HealthStatus {
   const phase = p?.status?.phase;
   if (phase === "Succeeded") return "ok";
@@ -332,18 +382,16 @@ export const k8sAdapter: ProbeAdapter = {
       const podItems: any[] = pods.items ?? [];
       const depItems: any[] = deploys.items ?? [];
       const stsItems: any[] = sts.items ?? [];
-      const podReadyN = podItems.filter(podReady).length;
-      const depReadyN = depItems.filter(ctrlReady).length;
-      const stsReadyN = stsItems.filter(ctrlReady).length;
+      const { servicePods, jobPods, podReadyN, depReadyN, stsReadyN, jobs, notReady } =
+        tallyNamespace(podItems, depItems, stsItems, jobItems);
 
-      // not-ready pods first, then cap (countGrid still shows the true total).
-      const workloads = [...podItems]
+      // The list is about what is serving, so Job pods stay out of it — a
+      // namespace running scheduled work would otherwise fill this with
+      // finished attempts and push the one broken deployment off the end.
+      const workloads = [...servicePods]
         .sort((a, b) => (podReady(a) ? 1 : 0) - (podReady(b) ? 1 : 0))
         .slice(0, WORKLOAD_CAP)
         .map((p) => ({ name: p?.metadata?.name ?? "?", kind: "Pod", status: podStatus(p) }));
-
-      const notReady =
-        podItems.length - podReadyN + (depItems.length - depReadyN) + (stsItems.length - stsReadyN);
 
       // Anything at all to judge? Previously `notReady === 0` meant "ok",
       // which made an empty namespace and a fully healthy one report the
@@ -363,13 +411,21 @@ export const k8sAdapter: ProbeAdapter = {
           : `nothing observed in ${ns} — the namespace is empty, or holds only kinds this probe does not read`;
       } else {
         status = notReady > 0 ? "warn" : "ok";
-        message = `${podReadyN}/${podItems.length} pods ready`;
-        if (cronItems.length > 0) message += `, ${cronItems.length} cronjob(s)`;
+        // Two sentences, because they answer two questions: how much of this
+        // namespace is serving, and how its scheduled work went. Merging them
+        // was what let 39 finished Job pods read as "ready".
+        message = `${podReadyN}/${servicePods.length} pods ready`;
+        const jobBits: string[] = [];
+        if (jobs.failed > 0) jobBits.push(`${jobs.failed} failed`);
+        if (jobs.active > 0) jobBits.push(`${jobs.active} running`);
+        if (jobs.succeeded > 0) jobBits.push(`${jobs.succeeded} succeeded`);
+        if (jobBits.length > 0) message += ` · jobs: ${jobBits.join(", ")}`;
+        if (cronItems.length > 0) message += ` · ${cronItems.length} cronjob(s)`;
         if (batchDenied) message += " (cronjobs not readable)";
       }
 
       const k8s = {
-        pods: { ready: podReadyN, total: podItems.length },
+        pods: { ready: podReadyN, total: servicePods.length, fromJobs: jobPods },
         deployments: { ready: depReadyN, total: depItems.length },
         statefulsets: { ready: stsReadyN, total: stsItems.length },
         services: { count: (svcs.items ?? []).length },
@@ -394,7 +450,7 @@ export const k8sAdapter: ProbeAdapter = {
             },
         jobs: "denied" in jobRes
           ? { observed: false, reason: "forbidden" }
-          : { observed: true, total: jobItems.length },
+          : { observed: true, total: jobItems.length, ...jobs },
         workloads,
       };
 
