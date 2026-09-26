@@ -8,6 +8,7 @@
 // only true if something checks.
 import { readFileSync } from "node:fs";
 import { NODE_TYPES } from "../api/dist/lib/node-types.js";
+import { isMonitored, withMonitored } from "../api/dist/lib/monitored.js";
 import { validateNode, validateEdge, ValidationError } from "../api/dist/lib/validate.js";
 
 let pass = 0;
@@ -60,6 +61,30 @@ rejects("a type from somebody else's vocabulary",
 rejects("a type that is merely plausible",
   () => validateNode({ id: "a", type: "service", name: "x" }), "type must be one of");
 accepts("a short-form type", () => validateNode({ id: "a", type: "svc", name: "x" }));
+
+// ── monitored: derived, and the collector must agree with it ──────────────
+// "Nothing is watching this" and "something looked and could not tell" were
+// the same grey until now. The test that matters is that this uses the same
+// rule the collector uses to choose what to probe — if they drift, a node
+// reads as monitored and is never probed, or the reverse.
+{
+  const cases = [
+    ["empty meta", {}, false],
+    ["infra probe", { probe: { type: "tcp", host: "h", port: 1 } }, true],
+    ["probe with no type", { probe: { host: "h" } }, false],
+    ["software probe only", { softwareProbes: { cnpg: { type: "http" } } }, true],
+    ["empty software bag", { softwareProbes: {} }, false],
+    ["probe: null", { probe: null }, false],
+  ];
+  for (const [label, meta, want] of cases) {
+    const got = isMonitored(meta);
+    if (got === want) pass++;
+    else failures.push(`monitored: ${label} → ${got}, expected ${want}`);
+  }
+  const w = withMonitored({ id: "x", meta: { probe: { type: "tcp" } } });
+  if (w.monitored === true && w.id === "x") pass++;
+  else failures.push("monitored: withMonitored dropped fields or the flag");
+}
 
 // ── the api's type list vs the schemas it claims to describe ──────────────
 // api/src/lib/node-types.ts is a copy: the two packages share nothing. A type

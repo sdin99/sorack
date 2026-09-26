@@ -5,19 +5,20 @@ import { nodes } from "../db/schema.js";
 import { getAdapter } from "../health/registry.js";
 import { env } from "../lib/env.js";
 import { validateNode, ValidationError } from "../lib/validate.js";
+import { withMonitored } from "../lib/monitored.js";
 
 export const nodesRoutes = new Hono();
 
 nodesRoutes.get("/", async (c) => {
   const rows = await db.select().from(nodes);
-  return c.json(rows);
+  return c.json(rows.map(withMonitored));
 });
 
 nodesRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
   const [row] = await db.select().from(nodes).where(eq(nodes.id, id));
   if (!row) return c.json({ error: "not found" }, 404);
-  return c.json(row);
+  return c.json(withMonitored(row));
 });
 
 nodesRoutes.post("/", async (c) => {

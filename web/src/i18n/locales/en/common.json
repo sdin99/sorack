@@ -309,7 +309,8 @@
       "workloads": "workloads",
       "requests": "requests",
       "pods": "pods"
-    }
+    },
+    "notMonitoredShort": "not monitored"
   },
   "map": {
     "empty": {

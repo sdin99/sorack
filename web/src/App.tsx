@@ -13,6 +13,7 @@ import { useSorack } from "@/lib/data-source/SorackData";
 // a fallback dashed style if they don't have one yet.
 const EDGE_TYPE_CHOICES = ["depends", "mounts", "routes"] as const;
 import { useIsDesktop } from "@/lib/use-is-desktop";
+import { nodeToneColor } from "@/lib/node-status";
 import { ActionMenu, ConfirmDialog, type ActionMenuItem } from "@/features/node-form/NodeActions";
 import { history } from "@/lib/history";
 import { TopologyFlow } from "@/features/topology-flow/TopologyFlow";
@@ -507,7 +508,7 @@ function TreeItem({ id, depth, lastChain = [], NODES, getChildren, currentId, is
   const children = getChildren(id).slice().sort(siblingSort);
   const hasChildren = children.length > 0;
   const expanded = !isCollapsed(id);
-  const statusColor = node.status === 'err' ? 'var(--err)' : node.status === 'warn' ? 'var(--warn)' : node.status === 'ok' ? 'var(--ok)' : 'var(--fg-4)';
+  const statusColor = nodeToneColor(node);
   // Right-click anywhere on the row opens the same node actions menu the
   // graph uses (rename / new child / move / delete / etc.). preventDefault
   // suppresses the native browser menu.
@@ -687,7 +688,7 @@ function TreeItem({ id, depth, lastChain = [], NODES, getChildren, currentId, is
 // hierarchy returns as soon as the query is cleared.
 function FlatTreeRow({ node, currentId, onJump, onNodeContextMenu, selectedIds, onSelectedIdsChange }) {
   const tip = useHoverTip(node?.name ?? '');
-  const statusColor = node.status === 'err' ? 'var(--err)' : node.status === 'warn' ? 'var(--warn)' : node.status === 'ok' ? 'var(--ok)' : 'var(--fg-4)';
+  const statusColor = nodeToneColor(node);
   const handleContextMenu = onNodeContextMenu
     ? (e: React.MouseEvent) => {
         e.preventDefault();

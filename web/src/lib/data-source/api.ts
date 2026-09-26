@@ -7,6 +7,10 @@ export interface ApiNode {
   parentId: string | null;
   name: string;
   status: "ok" | "warn" | "err" | "unknown";
+  // Derived by the api from the node's own probe config, never stored.
+  // `status: "unknown"` with `monitored: false` means nothing is watching it;
+  // with `monitored: true` it means something looked and could not tell.
+  monitored?: boolean;
   meta: Record<string, unknown>;
   // Free-form labels — hybrid format. "wireguard" = bare label, "env:prod" =
   // key:value (parsed at filter time, stored as-is).

@@ -23,13 +23,32 @@ they simply return `unknown` rather than erroring.
 
 ### Proxmox VE
 
-Mint a token at **PVE → Datacenter → Permissions → API Tokens**, then set:
+Make a dedicated user first, then mint a token for it at **PVE → Datacenter →
+Permissions → API Tokens**:
 
 ```bash
-SORACK_PROXMOX_USER=user@pam!tokenid
+SORACK_PROXMOX_USER=sorack@pve!tokenid
 SORACK_PROXMOX_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 SORACK_PROXMOX_INSECURE=true   # only if PVE serves a self-signed cert
 ```
+
+:::danger[Not a token on `root@pam`, and leave **Privilege Separation** on]
+sorack only reads. Give the user `PVEAuditor` on `/` and nothing else.
+
+A token with **no ACL entry of its own** is not therefore harmless. With
+privilege separation on (`privsep=1`, the default) it has no permissions —
+but with it off, it inherits everything its user has, and on `root@pam` that
+is the whole cluster. The two cases look identical from the outside: no ACL
+row either way. Which one you have depends on a checkbox set when the token
+was minted.
+
+So a `root@pam` token that appears to do nothing may be a full-cluster
+credential sitting in a Kubernetes Secret, waiting for something to use it.
+Read-only monitoring has no reason to hold one.
+
+Give each instance its own token, too. Sharing one between a dev and a
+production instance means compromising the softer one hands over both.
+:::
 
 ### node_exporter (system probe)
 

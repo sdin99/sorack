@@ -11,6 +11,7 @@ import { NodeIcon } from "@/components/icons/NodeIcon";
 import { SoftwareIcon, hasSoftwareIcon } from "@/components/icons/SoftwareIcon";
 import { SOFTWARE } from "@/features/lab/node-detail-schema";
 import { tagHue } from "@/lib/tag-color";
+import { nodeToneColor } from "@/lib/node-status";
 
 // Schema `type` → NodeIcon `kind`. New schema types map onto the closest
 // existing icon for now; bespoke icons can be added later.
@@ -46,12 +47,8 @@ const KIND_LABEL: Record<string, string> = {
   share: "SHARE",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  ok: "var(--ok)",
-  warn: "var(--warn)",
-  err: "var(--err)",
-  unknown: "var(--fg-3)",
-};
+// Colour lives in @/lib/node-status so the map card and the sidebar tree
+// cannot drift apart about the same node.
 
 const HANDLE_STYLE = {
   width: 8,
@@ -61,10 +58,11 @@ const HANDLE_STYLE = {
 };
 
 export function SorackNode({ data, selected }: NodeProps) {
-  const { name, kind, status, isRoot, isLeaf, isDropTarget, iconKind: iconKindOverride, software, tags, dimmed, maintenance } = data as {
+  const { name, kind, status, monitored, isRoot, isLeaf, isDropTarget, iconKind: iconKindOverride, software, tags, dimmed, maintenance } = data as {
     name: string;
     kind: string;
     status: string;
+    monitored?: boolean;
     isRoot?: boolean;
     isLeaf?: boolean;
     isDropTarget?: boolean;
@@ -76,7 +74,7 @@ export function SorackNode({ data, selected }: NodeProps) {
   };
   const iconKind = iconKindOverride ?? ICON_KIND[kind] ?? "svc";
   const kindLabel = KIND_LABEL[kind] ?? kind?.toUpperCase() ?? "?";
-  const statusColor = STATUS_COLOR[status] ?? STATUS_COLOR.unknown;
+  const statusColor = nodeToneColor({ status, monitored });
 
   // Drop-target wins visually over selection so the user always sees
   // where the reparent will land.

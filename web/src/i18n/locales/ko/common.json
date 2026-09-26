@@ -309,7 +309,8 @@
       "workloads": "워크로드",
       "requests": "리소스 요청",
       "pods": "파드"
-    }
+    },
+    "notMonitoredShort": "감시 안 함"
   },
   "map": {
     "empty": {

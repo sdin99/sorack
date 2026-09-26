@@ -1326,6 +1326,14 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
     >
       <span className="nd-health-dot" />
       <span className="nd-health-status">{t('nd.notMonitored', { defaultValue: 'not monitored' })}</span>
+      {/* Why, when someone bothered to say. "Not monitored" covers two very
+          different situations — nobody has got to it yet, and it was left off
+          on purpose because a probe here would lie (an identity proxy in
+          front of the thing answers 200 whether or not the thing is alive).
+          A sync that knows which can write the reason here. */}
+      {typeof node.meta?.probeSkipped === 'string' && node.meta.probeSkipped && (
+        <span className="nd-health-src" title={node.meta.probeSkipped}>{node.meta.probeSkipped}</span>
+      )}
       <span className="nd-health-end">
         {onOpenSettings && (
           <button
