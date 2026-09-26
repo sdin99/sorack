@@ -1332,7 +1332,10 @@ function StatusLine({ node, updateNode, onOpenSettings }: { node: any; updateNod
           front of the thing answers 200 whether or not the thing is alive).
           A sync that knows which can write the reason here. */}
       {typeof node.meta?.probeSkipped === 'string' && node.meta.probeSkipped && (
-        <span className="nd-health-src" title={node.meta.probeSkipped}>{node.meta.probeSkipped}</span>
+        <>
+          <span className="nd-health-src" title={node.meta.probeSkipped}>{node.meta.probeSkipped}</span>
+          <SyncedBy node={node} />
+        </>
       )}
       <span className="nd-health-end">
         {onOpenSettings && (
@@ -1983,6 +1986,32 @@ function RefsRow({ label, items, options, onAdd, onRemove, onJump }: {
   );
 }
 
+// ── Where a value came from ──────────────────────────────────────────
+// sorack has no field for most of what a sync writes, so the operator sees a
+// sentence on screen with no box to have typed it into and no way to change
+// it. The question that produced this was literally "how is this in here?
+// sorack doesn't seem to have a feature for adding descriptions".
+//
+// Same idea as the `(env)` marker on git config fields: when something else
+// owns a value, say so rather than leaving a read-only-looking field
+// unexplained. The difference is that env-pinned fields cannot be edited at
+// all, while these can — the next sync will simply put them back. So the
+// wording is "may be overwritten", not "cannot be changed", because the
+// second would be false and the operator would find that out the hard way.
+function SyncedBy({ node }: { node: any }) {
+  const { t } = useTranslation();
+  const by = node?.meta?.syncedBy;
+  if (typeof by !== "string" || !by) return null;
+  return (
+    <span className="nd-synced-by" title={t("nd.syncedByHint", {
+      source: by,
+      defaultValue: "Written by {{source}}. Edits here may be replaced on its next run.",
+    })}>
+      {t("nd.syncedBy", { source: by, defaultValue: "from {{source}}" })}
+    </span>
+  );
+}
+
 // ── Related decisions ────────────────────────────────────────────────
 // Why this node is here, linking out to the ADR that decided it.
 //
@@ -2009,6 +2038,7 @@ function RelatedDecisions({ node }: { node: any }) {
           {t("nd.relatedDecisions", { defaultValue: "Related decisions" })}{" "}
           <span className="nd-section-c">{items.length}</span>
         </span>
+        <SyncedBy node={node} />
       </div>
       <div className="nd-adr-list">
         {items.map((a: any) => {

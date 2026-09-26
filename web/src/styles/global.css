@@ -3510,6 +3510,14 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--surface-3); b
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
 }
 
+/* Provenance marker — quieter than the value it explains, because it is an
+   answer to "where is this from", not part of the reading. */
+.nd-synced-by {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+  color: var(--fg-3); flex: none; white-space: nowrap;
+  padding-left: 6px;
+}
+
 /* ─── Related decisions (node detail) ───────────────────────────── */
 .nd-adr-list { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px; }
 .nd-adr {

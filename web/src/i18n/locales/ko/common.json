@@ -311,7 +311,9 @@
       "pods": "파드"
     },
     "notMonitoredShort": "감시 안 함",
-    "relatedDecisions": "관련 결정"
+    "relatedDecisions": "관련 결정",
+    "syncedBy": "{{source}} 에서 옴",
+    "syncedByHint": "{{source}} 이(가) 쓴 값입니다. 여기서 고쳐도 다음 실행에 덮일 수 있습니다."
   },
   "map": {
     "empty": {

@@ -6,6 +6,7 @@ import { getAdapter } from "../health/registry.js";
 import { env } from "../lib/env.js";
 import { validateNode, ValidationError } from "../lib/validate.js";
 import { withMonitored } from "../lib/monitored.js";
+import { normalizeIncomingMeta, stripNulls } from "../lib/meta.js";
 
 export const nodesRoutes = new Hono();
 
@@ -41,8 +42,13 @@ nodesRoutes.post("/", async (c) => {
   if (existing.length > 0) {
     return c.json({ error: `node "${input.id}" already exists`, id: input.id }, 409);
   }
-  const [row] = await db.insert(nodes).values(input as never).returning();
-  return c.json(row, 201);
+  // Creation goes through the same meta rules as an update. It did not, and
+  // the difference was invisible: a node created with `probeSkipped: null`
+  // kept the null key while the same node updated with it lost the key, and
+  // both render identically.
+  const created = { ...input, meta: normalizeIncomingMeta((input as { meta?: unknown }).meta) };
+  const [row] = await db.insert(nodes).values(created as never).returning();
+  return c.json(withMonitored(row), 201);
 });
 
 nodesRoutes.patch("/:id", async (c) => {
@@ -145,11 +151,8 @@ nodesRoutes.patch("/:id", async (c) => {
     if (Object.keys(mergedSwProbes).length === 0) delete mergedMeta.softwareProbes;
     // A null root value means "delete this key" — lets a partial PATCH REMOVE
     // root config (clearing iconKind on a type change, removing the probe),
-    // not just add/overwrite it.
-    for (const key of Object.keys(mergedMeta)) {
-      if (mergedMeta[key] === null) delete mergedMeta[key];
-    }
-    metaUpdate = { meta: mergedMeta };
+    // not just add/overwrite it. Shared with POST so the two doors agree.
+    metaUpdate = { meta: stripNulls(mergedMeta) };
   }
 
   const [row] = await db
