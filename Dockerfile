@@ -66,6 +66,19 @@ COPY --from=build --chown=node:node /src/.deploy/package.json ./package.json
 COPY --from=build --chown=node:node /src/api/dist ./dist
 COPY --from=build --chown=node:node /src/web/dist ./public
 
+# ‼ Our own terms travel with the artifact. Measured on 0.1.10: the image
+# carried 258 licence files — node's own, npm's, and one for each runtime
+# dependency, because those ship inside their package directories — and not
+# sorack's. Someone who pulls the image and never sees the repository had the
+# code and no statement of what they may do with it. The OCI label says MIT,
+# which a scanner reads and a person does not.
+#
+# This covers sorack only. The Alpine base contributes sixteen packages whose
+# own licence texts are absent from that layer (Alpine's minimal images do not
+# ship /usr/share/licenses); that is a separate question and not one a COPY
+# line answers.
+COPY --from=build --chown=node:node /src/LICENSE ./LICENSE
+
 # The runbooks dir is a mount point in every real deployment; create it so
 # the api can start even when nothing is mounted (empty dir → empty list).
 RUN mkdir -p /runbooks && chown node:node /runbooks
