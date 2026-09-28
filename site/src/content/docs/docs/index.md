@@ -44,10 +44,12 @@ Kubernetes Secret.
 
 ## Self-host
 
-For a persistent deployment, the repo ships **Kubernetes manifests** — see
-[Deploy on Kubernetes](/docs/kubernetes/). Since sorack is just a Node + Postgres
-app, you can equally build your own image or run it under any process manager; a
-first-class production image is on the roadmap.
+For a persistent deployment there is a **published image** —
+`ghcr.io/sdin99/sorack`, one container serving the API and the web bundle on a
+single port — and a Kustomize base to point an overlay at. See
+[Deploy on Kubernetes](/docs/kubernetes/). Since sorack is just a Node +
+Postgres app, you can equally build your own image or run it under any process
+manager.
 
 ## Where to next
 
