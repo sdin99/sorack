@@ -3,126 +3,110 @@ title: Node types & meta
 description: The type vocabulary a node may take, and who owns each key under meta.
 ---
 
-A node has a `type` and a bag of `meta`. Both are contracts: the type decides
-which fields the detail panel renders, and `meta` is shared between you, the
-collector and anything syncing an inventory in. This page is the reference for
-both — most useful if you are writing something that POSTs to
+A node has a `type` and a `meta` object. The type decides which fields the
+detail panel shows. `meta` holds data written by you, by the collector, and by
+any tool that syncs an inventory into sorack. This page is the reference for
+both. It is most useful if you are writing a tool that calls
 [`/api/nodes`](/docs/api/).
 
 ## The type vocabulary
 
-`type` is validated against a closed list. It was a free string until v0.1.12,
-and the failure that closed it is worth knowing, because it is the failure this
-page exists to prevent: a sync sent its own words — `app`, `ingress` — and the
-nodes landed with a generic icon and a detail panel containing no fields,
-because the renderer looks the type up in a table with no such key. Nothing
-errored. The only symptom was on screen.
+`type` must be one of the values below. The API rejects any other value with a
+400 error whose message lists the accepted types.
 
-| `type` | What it is for | Default probe |
+| `type` | Use for | Default probe |
 | --- | --- | --- |
 | `host` | A physical or bare-metal machine. | `system` |
 | `vm` | A virtual machine on a hypervisor. | `system` |
-| `container` | An OS-level container (e.g. LXC). | `system` |
+| `container` | An OS-level container, such as LXC. | `system` |
 | `router` | The gateway between your LAN and the internet. | `tcp` |
 | `k8s_cluster` | A Kubernetes cluster. | `k8s` |
-| `k8s_namespace` | A namespace grouping workloads. | `k8s` |
-| `k8s_service` | A Service exposing pods. | `k8s` |
+| `k8s_namespace` | A namespace that groups workloads. | `k8s` |
+| `k8s_service` | A Service that exposes pods. | `k8s` |
 | `k8s_pvc` | A PersistentVolumeClaim. | `k8s` |
 | `k8s_cronjob` | A scheduled batch job. | `k8s` |
-| `external_service` | Something you depend on and do not run. | `http` |
-| `hosted_app` | Yours, deployed by you, on someone else's platform. | `http` |
+| `external_service` | A service you depend on but do not run. | `http` |
+| `hosted_app` | An app you deploy and maintain that runs on another provider's platform. | `http` |
 | `share` | A network file share (NFS, SMB). | `tcp` |
 
-Four short forms are accepted and resolve to the canonical type: `ct` →
-`container`, `ns` → `k8s_namespace`, `pvc` → `k8s_pvc`, `svc` →
-`k8s_service`. They are aliases, not separate types — the detail panel and the
-picker show the canonical card.
+sorack also accepts four short forms: `ct` (`container`), `ns`
+(`k8s_namespace`), `pvc` (`k8s_pvc`), and `svc` (`k8s_service`). They are not
+separate types. The detail panel and the type picker treat them as the full
+type.
 
-Anything else is rejected with a 400 whose message lists the accepted types.
+### Choosing between similar types
 
-### Two pairs that are easy to get wrong
+**`external_service` or `hosted_app`.** Choose by whether you can change it,
+not by where it runs. A function you deploy and patch is a `hosted_app`, even
+though another provider runs it. The provider's platform itself is an
+`external_service`. Do not use `host` for a third-party service: its `ip`,
+`os`, `kernel`, and `uptime` fields would always be empty.
 
-**`external_service` vs `hosted_app`.** The line is *whether you can fix it*,
-not where it runs. A function you deploy and patch is a `hosted_app` even
-though someone else's platform runs it; the platform underneath is an
-`external_service`. Typing a third-party service as `host` puts it among your
-own machines and leaves `ip`, `os`, `kernel` and `uptime` permanently blank —
-and empty fields are how a wrong type shows itself.
-
-**`k8s_service` vs `k8s_cronjob`.** A CronJob has no clusterIP, no ports, no
-selector and no endpoints, so the Service card describes nothing about one.
-The CronJob card carries `schedule`, `lastScheduleTime`, `lastSuccessfulTime`,
-`lastStatus` and `suspend` instead — and is
-[reported rather than graded](/docs/adapters/#kubernetes).
+**`k8s_service` or `k8s_cronjob`.** A CronJob has no cluster IP, ports,
+selector, or endpoints, so the Service fields do not apply. The CronJob type
+shows `schedule`, `lastScheduleTime`, `lastSuccessfulTime`, `lastStatus`, and
+`suspend`. sorack [reports these values but does not grade
+them](/docs/adapters/#kubernetes).
 
 ## `meta`
 
-`meta` is a free-form object with three groups of keys in it, separated by who
-writes them. The separation is the point: when two writers own one fact, they
-diverge, and the older of the two wins at random.
+`meta` is a free-form object. Its keys fall into three groups, depending on who
+writes them. Each group should have only one writer.
 
 | Group | Written by | Example keys |
 | --- | --- | --- |
-| Your fields | You, in the UI or over the API | `role`, `ip`, `provider`, `software` |
-| Observations | The collector, on every sweep | everything under `observed.*` |
-| Sync annotations | Whatever syncs an inventory in | `syncedBy`, `probeSkipped`, `adr` |
+| Your fields | You, in the UI or through the API | `role`, `ip`, `provider`, `software` |
+| Observations | The collector, on every check | Everything under `observed.*` |
+| Sync annotations | A tool that syncs an inventory into sorack | `syncedBy`, `probeSkipped`, `adr` |
 
-Two rules apply on the way in, to both `POST` and `PATCH`:
+Two rules apply to both `POST` and `PATCH`:
 
-- **`null` means "delete this key"**, not "store a null". The UI sends it to
-  clear a field; a sync sends it to say "no reason this time". Storing the null
-  would leave behind a fact nothing reads and everything has to step over —
-  and since a null and an absent key render identically, the only visible
-  symptom was `meta` slowly filling up.
-- **`observed` is refused.** It belongs to the collector. A caller could
-  otherwise seed a node with observations nothing observed, and on a node with
-  no probe that would never be corrected.
+- A `null` value deletes the key. sorack does not store `null`.
+- `observed` is ignored. Only the collector writes observations.
 
-`PATCH` merges rather than replaces, so send only the keys you are changing.
-The depth of the merge differs by key, which is worth knowing before you write
-a sync:
+`PATCH` merges `meta` instead of replacing it, so send only the keys you want
+to change. How deep the merge goes depends on the key:
 
 | Key | On `PATCH` |
 | --- | --- |
-| `manual`, `softwareProbes` | Merged one level deeper — sibling entries survive. |
-| `observed` | Ignored; the stored bag is kept. |
-| everything else | Replaced wholesale at the top level. |
+| `manual`, `softwareProbes` | Merged one level deeper. Other entries are kept. |
+| `observed` | Ignored. The stored value is kept. |
+| Any other key | Replaced as a whole. |
 
-So `{"meta":{"manual":{"ip":"10.0.0.2"}}}` changes `ip` and leaves the other
-manual fields alone, while `{"meta":{"adr":[…]}}` replaces the whole array.
+For example, `{"meta":{"manual":{"ip":"10.0.0.2"}}}` changes `ip` and keeps the
+other manual fields. `{"meta":{"adr":[…]}}` replaces the whole array.
 
-Both `POST` and `PATCH` hand back the node with a derived `monitored` boolean
-alongside the stored fields.
+`POST` and `PATCH` both return the node with the stored fields and a
+`monitored` boolean that sorack computes.
 
 ### Keys a sync writes
 
-Three keys exist so that something maintaining nodes from an external source
-of truth can explain itself in the UI. All three are optional, and all three
-are ordinary `meta` keys — nothing stops you setting them by hand.
+These three keys let a tool that manages nodes from another source of truth
+explain itself in the UI. All three are optional. They are ordinary `meta`
+keys, so you can also set them by hand.
 
-`syncedBy` — a string naming what wrote the node.
+**`syncedBy`** is a string that names the tool that wrote the node.
 
 ```jsonc
 { "meta": { "syncedBy": "inventory-sync" } }
 ```
 
-The detail panel shows *from inventory-sync* next to the values it wrote, with
-a tooltip saying edits here may be replaced on its next run. The wording is
-deliberate: the fields stay editable, so claiming they cannot be changed would
-be false and the operator would find out the hard way.
+The detail panel shows *from inventory-sync* next to the values the tool wrote.
+The tooltip says that edits made there may be replaced on the tool's next run.
+The fields remain editable.
 
-`probeSkipped` — a string explaining why a node has no probe.
+**`probeSkipped`** is a string that explains why a node has no probe.
 
 ```jsonc
 { "meta": { "probeSkipped": "behind an identity proxy; 200 means the proxy" } }
 ```
 
-[**not monitored**](/docs/concepts/#not-monitored-is-not-unknown) covers two
-very different situations: nobody has got to it yet, and a probe here would
-lie. This tells them apart. It renders next to the *not monitored* label and
-nowhere else — a node that *is* monitored never shows it.
+A node can be [**not monitored**](/docs/concepts/#not-monitored-is-not-unknown)
+because nobody has set up a probe yet, or because a probe would give a wrong
+answer. `probeSkipped` records the second case. It appears next to the
+*not monitored* label and nowhere else, so a monitored node never shows it.
 
-`adr` — an array of decision records, for why the node is there at all.
+**`adr`** is an array of decision records that explain why the node exists.
 
 ```jsonc
 {
@@ -134,20 +118,17 @@ nowhere else — a node that *is* monitored never shows it.
 }
 ```
 
-`id` is required; `title` falls back to the `id`, and `url` renders as a link
-only when it is `http(s)` — a dead anchor claims the decision is one click away
-when it is not, and the repository holding these is often private.
+`id` is required. If `title` is missing, the `id` is shown instead. `url` is
+shown as a link only if it starts with `http://` or `https://`.
 
-Links only, on purpose: there is no field in sorack for the reasoning itself.
-The decision belongs in the repository that owns it and reviews it, and a text
-box here would be a second home for the same fact.
+sorack stores links only, not the reasoning itself. Keep the decision record in
+the repository where it is written and reviewed.
 
-The section hides itself when the list is empty, rather than showing an empty
-"Related decisions" heading — which reads as *there are none* when it almost
-always means nobody has linked them yet.
+If the array is empty, the detail panel does not show the "Related decisions"
+section.
 
 :::note
-Keys the app does not recognise are stored and handed back untouched. That is
-what makes `meta` usable as a place to hang your own data — but it also means
-a typo is not an error, so check the detail panel after the first write.
+sorack stores keys it does not recognize and returns them unchanged, so you can
+keep your own data in `meta`. A misspelled key is not an error, so check the
+detail panel after your first write.
 :::

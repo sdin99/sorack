@@ -161,6 +161,8 @@ paragraph is a reasonable ceiling. If everything is bold, nothing is.
 한국어 산문에서는 줄표를 쓰지 않습니다. 영어 원문의 줄표를 그대로 옮긴 경우가 대부분입니다.
 쉼표, 괄호, 또는 문장 나누기로 바꿉니다.
 
+표에서 값이 없는 칸은 `—` 하나로 둡니다. 이 경우는 줄표 규칙의 예외입니다.
+
 | 피할 것 | 쓸 것 |
 |---|---|
 | 발견된 id 는 클러스터 좌표입니다 — `apps/cronjob/nightly-backup` — 그래서… | 탐지된 노드의 id는 클러스터 좌표입니다(예: `apps/cronjob/nightly-backup`). 그래서… |
@@ -217,3 +219,5 @@ These rules cannot be checked automatically and need review:
 - Whether the reason given for a rule is needed at all.
 - Whether an anecdote has been turned into a plain statement or just reworded.
 - Whether a translated sentence reads as natural Korean.
+- Whether comments inside code blocks state only the rule, with no anecdote or
+  measurement left in them. The checker skips code blocks.

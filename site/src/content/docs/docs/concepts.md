@@ -3,76 +3,74 @@ title: Concepts
 description: The two-axis node model, the topology graph, per-axis monitoring and runbooks.
 ---
 
-sorack models your homelab with a few primitives that mirror how self-hosted
-infrastructure actually behaves. Understanding them makes the rest of the app
-obvious.
+sorack models a homelab with a few building blocks. This page describes each
+one.
 
 ## Two-axis node model
 
 Every node has two independent axes:
 
-- An **infra type** — `host`, `vm`, `container`, `k8s_cluster`, `k8s_namespace`,
-  `router`, and so on. This is what the thing *is*, and it is chosen from a
-  [fixed vocabulary](/docs/nodes/): the type decides which fields the detail
-  panel shows, so a type nothing recognises produces an empty panel rather
-  than an error.
-- Zero or more **software attachments** — Proxmox VE, PostgreSQL, Jellyfin, … —
-  what *runs on* it.
+- An **infra type**, such as `host`, `vm`, `container`, `k8s_cluster`,
+  `k8s_namespace`, or `router`. It describes what the node is. You choose it
+  from a [fixed list](/docs/nodes/). The type decides which fields the detail
+  panel shows; a type sorack does not recognize shows an empty panel instead of
+  an error.
+- Zero or more **software attachments**, such as Proxmox VE, PostgreSQL, or
+  Jellyfin. They describe what runs on the node.
 
-Detail fields and monitoring slots **merge across both axes**. A Proxmox host,
-for example, surfaces host-level fields from its infra type and PVE-specific
-fields from its software attachment in the same panel.
+Detail fields and monitoring slots from both axes appear together. For
+example, a Proxmox host shows host fields from its infra type and PVE fields
+from its software attachment in the same panel.
 
-## Topology + typed edges
+## Topology and typed edges
 
-The inventory *is* the graph. You create, rename, reparent and connect nodes
-directly on the canvas, drawing **typed edges** between them. Layout is managed
-automatically by [dagre](https://github.com/dagrejs/dagre), so cosmetic edits
-never shuffle the picture — reparent a node or draw an edge and the graph
-re-flows on its own.
+The inventory is the graph. You create, rename, move, and connect nodes
+directly on the canvas, and draw **typed edges** between them.
+[dagre](https://github.com/dagrejs/dagre) lays out the graph automatically.
+Renaming a node does not move anything; moving a node or drawing an edge
+re-flows the graph.
 
 ## Per-axis monitoring
 
-Each axis carries **one probe**. You can run a reachability probe on the infra
-side and a Proxmox API probe on the software side at the same time.
+Each axis has one probe. For example, you can run a reachability probe on the
+infra axis and a Proxmox API probe on the software axis at the same time.
 
-When more than one axis reports, the **StatusLine** picks a primary aspect to
-drive the node's status and exposes a pill row so you can switch between aspects.
-Nodes without any probe are never touched, so manual status and automatic status
-never clash.
+When more than one axis reports, the **StatusLine** picks one aspect to set the
+node's status and shows a row of pills for switching between aspects. The
+collector does not change nodes that have no probe, so manual and automatic
+status never conflict.
 
 ### “not monitored” is not “unknown”
 
-These are different facts and the UI says so:
+The UI shows these two states differently:
 
-| Reads | Means |
+| Shows | Meaning |
 | --- | --- |
-| **not monitored** | No probe is configured on any axis. Nothing has been asked. |
-| `unknown` | A probe ran and could not decide — a timeout, a 403, a job whose history was garbage-collected. |
+| **not monitored** | No probe is configured on any axis. |
+| `unknown` | A probe ran but could not decide, for example after a timeout, a 403, or when a job's history has been cleaned up. |
 
-They used to render identically, which is worse than it sounds: on a map where
-most nodes are grey, the colour stops carrying information and an outage looks
-like the usual background. A node reading **not monitored** is a gap in your
-coverage; a node reading `unknown` is a probe that needs looking at.
+A node that shows **not monitored** is a gap in your monitoring. A node that
+shows `unknown` has a probe that needs attention.
 
-`monitored` is derived from the node's own probe config and never stored, so a
-probe added later can't leave a stale value behind. A sync can explain a
-deliberate gap by setting [`meta.probeSkipped`](/docs/nodes/#keys-a-sync-writes).
+sorack derives `monitored` from the node's probe configuration and does not
+store it, so the value is always current. If a sync leaves a node unmonitored
+on purpose, it can record the reason in
+[`meta.probeSkipped`](/docs/nodes/#keys-a-sync-writes).
 
 :::note
-Status is collector-owned. There's no manual "set this to green" — an
-unmonitored node says so rather than showing a stale hand-set value.
+Only the collector sets status. You cannot set a node to green by hand; a node
+without a probe shows **not monitored**.
 :::
 
 ## Maintenance mode
 
-Flag a node (and its subtree) as under maintenance and the collector skips it, so
-intentional downtime doesn't read as a failure. The node shows a distinct
-maintenance treatment instead of an error state.
+Mark a node as under maintenance and the collector skips it and its subtree.
+Planned downtime then does not show as a failure. The node shows a maintenance
+state instead of an error.
 
 ## Runbooks
 
-Runbooks are markdown documents linked to nodes. They render inside the app and
-include an in-app split-view editor, `[[node:…]]` / `[[runbook:…]]` cross-links,
-optional git sync, and file attachments. See your nodes from a runbook, and jump
-to a node's runbooks from its detail panel.
+Runbooks are Markdown documents linked to nodes. The app renders them and
+includes a split-view editor, `[[node:…]]` and `[[runbook:…]]` links, optional
+git sync, and file attachments. A runbook shows the nodes it links to, and a
+node's detail panel links to its runbooks.

@@ -3,14 +3,15 @@ title: Quickstart
 description: Run sorack locally in a few minutes, or self-host it on your cluster.
 ---
 
-sorack is a standard web app — a **React (Vite)** frontend, a **Hono (Node)**
-API, and **PostgreSQL**. Run it however you'd run a Node app plus Postgres. The
-repo includes Kubernetes manifests, but they're *one* option, not a requirement.
+sorack is a web app with a React (Vite) frontend, a Hono (Node) API, and a
+PostgreSQL database. You can run it anywhere you can run a Node app and
+Postgres. The repository includes Kubernetes manifests, but Kubernetes is not
+required.
 
 ## Try it locally
 
-The fastest way to see it. You'll need **Node 22**, **pnpm**, and a **PostgreSQL**
-instance — any will do. Here's one with Docker:
+You need Node 22, pnpm, and a PostgreSQL instance. Any PostgreSQL works. To
+start one with Docker:
 
 ```bash
 docker run -d --name sorack-pg \
@@ -18,7 +19,8 @@ docker run -d --name sorack-pg \
   -p 5432:5432 postgres:17
 ```
 
-Then clone, point the API at that Postgres, and start both dev servers:
+Clone the repository, point the API at that database, and start the dev
+servers:
 
 ```bash
 git clone https://github.com/sdin99/sorack && cd sorack
@@ -31,28 +33,26 @@ export POSTGRES_HOST=localhost POSTGRES_DB=sorack \
 pnpm dev   # web → http://localhost:5173 · api → :3001
 ```
 
-Migrations run automatically on API boot. Open <http://localhost:5173> — the
-initial admin password is printed to the API log once (or pin it with
-`SORACK_ADMIN_PASSWORD`). The full environment list is in
+The API runs database migrations when it starts. Open <http://localhost:5173>.
+The initial admin password is printed once to the API log. To choose your own,
+set `SORACK_ADMIN_PASSWORD`. All environment variables are listed in
 [Configuration](/docs/configuration/).
 
 :::note
-sorack reads configuration straight from `process.env`, so inject it however you
-like — a shell `export` as above, `node --env-file`, a `.env` loader, or a
-Kubernetes Secret.
+sorack reads its configuration from `process.env`. You can set it with a shell
+`export` as above, `node --env-file`, a `.env` loader, or a Kubernetes Secret.
 :::
 
 ## Self-host
 
-For a persistent deployment there is a **published image** —
-`ghcr.io/sdin99/sorack`, one container serving the API and the web bundle on a
-single port — and a Kustomize base to point an overlay at. See
-[Deploy on Kubernetes](/docs/kubernetes/). Since sorack is just a Node +
-Postgres app, you can equally build your own image or run it under any process
-manager.
+For a long-running deployment, use the published image,
+`ghcr.io/sdin99/sorack`. It is a single container that serves the API and the
+web UI on one port. A Kustomize base is included for Kubernetes; see
+[Deploy on Kubernetes](/docs/kubernetes/). You can also build your own image or
+run sorack under any process manager.
 
-## Where to next
+## Next steps
 
-Open the topology view and create your first node — pick an infra type, attach
-software, then add a probe per axis and the StatusLine starts reporting. The
-model is explained in [Concepts](/docs/concepts/).
+Open the topology view and create your first node. Pick an infra type, attach
+software, and add a probe to each axis. The StatusLine then starts reporting
+status. [Concepts](/docs/concepts/) explains the model.
