@@ -144,9 +144,23 @@ def main() -> int:
             continue
 
         checked += 1
-        if ko_last == en_last:
-            continue
         declared = source_commit(ko)
+
+        if ko_last == en_last:
+            # Updated together, so the field has nothing left to say — and a
+            # value that survives from an earlier round names a commit that is
+            # no longer the English page's latest. Left alone it reads as a
+            # current claim, and the same-commit arm would keep passing over
+            # it forever. `sourceCommit` means "checked against a version
+            # other than the one I was committed with"; here there is no such
+            # version.
+            if declared:
+                failures.append(
+                    f"{en.name}: both files were changed by {en_last[:9]}, and the "
+                    f"translation still declares sourceCommit {declared[:9]} from an "
+                    f"earlier round. Remove the line — updating together is the claim.")
+            continue
+
         if declared and en_last.startswith(declared):
             continue
 
