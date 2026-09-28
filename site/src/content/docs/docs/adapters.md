@@ -79,6 +79,19 @@ answers, and "the probe could not read those kinds" is a third.
 on the node, and scores on whether anything is behind it — a Service with no
 ready endpoints resolves and answers nothing.
 
+With one exception, which matters on any cluster running operators: **a Service
+something else created is not judged on its own.** If the Service has
+`ownerReferences`, an empty endpoint list reports `unknown` and names the
+owner instead of a fault.
+
+"Is anything supposed to be behind this?" is not a question the Service can
+answer. Its owner is what asked for the instances, so the owner is where the
+answer lives — and that is somewhere this probe cannot look. A single-instance
+database has no read replica, so its read-only Service correctly has no
+endpoints; the observation is right and scoring it a fault is not. It is the
+same rule as a Deployment scaled to zero counting as ready: an intent of zero
+is not a failure.
+
 `cronjob` fills `schedule`, `suspend`, `lastScheduleTime`,
 `lastSuccessfulTime` and `lastStatus`, and scores on **the outcome of the last
 run only**. A failed run is a fact. Lateness is not: calling a CronJob overdue
@@ -98,6 +111,14 @@ node for each Service and CronJob it finds:
 Only kinds a probe can judge on their own become nodes. A Deployment has no
 probe mode, so it stays in the namespace's counts rather than becoming a node
 that nothing can ever say anything about.
+
+Owned Services are left out for the same reason — a node whose health is
+decided somewhere the probe cannot read. They stay visible in the namespace
+report, grouped by what created them, which is the only grouping of them that
+carries information. On a cluster with one Service per database role this is
+most of them: on the cluster this was measured against, 40 discoverable
+Services became 28, and the twelve that fell away were exactly the
+operator-owned ones.
 
 A discovered node arrives already probed — discovery knows the coordinate, and
 that coordinate is exactly what a Service or CronJob probe takes.

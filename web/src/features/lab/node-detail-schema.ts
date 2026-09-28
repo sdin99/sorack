@@ -524,6 +524,13 @@ export const INFRA_META: Record<string, { name: string; category: string; probe:
   k8s_namespace: { name: "K8s Namespace", category: "Kubernetes", probe: "k8s",    allowedProbeTypes: ["k8s"],                    description: "A namespace grouping workloads within a cluster." },
   k8s_service:   { name: "K8s Service",   category: "Kubernetes", probe: "k8s",    allowedProbeTypes: ["k8s", "tcp", "http"],     description: "A service exposing pods within a cluster." },
   k8s_pvc:       { name: "K8s PVC",       category: "Kubernetes", probe: "k8s",    allowedProbeTypes: ["k8s"],                    description: "A persistent volume claim for stateful storage." },
+  k8s_cronjob:   { name: "K8s CronJob",   category: "Kubernetes", probe: "k8s",    allowedProbeTypes: ["k8s"],                    description: "A scheduled batch job. Reported, not graded — see the note on TYPE_DETAIL." },
+  // Reachable over the network, and that is all the probe can say. For an
+  // external service an alive check is often a check of the provider's edge
+  // rather than of the thing (an identity proxy in front answers 200 either
+  // way) — which is what meta.probeSkipped is for.
+  external_service: { name: "External Service", category: "External", probe: "http", allowedProbeTypes: ["http", "tcp"],        description: "Something you depend on and do not run." },
+  hosted_app:    { name: "Hosted App",    category: "External",   probe: "http",   allowedProbeTypes: ["http", "tcp"],            description: "Yours, deployed by you, running on someone else's platform." },
   share:         { name: "Share",         category: "Storage",    probe: "tcp",    allowedProbeTypes: ["tcp"],                    description: "A network file share (NFS, SMB)." },
 };
 

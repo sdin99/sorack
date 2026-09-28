@@ -13,6 +13,17 @@ export default defineConfig({
       logo: { src: './src/assets/sorack-mark.svg', alt: 'sorack' },
       customCss: ['./src/styles/sorack.css'],
       favicon: '/favicon.svg',
+      // English stays at the root (`/docs/...`), Korean sits under `/ko/`.
+      // ‼ `root` is load-bearing. The other way to write this is
+      // `defaultLocale: 'en'` with an `en` entry, which moves English to
+      // `/en/docs/...` and breaks every link that already exists — the README,
+      // the GitHub issues, anything anyone bookmarked. A translation should
+      // not be able to move the original.
+      defaultLocale: 'root',
+      locales: {
+        root: { label: 'English', lang: 'en' },
+        ko: { label: '한국어', lang: 'ko' },
+      },
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/sdin99/sorack' },
       ],
@@ -49,6 +60,7 @@ export default defineConfig({
         {
           label: 'Reference',
           items: [
+            { label: 'Node types & meta', slug: 'docs/nodes' },
             { label: 'Configuration', slug: 'docs/configuration' },
             { label: 'API keys', slug: 'docs/api' },
             { label: 'Troubleshooting', slug: 'docs/troubleshooting' },

@@ -70,6 +70,47 @@ jobs:
           setTimeout(() => { console.log('import chain resolved'); process.exit(0); }, 20000);
           "
 
+  # The docs deploy on push to main — Cloudflare Pages is wired to the repo,
+  # with no workflow of its own. So a docs commit is a publish, and a broken
+  # link or a translation that silently reverted to English is live before
+  # anyone reads it. That is why these two run here and not by hand.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # ‼ Not optional. The translation check compares per-file last
+          # commits, and on a shallow clone every file reports the same one —
+          # so it passes on a translation that is fifty commits behind. The
+          # script refuses to run shallow rather than trusting that anyone
+          # remembers this comment.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      # ‼ npm, not pnpm. site/ is outside the pnpm workspace (see
+      # pnpm-workspace.yaml: web and api only) and carries a
+      # package-lock.json, so the root install in the `check` job does not
+      # cover it and `pnpm install` here would resolve against nothing.
+      - name: build the docs site
+        working-directory: site
+        run: |
+          npm ci
+          npm run build
+
+      # Anchors are generated from heading text, and the Korean headings are
+      # Korean — a link copied across from the English page looks right and
+      # resolves to nothing.
+      - name: docs links resolve
+        run: python3 scripts/check-docs-links.py site/dist
+
+      - name: translations track their source
+        run: python3 scripts/check-docs-translations.py
+
   # One job, many steps — deliberately. GitHub bills Actions per job rounded
   # up to the minute, so six 10-second checks split across six jobs costs six
   # minutes for ninety seconds of work. Individual red lights are traded for
