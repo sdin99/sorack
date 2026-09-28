@@ -34,7 +34,7 @@ sorack also accepts four short forms: `ct` (`container`), `ns`
 separate types. The detail panel and the type picker treat them as the full
 type.
 
-### Choosing between similar types
+### Two pairs that are easy to get wrong
 
 **`external_service` or `hosted_app`.** Choose by whether you can change it,
 not by where it runs. A function you deploy and patch is a `hosted_app`, even

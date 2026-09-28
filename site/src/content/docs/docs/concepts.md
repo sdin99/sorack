@@ -22,7 +22,7 @@ Detail fields and monitoring slots from both axes appear together. For
 example, a Proxmox host shows host fields from its infra type and PVE fields
 from its software attachment in the same panel.
 
-## Topology and typed edges
+## Topology + typed edges
 
 The inventory is the graph. You create, rename, move, and connect nodes
 directly on the canvas, and draw **typed edges** between them.

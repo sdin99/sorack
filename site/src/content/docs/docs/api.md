@@ -3,19 +3,18 @@ title: API keys
 description: Calling the sorack api from a script with a bearer key.
 ---
 
-Everything the web UI does goes through `/api/*`. A script can do the same
-with an API key, which is what you want for a reconciler, a sync job, or
-anything else that is not a person with a browser.
+Everything the web UI does goes through `/api/*`. Scripts can call the same
+API with an API key. Use a key for sync jobs, reconcilers, and other tools that
+run without a person at a browser.
 
 ## Issue a key
 
-Settings → **API keys** → *New key*. Pick a scope, give it a name you will
-recognise in six months, and copy the value — it is stored as
-`sha256(key + AUTH_SECRET)` and cannot be shown again.
+Go to **Settings → API keys** and select **New key**. Choose a scope, give the
+key a name you will recognize later, and copy the value. sorack stores only
+`sha256(key + AUTH_SECRET)`, so the value cannot be shown again.
 
-Keys are issued from a logged-in session only. A key cannot create or revoke
-another key: otherwise revoking the one you know about would not actually
-revoke access.
+You can create keys only from a signed-in session. A key cannot create or
+revoke other keys.
 
 ## Send it
 
@@ -26,17 +25,17 @@ curl -H "Authorization: Bearer $SORACK_API_KEY" \
 
 ## Scopes
 
-| scope | may do |
+| Scope | Allows |
 |---|---|
 | `read` | `GET`, `HEAD`, `OPTIONS` |
-| `write` | everything the api exposes |
+| `write` | Every API operation |
 
-The guard is keyed on the HTTP method, not on a list of routes, so a route
-added later is covered without anyone remembering to add it.
+Scopes are checked by HTTP method, not by a list of routes, so new routes are
+covered automatically.
 
-`POST /api/nodes/:id/probe/test` needs `write` even though it changes nothing
-stored: it opens a connection to an operator-supplied address, which is not
-something a read-only key should be able to trigger.
+`POST /api/nodes/:id/probe/test` requires `write` even though it does not change
+stored data, because it opens a connection to an address supplied by the
+caller.
 
 ## Telling the two failures apart
 
@@ -45,24 +44,25 @@ something a read-only key should be able to trigger.
 403  {"error":"this API key is read-only","scope":"read"}
 ```
 
-`401` means the key is absent, malformed, or revoked — issue a new one. `403`
-means the key is valid and not allowed to do this — fix the configuration. A
-client that retries on both will loop forever on the second, so branch on the
-status before retrying.
+`401` means the key is missing, malformed, or revoked; create a new key. `403`
+means the key is valid but its scope does not allow the request; change the
+scope or use a different key. Do not retry on `403`: the result will not
+change.
 
 ## Checking that requests arrive at all
 
-Each successful verification records `lastUsedAt`, shown in Settings next to
-the key. If a key you have just wired up still reads *never used*, the request
-is not reaching sorack — something in front of it is answering. An identity
-proxy that returns its login page with `200` is the usual cause, and it looks
-like a working request to most clients.
+Each successful request updates the key's **last used** time, shown next to
+the key in Settings. If a key you just set up still shows *never used*, your
+requests are not reaching sorack. A common cause is an identity proxy in front
+of sorack that returns its login page with status `200`, which most clients
+treat as success.
 
 ## Attaching software to a node
 
-Software running on a host or VM is not a node. It lives on the node it runs
-on, under `meta.software` (which ids are present) and `meta.softwareProbes`
-(how to check each one). Both go through the node's own `PATCH`:
+Software that runs on a host or VM is not a separate node. It is stored on the
+node it runs on, in `meta.software` (the list of software ids) and
+`meta.softwareProbes` (the probe for each one). Set both with a `PATCH` to the
+node:
 
 ```bash
 curl -X PATCH .../api/nodes/k8s-master -H 'content-type: application/json' -d '{
@@ -73,27 +73,27 @@ curl -X PATCH .../api/nodes/k8s-master -H 'content-type: application/json' -d '{
 }'
 ```
 
-`meta` is merged, not replaced, so a `PATCH` that touches one key keeps the
-others. Two exceptions matter to a script:
+`PATCH` merges `meta`, so keys you do not send are kept. Two exceptions matter
+for scripts:
 
-- **`meta.software` is an array and is replaced wholesale.** It is the list,
-  not an addition to it.
-- **Sending `software` deletes the probes of anything absent from it.** That
-  is deliberate — unchecking software in the UI should not leave its probe and
-  its collected metrics behind forever — but it means one `PATCH` per software
-  does not accumulate. Measured: `{"software":["containerd"],…}` followed by
-  `{"software":["kubelet"],…}` leaves `kubelet` alone, with no error.
+- `meta.software` is an array and is replaced as a whole.
+- When you send `meta.software`, sorack deletes the probes of any software not
+  in the new list. This matches the UI, where unchecking software also removes
+  its probe and collected metrics.
 
-So **send every software for a node in one `PATCH`**, with the complete list.
+Because of this, one `PATCH` per software item does not add up. For example,
+sending `{"software":["containerd"],…}` and then `{"software":["kubelet"],…}`
+leaves only `kubelet`, with no error. Send the complete list for a node in a
+single `PATCH`.
 
-`meta.observed.*` is owned by the collector and is kept from the database on
-every write, so a caller cannot clobber it and does not need to send it back.
+You do not need to send `meta.observed.*`. The collector owns it, and sorack
+keeps the stored value on every write.
 
 ## Notes for callers
 
-- Keys do not expire. Revocation is the only way out, which is why
-  `lastUsedAt` exists: check it before deleting one.
-- Validation errors are `400` and name the field. A `409` means a duplicate —
-  for nodes that is the id, for edges the `(source, target, type)` triple.
-- Keys issued before the rename from "API tokens" begin with `sorack_pat_`
-  instead of `sorack_key_`. Both are accepted; only the latter is issued.
+- Keys do not expire. To stop using one, revoke it. Check its **last used**
+  time before you revoke it.
+- Validation errors return `400` and name the field. `409` means a duplicate:
+  the id for nodes, or the `(source, target, type)` combination for edges.
+- Keys created before this feature was renamed from "API tokens" start with
+  `sorack_pat_`. New keys start with `sorack_key_`. Both are accepted.

@@ -3,41 +3,42 @@ title: Troubleshooting
 description: Common issues running sorack and how to fix them.
 ---
 
-The commands here assume an **image install** — the one container from
-[Deploy on Kubernetes](/docs/kubernetes/), named `sorack`, serving the api and
-the web bundle on one port. Nothing on this page needs `-c <container>`.
+The commands on this page assume you installed sorack from the image, as
+described in [Deploy on Kubernetes](/docs/kubernetes/). The image runs one
+container named `sorack`, so the commands do not need `-c`.
 
-If you are running `deploy/dev` instead, that is a development setup and not an
-install; its own failures are at the [bottom of this page](#developing-on-sorack).
+If you run `deploy/dev` for development, see
+[Developing on sorack](#developing-on-sorack) at the end of this page.
 
 ## The pod never becomes Ready
 
-`kubectl describe pod` names the cause; the two you are most likely to hit are
-both in the overlay rather than in sorack.
+Run `kubectl describe pod` to see the cause. The most common causes are in the
+overlay:
 
 | `kubectl get pods` shows | Cause |
 | --- | --- |
-| `CreateContainerConfigError` | The `sorack-db` Secret does not exist. It holds `POSTGRES_USERNAME` and `POSTGRES_PASSWORD`, which have no sensible default, so it is a hard requirement and fails at admission — the message names the missing secret. (`sorack-app` *is* optional and its absence is not this.) |
-| `Pending`, event `pod has unbound immediate PersistentVolumeClaims` | The runbooks PVC has no storage class. The base deliberately sets none; your overlay has to. |
-| `ImagePullBackOff` | The image pin does not resolve. If you pinned a digest, check it against the GHCR package page for that version — a digest that was valid can be garbage-collected once nothing tags it. |
+| `CreateContainerConfigError` | The `sorack-db` Secret does not exist. It holds `POSTGRES_USERNAME` and `POSTGRES_PASSWORD`, which have no defaults, so the pod cannot start without it. The error message names the missing Secret. The `sorack-app` Secret is optional and does not cause this error. |
+| `Pending`, with the event `pod has unbound immediate PersistentVolumeClaims` | The runbooks PVC has no storage class. The base does not set one; set it in your overlay. |
+| `ImagePullBackOff` | The pinned image cannot be pulled. If you pinned a digest, compare it with the GHCR package page for that version. A digest that no tag points to can be deleted from the registry. |
 
-A pod that is Running but never Ready is a different thing: the readiness probe
-polls `/api/health`, so check the logs. The usual answer is Postgres — the api
-retries a migration for up to 60 seconds and logs each attempt with
+If the pod is Running but not Ready, check the logs. The readiness probe calls
+`/api/health`. The usual cause is that PostgreSQL is unreachable: the api
+retries migrations for up to 60 seconds and logs each attempt as
 `[migrate] postgres not reachable`.
 
 ## Login succeeds but the next request is 401
 
-You submit the login form, see `POST /api/auth/login → 200`, then immediately
-`GET /api/auth/me → 401`.
+The login form returns `POST /api/auth/login → 200`, and the next request
+returns `GET /api/auth/me → 401`.
 
-**Cause:** you're reaching the app over plain HTTP (e.g. `kubectl port-forward`).
-The session cookie is set with `Secure`, so the browser drops it on non-HTTPS
-origins.
+**Cause:** you are connecting over plain HTTP, for example through
+`kubectl port-forward`. The session cookie is marked `Secure`, so the browser
+does not send it over HTTP.
 
-**Fix** (one of):
+**Fix:** use one of these options.
 
-- Front it with HTTPS (copy `examples/ingress.yaml`, set your hostname + TLS).
+- Serve sorack over HTTPS. Copy `examples/ingress.yaml` and set your hostname
+  and TLS.
 - For local testing, set `SORACK_COOKIE_SECURE: "false"` in the `sorack-app`
   Secret and restart:
 
@@ -49,38 +50,33 @@ kubectl rollout restart deploy/sorack -n sorack
 
 ## `relation "auth.users" does not exist`
 
-Migrations run automatically on api boot, so this means the migration step
-failed rather than that it was never run — check the api logs for the cause
-(most often the database being unreachable). To run it by hand:
+The api runs migrations when it starts, so this error means the migration
+failed. Check the api logs for the cause; it is usually that the database is
+unreachable. To run migrations by hand:
 
 ```bash
 kubectl exec -n sorack deploy/sorack -- node dist/db/migrate.js
 ```
 
-The migration runner is a second entry point in the same module the api calls
-at startup, and it resolves the `.sql` files relative to its own file, so it
-works from the compiled output with no extra tooling in the image. It is
-idempotent — already-applied migrations are skipped.
+This runs the same migration code the api runs at startup. Migrations that
+have already been applied are skipped.
 
 ## Where's the initial admin password?
 
-If you didn't set `SORACK_ADMIN_PASSWORD`, the api generates one on first boot
-and logs it once:
+If you did not set `SORACK_ADMIN_PASSWORD`, the api generates a password on
+first start and prints it to the log:
 
 ```bash
 kubectl logs -n sorack deploy/sorack | grep -A5 "Initial admin"
 ```
 
-:::caution
-"Once" is literal. The line is printed only when the user row is actually
-created, so restarting the pod does not print it again — with a user row
-present the bootstrap does nothing. That pod's log is the only copy.
-:::
+The password is printed only when the admin user is created. Restarting the
+pod does not print it again.
 
 ## Lost the admin password
 
-There is no reset flow. Delete the admin row and restart: the bootstrap sees no
-user and generates a new password.
+sorack has no password reset. Delete the user rows and restart; sorack then
+creates the admin user again with a new password.
 
 ```bash
 kubectl exec -n sorack sorack-postgres-0 -- sh -lc \
@@ -88,14 +84,15 @@ kubectl exec -n sorack sorack-postgres-0 -- sh -lc \
 kubectl rollout restart deploy/sorack -n sorack
 ```
 
-This deletes every user row, not just the admin, and it invalidates their
-sessions. On a single-operator install that is the whole point; on anything
-else, update the one row instead.
+:::caution
+This deletes all users, not only the admin, and ends their sessions. If other
+users exist, update the admin row instead.
+:::
 
 ## Everyone got logged out after a pod restart
 
-`SORACK_AUTH_SECRET` isn't set, so the api generates a random one each boot and
-old session tokens stop validating. Set it in the `sorack-app` Secret:
+`SORACK_AUTH_SECRET` is not set, so the api generates a new one on each start
+and existing sessions stop working. Set it in the `sorack-app` Secret:
 
 ```bash
 openssl rand -base64 48
@@ -105,11 +102,11 @@ kubectl rollout restart deploy/sorack -n sorack
 
 ## Developing on sorack
 
-These apply to `deploy/dev` only — the hostPath setup described under
+This section applies only to `deploy/dev`, the development setup described in
 [Developing on sorack](/docs/kubernetes/#developing-on-sorack). It mounts a
-checkout from the node and runs `pnpm dev` inside, so its container is named
-`dev`, its code lives at `/workspace`, and it serves Vite on 5173 rather than
-the single-port bundle. Commands aimed at it need `-c dev`:
+checkout from the node and runs `pnpm dev` in a container named `dev`, with the
+code at `/workspace`. It serves Vite on port 5173. Commands for it need
+`-c dev`:
 
 ```bash
 kubectl logs -n sorack deploy/sorack -c dev
@@ -119,21 +116,20 @@ kubectl exec -n sorack deploy/sorack -c dev -- sh -lc \
 
 ### The pod stays in `ContainerCreating` for a long time
 
-First boot installs the dependencies and starts both Vite and tsx. A couple of
-minutes is normal; after that, code edits hot-reload. An image install does not
-do this — if a `deploy/base` pod is slow to start, see
-[above](#the-pod-never-becomes-ready).
+On first start, the dev pod installs dependencies and starts Vite and tsx.
+This can take a few minutes. After that, code changes reload automatically.
+The image install does not do this; if an image-based pod is slow to start, see
+[The pod never becomes Ready](#the-pod-never-becomes-ready).
 
 ### `pnpm install` aborts with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`
 
-You ran `pnpm install` on the host before mounting via `hostPath`, so the pod
-sees a `node_modules` built against a different libc. The deployment passes
-`--config.confirmModulesPurge=false` so newer checkouts skip the prompt; pull
-the latest `deploy/dev/deployment.yaml` if you're on an older copy.
+You ran `pnpm install` on the host before mounting the checkout with
+`hostPath`, so the pod sees a `node_modules` built for a different libc. The
+current `deploy/dev/deployment.yaml` passes `--config.confirmModulesPurge=false`
+to skip this prompt. If you have an older copy, update it.
 
 :::caution
-The prompt is the only thing standing between you and a purge of a
-`node_modules` the pod is using. If the checkout is shared with a running pod,
-answering yes — or passing the flag on the host rather than in the pod — breaks
-it until the next install completes.
+If the checkout is shared with a running pod, do not confirm the prompt or pass
+that flag on the host. Either removes the `node_modules` the pod is using, and
+the pod stops working until the next install finishes.
 :::

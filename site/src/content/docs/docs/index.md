@@ -51,7 +51,7 @@ web UI on one port. A Kustomize base is included for Kubernetes; see
 [Deploy on Kubernetes](/docs/kubernetes/). You can also build your own image or
 run sorack under any process manager.
 
-## Next steps
+## Where to next
 
 Open the topology view and create your first node. Pick an infra type, attach
 software, and add a probe to each axis. The StatusLine then starts reporting

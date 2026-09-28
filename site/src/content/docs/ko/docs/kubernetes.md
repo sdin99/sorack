@@ -99,7 +99,7 @@ api가 시작할 때 데이터베이스 마이그레이션을 실행합니다. �
 
 ```bash
 kubectl port-forward -n sorack svc/sorack 8080:80
-# 그다음 http://localhost:8080 을 엽니다
+# 그다음 http://localhost:8080을 엽니다
 ```
 
 세션 쿠키에 `Secure` 속성이 있으므로 port-forward처럼 평문 HTTP로 접속하면 로그인이
