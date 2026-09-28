@@ -1,7 +1,6 @@
 ---
 title: 쿠버네티스에 배포하기
 description: 포함된 매니페스트로 쿠버네티스 클러스터에 sorack을 직접 호스팅합니다.
-sourceCommit: 18ef7ad43da332a0485fd1826643168fed6bd750
 ---
 
 sorack은 배포된 이미지(`ghcr.io/sdin99/sorack`)로 쿠버네티스에서 실행합니다.
@@ -32,7 +31,7 @@ sorack은 배포된 이미지(`ghcr.io/sdin99/sorack`)로 쿠버네티스에서 
 | `sorack-app` | `examples/secret-app.yaml` | api                        |
 
 ```bash
-kubectl apply -f deploy/dev/namespace.yaml
+kubectl create namespace sorack
 
 # 예제를 복사해 실제 값을 채웁니다. 값을 채운 사본은 커밋하지 않습니다.
 cp examples/secret-db.yaml  /tmp/sorack-db.yaml
@@ -55,8 +54,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: sorack
 resources:
-  # 릴리스 태그로 고정합니다. 브랜치 ref는 누군가 push할 때마다 바뀝니다.
-  - github.com/sdin99/sorack//deploy/base?ref=v0.1.8
+  # https://github.com/sdin99/sorack/releases 의 릴리스 태그로 고정합니다.
+  # 브랜치 ref는 누군가 push할 때마다 바뀝니다.
+  - github.com/sdin99/sorack//deploy/base?ref=<version>
 images:
   # digest로 고정합니다. 태그는 다른 이미지로 옮겨질 수 있습니다.
   - name: ghcr.io/sdin99/sorack

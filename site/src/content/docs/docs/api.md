@@ -44,7 +44,9 @@ caller.
 403  {"error":"this API key is read-only","scope":"read"}
 ```
 
-`401` means the key is missing, malformed, or revoked; create a new key. `403`
+`401` means the key is missing, malformed, or revoked, or that
+`SORACK_AUTH_SECRET` has changed since the key was created (see
+[Configuration](/docs/configuration/#auth)); create a new key. `403`
 means the key is valid but its scope does not allow the request; change the
 scope or use a different key. Do not retry on `403`: the result will not
 change.
