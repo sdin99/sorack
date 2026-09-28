@@ -295,6 +295,11 @@ section.block { padding:76px 0; border-bottom:1px solid var(--border); }
 }
 .shot .cap { font-family:var(--mono); font-size:12px; color:var(--fg-3); background:color-mix(in srgb,var(--surface-1) 84%, transparent); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px 12px; backdrop-filter:blur(2px); }
 .shot.gif { aspect-ratio:21/9; }
+/* The detail card sits in the 1fr column next to the 1.5fr topology card, and
+   the grid stretches both to one height. At 16/9 the narrower card's image
+   ended well above its frame. 32/27 is 16/9 scaled by 1.5, so the two images
+   are the same height at any width; detail.png is cropped to exactly this. */
+.shot.detail { aspect-ratio:32/27; }
 .shot img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
 .showcase-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:16px; }
 
@@ -527,7 +532,7 @@ footer.foot { padding:46px 0 56px; }
           <div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div>
           <div class="url">sorack / node/k8s-cluster</div>
         </div>
-        <div class="shot"><img src="/shots/detail.png" alt="sorack node detail — spec, status and related runbooks" loading="lazy" /></div>
+        <div class="shot detail"><img src="/shots/detail.png" alt="sorack node detail — spec, status and related runbooks" loading="lazy" /></div>
       </div>
     </div>
   </div>
