@@ -41,7 +41,7 @@ drive the node's status and exposes a pill row so you can switch between aspects
 Nodes without any probe are never touched, so manual status and automatic status
 never clash.
 
-### "not monitored" is not "unknown"
+### “not monitored” is not “unknown”
 
 These are different facts and the UI says so:
 
