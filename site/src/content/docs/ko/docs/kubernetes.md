@@ -1,6 +1,7 @@
 ---
 title: 쿠버네티스에 배포하기
 description: 포함된 매니페스트로 쿠버네티스 클러스터에 sorack을 직접 호스팅합니다.
+sourceCommit: 18ef7ad43da332a0485fd1826643168fed6bd750
 ---
 
 sorack은 배포된 이미지(`ghcr.io/sdin99/sorack`)로 쿠버네티스에서 실행합니다.
