@@ -290,12 +290,16 @@ export async function probeService(
     // backing count out rather than printing a zero we did not observe.
   }
 
+  const owner = (svc?.metadata?.ownerReferences ?? [])[0];
+  const ownedBy = owner?.kind && owner?.name ? `${owner.kind}/${owner.name}` : undefined;
+
   const observed: Record<string, unknown> = {
     svc_type: svc?.spec?.type ?? undefined,
     clusterIP: svc?.spec?.clusterIP ?? undefined,
     ports: portsText(svc?.spec?.ports),
     selector: selectorText(svc?.spec?.selector),
     endpoints: endpointsKnown ? String(ready) : undefined,
+    ownedBy,
   };
 
   if (!endpointsKnown) {
@@ -304,9 +308,31 @@ export async function probeService(
   if (svc?.spec?.type === "ExternalName") {
     return { status: "ok", latencyMs: latency(), message: `ExternalName → ${svc?.spec?.externalName}`, observed };
   }
-  return ready > 0
-    ? { status: "ok", latencyMs: latency(), message: `${ready} endpoint(s)`, observed }
-    : { status: "warn", latencyMs: latency(), message: "no ready endpoints — nothing is behind this service", observed };
+  if (ready > 0) {
+    return { status: "ok", latencyMs: latency(), message: `${ready} endpoint(s)`, observed };
+  }
+  // ‼ Empty is only a fault if something was supposed to be there, and a
+  // Service another object created does not decide that for itself.
+  //
+  // An operator put three of these on a map: the `-ro` Services of
+  // single-instance CloudNativePG clusters. A cluster with one instance has
+  // no read replica, so its read-only Service correctly has no endpoints —
+  // and each one reported warn. The observation was right and the judgement
+  // was not, because the question "is anything behind this?" belongs to the
+  // owner, which knows how many instances it asked for.
+  //
+  // Same shape as scaled-to-zero counting as ready for a Deployment: intent
+  // of zero is not failure. Here the intent lives somewhere this probe cannot
+  // see, so it reports and does not score.
+  if (ownedBy) {
+    return {
+      status: "unknown",
+      latencyMs: latency(),
+      message: `no endpoints — owned by ${ownedBy}, which decides whether that is expected`,
+      observed,
+    };
+  }
+  return { status: "warn", latencyMs: latency(), message: "no ready endpoints — nothing is behind this service", observed };
 }
 
 export const k8sAdapter: ProbeAdapter = {
@@ -428,7 +454,21 @@ export const k8sAdapter: ProbeAdapter = {
         pods: { ready: podReadyN, total: servicePods.length, fromJobs: jobPods },
         deployments: { ready: depReadyN, total: depItems.length },
         statefulsets: { ready: stsReadyN, total: stsItems.length },
-        services: { count: (svcs.items ?? []).length },
+        services: (() => {
+          const items = svcs.items ?? [];
+          const byOwner = new Map<string, number>();
+          for (const svc of items) {
+            const o = (svc?.metadata?.ownerReferences ?? [])[0];
+            if (o?.kind && o?.name) byOwner.set(`${o.kind}/${o.name}`, (byOwner.get(`${o.kind}/${o.name}`) ?? 0) + 1);
+          }
+          // Owned Services do not become nodes, so the namespace is where
+          // they stay visible — grouped by what made them, which is the only
+          // grouping that means anything.
+          return {
+            count: items.length,
+            owned: [...byOwner].map(([owner, count]) => ({ owner, count })),
+          };
+        })(),
         ingresses: { count: (ings.items ?? []).length },
         // Deliberately not scored yet. Deciding a CronJob is late needs its
         // schedule, and guessing a threshold here would invent alerts on
@@ -469,7 +509,14 @@ export const k8sAdapter: ProbeAdapter = {
         const kindsRead: string[] = ["service"];
         for (const svc of svcs.items ?? []) {
           const name = svc?.metadata?.name;
-          if (name) found.push({ coordinate: { namespace: ns, kind: "service", name }, type: "k8s_service", name });
+          if (!name) continue;
+          // A Service something else created is a way to reach that thing,
+          // not a thing. Promoting it produces a node judged without the
+          // context that decides whether it is healthy — and three per
+          // database, on a cluster that makes one Service per role.
+          // ownerReferences is the cluster saying so, not a guess.
+          if ((svc?.metadata?.ownerReferences ?? []).length > 0) continue;
+          found.push({ coordinate: { namespace: ns, kind: "service", name }, type: "k8s_service", name });
         }
         // ‼ Only claim to have read cronjobs when we did. batch/v1 is denied
         // on installs whose ClusterRole predates it, and a denied read looks
