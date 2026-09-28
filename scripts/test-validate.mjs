@@ -171,6 +171,60 @@ accepts("a short-form type", () => validateNode({ id: "a", type: "svc", name: "x
       pass++;
     }
   }
+
+  // ── the same list again, from the third place that holds it ──────────────
+  // INFRA_META is what the type picker is built from (buildInfraGalleryItems
+  // maps over it). NODE_TYPES vs TYPE_DETAIL above says a type has a detail
+  // schema; it says nothing about whether anyone can choose it. All three of
+  // k8s_cronjob, external_service and hosted_app shipped accepted by the api,
+  // with full schemas, and absent from the picker — the check above passed on
+  // all three, because it compares the two lists that agreed.
+  //
+  // Symptoms of the gap, none of which fail anything: the type is unreachable
+  // for an operator (only a sync can set it), a node that already has one
+  // renders it as a raw string under "Other", and defaultProbeType falls back
+  // to "tcp" — a port check on a CronJob, which has no port.
+  {
+    const metaBlock = schema.slice(schema.indexOf("export const INFRA_META"));
+    const picker = [...metaBlock.slice(0, metaBlock.indexOf("\n};")).matchAll(/^ {2}([a-z0-9_]+):\s*\{/gm)]
+      .map((m) => m[1]);
+    if (picker.length === 0) {
+      failures.push("picker drift: parsed 0 entries from INFRA_META — the parse is broken, not the list");
+    } else {
+      const unpickable = canonical.filter((t) => !picker.includes(t));
+      const noSchema = picker.filter((t) => !canonical.includes(t));
+      // An alias here would put two cards on screen for one type.
+      const aliased = picker.filter((t) => aliases.includes(t));
+      if (unpickable.length || noSchema.length || aliased.length) {
+        failures.push(
+          `picker drift: INFRA_META vs TYPE_DETAIL — ` +
+          `${unpickable.length ? `${unpickable.join(", ")} cannot be picked in the UI; ` : ""}` +
+          `${noSchema.length ? `${noSchema.join(", ")} is offered with no detail schema; ` : ""}` +
+          `${aliased.length ? `${aliased.join(", ")} is an alias and would show a duplicate card` : ""}`);
+      } else {
+        pass++;
+      }
+
+      // A category the order list doesn't know sinks to the end of the
+      // gallery. That looks like a layout decision, so nobody reports it.
+      const detailSrc = readFileSync(
+        new URL("../web/src/features/lab/LabDetail.tsx", import.meta.url), "utf8");
+      const orderLine = detailSrc.match(/const CATEGORY_ORDER = \[([^\]]*)\]/);
+      if (!orderLine) {
+        failures.push("picker drift: CATEGORY_ORDER not found in LabDetail.tsx — cannot check category order");
+      } else {
+        const known = [...orderLine[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+        const cats = [...new Set([...metaBlock.slice(0, metaBlock.indexOf("\n};"))
+          .matchAll(/category:\s*"([^"]+)"/g)].map((m) => m[1]))];
+        const unordered = cats.filter((c) => !known.includes(c));
+        if (unordered.length) {
+          failures.push(`picker drift: category ${unordered.join(", ")} is not in CATEGORY_ORDER — those cards sink to the end of the gallery`);
+        } else {
+          pass++;
+        }
+      }
+    }
+  }
 }
 
 if (failures.length) {

@@ -586,7 +586,9 @@ export function EditableHeaderName({ node, onIdChange }: { node: any; onIdChange
 // the header type picker (EditableHeaderType) and the new-node setup banner
 // (NewNodeSetupBanner). Picking from either runs the same commit logic
 // (commitInfraType): clear iconKind override + drop incompatible software.
-const CATEGORY_ORDER = ["Compute", "Kubernetes", "Network", "Storage"];
+// ‼ A category missing from this list does not fail — it sinks to the end,
+// which reads as an ordering choice rather than an omission.
+const CATEGORY_ORDER = ["Compute", "Kubernetes", "Network", "Storage", "External"];
 
 export function buildInfraGalleryItems(currentType: string): CardItem[] {
   const items: CardItem[] = Object.entries(INFRA_META).map(([id, m]) => ({

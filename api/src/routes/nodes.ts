@@ -161,7 +161,11 @@ nodesRoutes.patch("/:id", async (c) => {
     .where(eq(nodes.id, id))
     .returning();
   if (!row) return c.json({ error: "not found" }, 404);
-  return c.json(row);
+  // Same shape as GET and POST. This was the one door that returned a bare
+  // row, and it is the door where `monitored` is most likely to have just
+  // changed — a PATCH that attaches a probe. A client trusting the response
+  // would render "not monitored" on the node it had only now set up.
+  return c.json(withMonitored(row));
 });
 
 // Run a probe config once, on demand, WITHOUT persisting — powers the detail
