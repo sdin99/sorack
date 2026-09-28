@@ -7,17 +7,21 @@ function required(name: string): string {
   return v;
 }
 
-// AUTH_SECRET is the pepper mixed into session-token hashes. We don't
-// force it (keeps first-run friction low for self-hosters), but a
-// missing secret means a fresh random one each boot → sessions don't
-// survive a restart. Never ship a hardcoded default.
+// AUTH_SECRET is the pepper mixed into session-token and API-key hashes
+// (lib/session.ts, lib/api-key.ts). We don't force it (keeps first-run
+// friction low for self-hosters), but a missing secret means a fresh random
+// one each boot, so neither sessions nor API keys survive a restart. The
+// warning used to name sessions only; a script's key failing with 401 after
+// a routine restart is the more expensive surprise. Never ship a hardcoded
+// default.
 function authSecret(): string {
   const v = process.env.SORACK_AUTH_SECRET;
   if (v) return v;
   // eslint-disable-next-line no-console
   console.warn(
     "[auth] SORACK_AUTH_SECRET not set — generated a random one. " +
-      "Sessions will be invalidated on restart. Set SORACK_AUTH_SECRET to persist them.",
+      "Sessions and API keys will stop working on restart. " +
+      "Set SORACK_AUTH_SECRET before creating API keys.",
   );
   return randomBytes(32).toString("base64");
 }

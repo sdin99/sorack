@@ -310,7 +310,6 @@
       "requests": "requests",
       "pods": "pods"
     },
-    "notMonitoredShort": "not monitored",
     "relatedDecisions": "Related decisions",
     "syncedBy": "from {{source}}",
     "syncedByHint": "Written by {{source}}. Edits here may be replaced on its next run."

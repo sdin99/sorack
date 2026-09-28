@@ -26,7 +26,7 @@
     "signIn": "로그인",
     "signOut": "로그아웃",
     "invalid": "아이디 또는 비밀번호가 올바르지 않습니다",
-    "tooManyAttempts": "시도 횟수 초과 — 잠시 후 다시 시도하세요"
+    "tooManyAttempts": "시도 횟수 초과 — 잠시 후 다시 시도하십시오"
   },
   "settings": {
     "title": "설정",
@@ -97,7 +97,7 @@
     "configureThis": "설정",
     "remove": "삭제",
     "delete": "삭제",
-    "deleteTitle": "노드를 삭제할까요?",
+    "deleteTitle": "노드를 삭제하시겠습니까?",
     "deleteMessage": "\"{{name}}\"이(가) 삭제됩니다. 하위 노드는 남지만 상위 연결이 끊깁니다."
   },
   "edgeActions": {
@@ -108,12 +108,12 @@
       "contains": "contains (부모로 묶기)"
     },
     "changeTo": {
-      "depends": "depends 로 변경",
-      "mounts": "mounts 로 변경",
-      "routes": "routes 로 변경"
+      "depends": "depends로 변경",
+      "mounts": "mounts로 변경",
+      "routes": "routes로 변경"
     },
     "delete": "엣지 삭제",
-    "deleteTitle": "엣지를 삭제할까요?",
+    "deleteTitle": "엣지를 삭제하시겠습니까?",
     "deleteMessage": "이 엣지가 토폴로지에서 제거됩니다.",
     "detach": "연결 해제 (자식을 최상단으로)",
     "verb": {
@@ -137,7 +137,7 @@
     "placeholder": "호스트·서비스·네임스페이스·런북…",
     "hintNav": "이동",
     "hintOpen": "열기",
-    "typeToSearch": "검색어를 입력하세요",
+    "typeToSearch": "검색어 입력",
     "empty": "\"{{q}}\" 결과 없음"
   },
   "searchResultType": {
@@ -170,7 +170,7 @@
       "design_doc": "설계 문서"
     },
     "conflict": {
-      "message": "이 runbook이 외부에서 변경됐어요.",
+      "message": "이 런북이 다른 곳에서 변경되었습니다.",
       "reload": "외부 변경 가져오기",
       "keepDraft": "내 변경 유지",
       "viewDiff": "diff 보기",
@@ -220,7 +220,7 @@
     "diffTitle": "git diff — {{id}}.md",
     "branchSection": "브랜치",
     "currentBranch": "현재 브랜치",
-    "switchTo": "{{name}} 로 전환",
+    "switchTo": "{{name}} 브랜치로 전환",
     "noBranches": "브랜치 없음 — 먼저 commit 필요",
     "newBranchPlaceholder": "새 브랜치 이름",
     "createBranch": "생성",
@@ -243,7 +243,7 @@
     "spec": "스펙",
     "notesTags": "노트 · 태그",
     "manuallyMaintained": "수동 관리",
-    "descEmpty": "아직 작성된 description 이 없어요. 탭해서 추가.",
+    "descEmpty": "아직 설명이 없습니다. 탭해서 추가.",
     "contains": "포함",
     "relationships": "관계",
     "healthVia": "{{source}} 체크",
@@ -310,10 +310,9 @@
       "requests": "리소스 요청",
       "pods": "파드"
     },
-    "notMonitoredShort": "감시 안 함",
     "relatedDecisions": "관련 결정",
-    "syncedBy": "{{source}} 에서 옴",
-    "syncedByHint": "{{source}} 이(가) 쓴 값입니다. 여기서 고쳐도 다음 실행에 덮일 수 있습니다."
+    "syncedBy": "{{source}}에서 옴",
+    "syncedByHint": "{{source}}에서 쓴 값입니다. 여기서 고쳐도 다음 실행에 덮일 수 있습니다."
   },
   "map": {
     "empty": {
