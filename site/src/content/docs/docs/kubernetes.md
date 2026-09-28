@@ -3,32 +3,31 @@ title: Deploy on Kubernetes
 description: Self-host sorack on a Kubernetes cluster using the included manifests.
 ---
 
-Install from the published image: `deploy/base` is a Kustomize base you point
-an overlay at. Everything site-specific — namespace, image digest, storage
-class, hostname — is deliberately absent from the base, so applying it without
-an overlay fails loudly rather than guessing.
+sorack runs on Kubernetes from the published image, `ghcr.io/sdin99/sorack`.
+`deploy/base` is a Kustomize base. You write an overlay that points at it and
+adds the values specific to your cluster: namespace, image digest, storage
+class, and hostname. The base leaves these out, so applying it without an
+overlay fails instead of guessing.
 
-:::caution
-This page used to lead with the **dev pod** under `deploy/dev`, which mounts a
-checkout from the cluster node via `hostPath` and says an image-based install
-"is on the roadmap". That has not been true since v0.1.0, and the dev pod was
-never an install path: it needs the source on the node, and `hostPath` is one
-of the volume types the project's own hardening check rejects. It is a
-development setup and is now documented as one, at the bottom of this page.
+:::note
+`deploy/dev` is a development setup, not an installation method. It mounts
+source code from the node through `hostPath`. See
+[Developing on sorack](#developing-on-sorack).
 :::
 
 ## Prerequisites
 
 - A Kubernetes cluster with a default `StorageClass`.
 - `kubectl` with Kustomize (built in since 1.14).
-- Optional: an ingress controller + cert-manager if you want HTTPS via an
-  Ingress; otherwise `kubectl port-forward` works fine.
+- Optional: an ingress controller and cert-manager, if you want HTTPS through
+  an Ingress. Otherwise `kubectl port-forward` is enough.
 
 ## 1. Create the Secrets
 
-Two Secrets keep DB and app config rotating independently:
+sorack uses two Secrets, so you can rotate database and app settings
+separately:
 
-| Secret       | Source                     | Consumed by                |
+| Secret       | Source                     | Used by                    |
 | ------------ | -------------------------- | -------------------------- |
 | `sorack-db`  | `examples/secret-db.yaml`  | postgres statefulset + api |
 | `sorack-app` | `examples/secret-app.yaml` | api only                   |
@@ -36,7 +35,7 @@ Two Secrets keep DB and app config rotating independently:
 ```bash
 kubectl apply -f deploy/dev/namespace.yaml
 
-# Copy + fill in real values (don't commit the filled-in copies)
+# Copy the examples and fill in real values. Do not commit the filled-in copies.
 cp examples/secret-db.yaml  /tmp/sorack-db.yaml
 cp examples/secret-app.yaml /tmp/sorack-app.yaml
 $EDITOR /tmp/sorack-db.yaml /tmp/sorack-app.yaml
@@ -46,11 +45,10 @@ kubectl apply -f /tmp/sorack-app.yaml
 
 ## 2. Write an overlay
 
-The base carries no namespace, no image pin, no storage class and no hostname.
-The full annotated template — including why the image is pinned by digest and
-not by tag — is in
+The base has no namespace, image pin, storage class, or hostname. A full
+annotated template is in
 [`deploy/base/README.md`](https://github.com/sdin99/sorack/blob/main/deploy/base/README.md).
-The shape:
+A minimal overlay looks like this:
 
 ```yaml
 # kustomization.yaml
@@ -58,13 +56,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: sorack
 resources:
-  # A released tag, never a branch: a branch ref means someone else's push
-  # silently re-renders your overlay.
+  # Pin a release tag. A branch ref changes whenever someone pushes to it.
   - github.com/sdin99/sorack//deploy/base?ref=v0.1.8
 images:
-  # A digest, not a tag. `newTag: sha-abc1234` looks equally specific and is
-  # not — a tag is a mutable pointer, and this project has had one move
-  # between two digests within a minute of a release.
+  # Pin by digest. A tag can be moved to a different image.
   - name: ghcr.io/sdin99/sorack
     digest: sha256:...   # from the GHCR package page for that version
 patches:
@@ -97,26 +92,24 @@ kubectl apply -f deploy/postgres/
 kubectl apply -k path/to/your/overlay
 ```
 
-Migrations run automatically when the api boots — there's no separate migrate
+The api runs database migrations when it starts. There is no separate migration
 step.
 
 ## 4. Open the UI
 
-The image serves the api and the web bundle on one port.
+The image serves the api and the web UI on one port.
 
 ```bash
 kubectl port-forward -n sorack svc/sorack 8080:80
 # then open http://localhost:8080
 ```
 
-:::tip
-The session cookie is marked `Secure`, so over plain HTTP (port-forward) the
-login won't stick. Either front it with HTTPS, or set
-`SORACK_COOKIE_SECURE: "false"` in the `sorack-app` Secret for local testing.
-:::
+The session cookie is marked `Secure`, so login does not persist over plain
+HTTP such as a port-forward. Put the service behind HTTPS, or for local testing
+set `SORACK_COOKIE_SECURE: "false"` in the `sorack-app` Secret.
 
-The initial admin password is printed to the api log once on first boot if you
-didn't pin `SORACK_ADMIN_PASSWORD`:
+If you did not set `SORACK_ADMIN_PASSWORD`, the api generates an admin password
+and prints it to its log once, on first start:
 
 ```bash
 kubectl logs -n sorack deploy/sorack | grep -i password
@@ -124,19 +117,18 @@ kubectl logs -n sorack deploy/sorack | grep -i password
 
 ## Developing on sorack
 
-`deploy/dev` is a different thing and not an install path. It mounts a
-checkout from the cluster node over `hostPath` and runs `pnpm dev` inside, so
-edits on the node are live in the pod — useful if you are changing sorack, and
-unsuitable for running it:
+`deploy/dev` is for working on sorack itself. It mounts a checkout from the
+node through `hostPath` and runs `pnpm dev` inside the pod, so edits on the
+node take effect immediately. Do not use it to run sorack:
 
-- it needs the source present on the node the pod lands on,
-- `hostPath` is one of the volume types the project's own hardening check
-  rejects, and a namespace with `pod-security.kubernetes.io/enforce=restricted`
-  will not admit it,
-- it serves Vite on 5173 rather than the single-port bundle, so the port and
-  the container name differ from everything above.
+- The source must be present on the node where the pod runs.
+- It uses a `hostPath` volume, which the project's security settings check
+  rejects. Namespaces that enforce the `restricted` Pod Security Standard do
+  not admit it.
+- It serves Vite on port 5173 instead of the single-port image, so the port
+  and container name differ from the steps above.
 
-Point it at your checkout and apply:
+Point the volume at your checkout and apply:
 
 ```yaml
 volumes:
@@ -152,4 +144,4 @@ kubectl apply -f deploy/dev/
 kubectl port-forward -n sorack svc/sorack 5173:80
 ```
 
-The container is named `dev`, so logs need `-c dev`.
+The container is named `dev`, so `kubectl logs` needs `-c dev`.

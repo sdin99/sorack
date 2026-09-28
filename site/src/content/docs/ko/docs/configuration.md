@@ -1,13 +1,12 @@
 ---
 title: 설정
-description: sorack api 의 환경변수.
-sourceCommit: 2163694f8a8c7c734ed34d74220538353b3b443e
+description: sorack api의 환경변수.
 ---
 
-sorack 은 모든 것을 `process.env` 에서 읽습니다. 그러니 배포 방식에 맞게 설정을 주입
-하십시오 — 쿠버네티스 Secret, `docker -e`, 또는 로컬 `.env`. 전체 목록은
-[`api/.env.example`](https://github.com/sdin99/sorack/blob/main/api/.env.example)
-에 있고, 주요 항목은 아래와 같습니다.
+sorack은 설정을 환경변수에서 읽습니다. 쿠버네티스 Secret, `docker -e`, 로컬 `.env`
+파일로 설정할 수 있습니다. 전체 목록은
+[`api/.env.example`](https://github.com/sdin99/sorack/blob/main/api/.env.example) 파일에
+있으며, 자주 쓰는 항목은 아래와 같습니다.
 
 ## Postgres (필수)
 
@@ -21,71 +20,68 @@ sorack 은 모든 것을 `process.env` 에서 읽습니다. 그러니 배포 방
 
 ## 인증
 
-| 변수                     | 기본값   | 비고                                                                |
-| ------------------------ | -------- | ------------------------------------------------------------------- |
-| `SORACK_AUTH_SECRET`     | 무작위   | 세션 토큰 pepper. **반드시 설정하십시오** — 안 하면 재시작마다 세션이 초기화됩니다. `openssl rand -base64 48` 로 생성. |
-| `SORACK_ADMIN_USERNAME`  | `admin`  | 초기 관리자.                                                        |
-| `SORACK_ADMIN_PASSWORD`  | 무작위   | 지정하지 않으면 첫 부팅 때 생성되어 로그에 한 번 출력됩니다.        |
-| `SORACK_COOKIE_SECURE`   | `true`   | 로컬에서 평문 HTTP 로 서비스할 때만 `false` 로.                     |
-| `SORACK_ALLOWED_ORIGINS` | —        | 쉼표로 구분한 CORS 허용 목록. 웹 UI 가 api 와 다른 origin 에 있을 때만 필요합니다. |
+| 변수                     | 기본값 | 비고                                                                |
+| ------------------------ | ------ | ------------------------------------------------------------------- |
+| `SORACK_AUTH_SECRET`     | 무작위 | 세션 토큰을 해시할 때 쓰는 비밀값입니다. 반드시 설정합니다. 설정하지 않으면 시작할 때마다 새 값이 생성되어 모든 세션이 끊깁니다. `openssl rand -base64 48`로 생성합니다. |
+| `SORACK_ADMIN_USERNAME`  | `admin` | 초기 관리자 사용자                                                 |
+| `SORACK_ADMIN_PASSWORD`  | 무작위 | 설정하지 않으면 첫 시작 때 생성되어 로그에 한 번 출력됩니다.        |
+| `SORACK_COOKIE_SECURE`   | `true` | 로컬에서 평문 HTTP로 접속할 때만 `false`로 설정합니다.              |
+| `SORACK_ALLOWED_ORIGINS` | —      | 쉼표로 구분한 CORS 허용 목록. 웹 UI를 api와 다른 origin에서 제공할 때만 필요합니다. |
 
 ## 헬스 수집기
 
 | 변수                         | 기본값  | 비고                                        |
 | ---------------------------- | ------- | ------------------------------------------- |
-| `SORACK_HEALTH_ENABLED`      | `true`  | `false` 로 두면 폴러를 끕니다.              |
-| `SORACK_HEALTH_INTERVAL_MS`  | `30000` | 사이클 주기(개발용 매니페스트는 5000).      |
-| `SORACK_HEALTH_TIMEOUT_MS`   | `5000`  | 프로브별 타임아웃(프로브가 덮어쓸 수 있음). |
+| `SORACK_HEALTH_ENABLED`      | `true`  | `false`로 설정하면 수집기를 끕니다.         |
+| `SORACK_HEALTH_INTERVAL_MS`  | `30000` | 확인 주기(개발용 매니페스트는 5000)         |
+| `SORACK_HEALTH_TIMEOUT_MS`   | `5000`  | 프로브별 타임아웃. 프로브마다 바꿀 수 있습니다. |
 
 ## 런북 및 기타
 
 | 변수                   | 기본값  | 비고                                             |
 | ---------------------- | ------- | ------------------------------------------------ |
-| `SORACK_RUNBOOKS_DIR`  | —       | 런북 `.md` 파일 디렉터리(파일 백엔드).           |
-| `PORT`                 | `3001`  | API 포트.                                        |
+| `SORACK_RUNBOOKS_DIR`  | —       | 런북 `.md` 파일을 두는 디렉터리                   |
+| `PORT`                 | `3001`  | API 포트                                         |
 
 ## 런북 git 동기화
 
-선택 사항입니다. 런북은 git 이 전혀 없어도 동작합니다 — `SORACK_RUNBOOKS_DIR` 안의
-파일이 진실의 원천이고 데이터베이스는 그것의 캐시입니다. 원격은 그 디렉터리 위에 얹는
-한 겹이지, 디렉터리를 가지기 위한 조건이 아닙니다.
+git 동기화는 선택 사항입니다. 쓰지 않으면 `SORACK_RUNBOOKS_DIR` 디렉터리의 파일이 원본이고
+데이터베이스는 그 캐시입니다. git 원격 저장소는 이 디렉터리 위에 선택적으로 더하는
+기능입니다.
 
 | 변수                       | 기본값   | 비고                                               |
 | -------------------------- | -------- | -------------------------------------------------- |
-| `SORACK_GIT_ENABLED`       | —        | **환경변수로 git 을 설정한다면 필수.** 아래를 보십시오. |
-| `SORACK_GIT_REMOTE`        | —        | clone/push URL.                                    |
+| `SORACK_GIT_ENABLED`       | —        | 환경변수로 git을 설정할 때 필수입니다. 아래를 참고하십시오. |
+| `SORACK_GIT_REMOTE`        | —        | clone과 push에 쓰는 URL                            |
 | `SORACK_GIT_BRANCH`        | `main`   |                                                    |
-| `SORACK_GIT_USERNAME`      | —        | GitHub 이라면 비어 있지 않은 아무 값. 인증은 토큰이 합니다. |
-| `SORACK_GIT_TOKEN`         | —        | 개인 액세스 토큰. 해당 저장소에 쓰기 범위.          |
-| `SORACK_GIT_AUTHOR_NAME`   | `sorack` | 커밋 author.                                       |
+| `SORACK_GIT_USERNAME`      | —        | GitHub이라면 비어 있지 않은 아무 값. 인증은 토큰이 합니다. |
+| `SORACK_GIT_TOKEN`         | —        | 저장소 쓰기 권한이 있는 개인 액세스 토큰            |
+| `SORACK_GIT_AUTHOR_NAME`   | `sorack` | 커밋 author                                        |
 | `SORACK_GIT_AUTHOR_EMAIL`  | —        |                                                    |
 
-:::caution[환경변수로 설정할 때 `SORACK_GIT_ENABLED` 는 선택 사항이 아니다]
-저장 모드는 토글이고, 그 토글은 설정 화면이 쓰는 **데이터베이스 행**에 있습니다. 행이
-없으면 — 전부 환경변수로 설정한 배포에서는 그게 정상 상태입니다 — `false` 로 읽히고,
-다른 것을 무엇을 설정하든 git 은 꺼진 상태로 남습니다.
+:::caution[환경변수로 git을 설정할 때는 `SORACK_GIT_ENABLED=true`를 설정하십시오]
+git 동기화는 설정 화면이 데이터베이스에 저장하는 값으로 켜집니다. 환경변수만으로
+설정하면 그 값이 없으므로 git 동기화가 꺼진 채로 남습니다.
 
-`SORACK_GIT_REMOTE` 와 `SORACK_GIT_TOKEN` 만 설정하고 끝내면 **설정된 것처럼 보이지만
-아무것도 하지 않는** 인스턴스가 됩니다. `/api/git/pull` 은 `412 not configured` 로
-답하고, 왜 그런지는 아무도 알려주지 않습니다.
+`SORACK_GIT_REMOTE`와 `SORACK_GIT_TOKEN`만 설정하면 동기화하지 않으며,
+`/api/git/pull`은 `412 not configured`를 돌려줍니다.
 :::
 
-환경변수는 저장된 행을 **필드 단위로** 이깁니다. 설정 화면은 환경변수가 고정한 필드를
-회색으로 표시합니다. UI 에서 먼저 넣고 나중에 환경변수로 넣은 필드는 환경변수 값이
-되므로 화면을 확인하십시오 — 그 화면은 git 이 **실제로 쓰는 값**을 보여주고, 각 값이
-어디서 왔는지 표시합니다.
+환경변수는 설정 화면에서 저장한 값보다 우선하며, 필드마다 따로 적용됩니다. 설정 화면은
+환경변수로 정해진 필드를 비활성화하고 각 값이 어디서 왔는지 표시합니다. UI에서 먼저
+설정한 필드를 나중에 환경변수로 설정하면 환경변수 값이 쓰입니다.
 
-`SORACK_GIT_TOKEN_KEY` 는 별개입니다. 이것은 설정 화면이 *데이터베이스에 저장한* 토큰을
-암호화합니다. 환경변수로 설정한 배포는 아무것도 복호화하지 않으므로 이 값이 필요하지
-않습니다. 설정한다면 정확히 base64 32바이트여야 하고(`openssl rand -base64 32`),
-아니면 api 가 시작을 거부합니다.
+`SORACK_GIT_TOKEN_KEY`는 설정 화면에서 저장해 데이터베이스에 보관하는 토큰을 암호화합니다.
+환경변수로만 git을 설정한다면 필요하지 않습니다. 설정한다면 base64로 인코딩한 정확히
+32바이트 값이어야 하며(`openssl rand -base64 32`), 그렇지 않으면 api가 시작하지 않습니다.
 
 ### 런북이 이미 있는데 지금 원격을 붙이고 싶다면
 
-설정 → 런북 화면에, 디렉터리에 파일이 있고 원격이 설정되어 있으며 아직 저장소가
-아닐 때 **원격으로 편입(Adopt into remote)** 버튼이 나타납니다. 있는 것을 커밋하고
-푸시합니다. 원격에 이미 커밋이 있으면 둘을 병합합니다. 양쪽에 같은 이름의 파일이 있으면
-**아무것도 쓰지 않은 채** 거부하고 그 파일 이름을 알려 줍니다.
+런북 디렉터리에 파일이 있고, 원격 저장소가 설정되어 있고, 디렉터리가 아직 git 저장소가
+아니면 **설정 → 런북**에 **원격에 올리기** 버튼이 표시됩니다. 이
+버튼은 기존 파일을 커밋해 push합니다. 원격에 이미 커밋이 있으면 두 이력을 병합합니다.
+양쪽에 같은 이름의 파일이 있으면 아무것도 바꾸지 않고 멈추며 충돌한 파일 목록을
+보여 줍니다.
 
-선택적인 어댑터 자격 증명(Proxmox 등)은 [프로브와 어댑터](/ko/docs/adapters/)에서
-다룹니다.
+Proxmox 같은 선택적 어댑터의 자격 증명은 [프로브와 어댑터](/ko/docs/adapters/)에서
+설명합니다.

@@ -111,6 +111,12 @@ jobs:
       - name: translations track their source
         run: python3 scripts/check-docs-translations.py
 
+      # The rules a machine can see from site/STYLE.md. The ones it cannot
+      # (whether a reason is needed, whether Korean reads naturally, comments
+      # inside code blocks) are listed in STYLE.md for review.
+      - name: docs follow the style guide
+        run: python3 scripts/check-docs-style.py
+
   # One job, many steps — deliberately. GitHub bills Actions per job rounded
   # up to the minute, so six 10-second checks split across six jobs costs six
   # minutes for ninety seconds of work. Individual red lights are traded for
