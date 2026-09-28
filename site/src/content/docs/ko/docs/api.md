@@ -41,7 +41,8 @@ curl -H "Authorization: Bearer $SORACK_API_KEY" \
 403  {"error":"this API key is read-only","scope":"read"}
 ```
 
-`401`은 키가 없거나, 형식이 틀렸거나, 폐기됐다는 뜻입니다. 새 키를 만듭니다. `403`은
+`401`은 키가 없거나, 형식이 틀렸거나, 폐기됐거나, 키를 만든 뒤 `SORACK_AUTH_SECRET` 값이
+바뀌었다는 뜻입니다([설정](/ko/docs/configuration/#인증) 참고). 새 키를 만듭니다. `403`은
 키는 유효하지만 범위가 요청을 허용하지 않는다는 뜻입니다. 범위를 바꾸거나 다른 키를
 씁니다. `403`은 다시 시도해도 결과가 같으므로 재시도하지 않습니다.
 

@@ -33,7 +33,7 @@ separately:
 | `sorack-app` | `examples/secret-app.yaml` | api only                   |
 
 ```bash
-kubectl apply -f deploy/dev/namespace.yaml
+kubectl create namespace sorack
 
 # Copy the examples and fill in real values. Do not commit the filled-in copies.
 cp examples/secret-db.yaml  /tmp/sorack-db.yaml
@@ -56,8 +56,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: sorack
 resources:
-  # Pin a release tag. A branch ref changes whenever someone pushes to it.
-  - github.com/sdin99/sorack//deploy/base?ref=v0.1.8
+  # Pin a release tag from https://github.com/sdin99/sorack/releases.
+  # A branch ref changes whenever someone pushes to it.
+  - github.com/sdin99/sorack//deploy/base?ref=<version>
 images:
   # Pin by digest. A tag can be moved to a different image.
   - name: ghcr.io/sdin99/sorack

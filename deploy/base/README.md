@@ -29,8 +29,9 @@ kind: Kustomization
 namespace: sorack
 resources:
   # A tag, never a branch: a branch ref means someone else's push
-  # silently re-renders your overlay.
-  - github.com/sdin99/sorack//deploy/base?ref=v0.1.0
+  # silently re-renders your overlay. Use a release tag from
+  # https://github.com/sdin99/sorack/releases in place of <version>.
+  - github.com/sdin99/sorack//deploy/base?ref=<version>
 images:
   # A digest, not a tag. `newTag: sha-abc1234` looks equally specific and is
   # not: a tag is a mutable pointer, and this project has already had one

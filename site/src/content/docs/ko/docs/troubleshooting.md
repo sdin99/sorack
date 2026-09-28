@@ -89,8 +89,9 @@ kubectl rollout restart deploy/sorack -n sorack
 
 ## 파드를 재시작했더니 전원이 로그아웃됐다
 
-`SORACK_AUTH_SECRET` 값이 설정되지 않아 api가 시작할 때마다 새 값을 생성하므로 기존
-세션을 쓸 수 없게 됩니다. `sorack-app` Secret에 설정합니다.
+`SORACK_AUTH_SECRET` 값이 설정되지 않아 api가 시작할 때마다 새 값을 생성합니다. 기존 세션을
+쓸 수 없게 되고, API 키도 모두 동작하지 않아 스크립트가 `401`을 받습니다. `sorack-app`
+Secret에 값을 설정한 뒤 API 키를 새로 만듭니다.
 
 ```bash
 openssl rand -base64 48

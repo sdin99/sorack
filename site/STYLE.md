@@ -124,6 +124,15 @@ Use bold for:
 Do not bold whole sentences or clauses for emphasis. One bold phrase per
 paragraph is a reasonable ceiling. If everything is bold, nothing is.
 
+## Headings and anchors
+
+Change a heading only when it breaks a rule in this guide. Starlight builds
+each section's anchor from its heading, so renaming a published heading breaks
+links to that section from outside this site, and nothing reports it.
+
+When you do change one, run `scripts/check-docs-links.py` against a build and
+list the old and new anchors in the pull request.
+
 ## Punctuation
 
 - **`‼`** and other emphasis symbols: do not use.
@@ -177,6 +186,14 @@ paragraph is a reasonable ceiling. If everything is bold, nothing is.
 | fail loudly | 요란하게 실패하다 | 오류를 내고 멈추다 |
 | degrade gracefully | 부드럽게 degrade 하다 | 일부 기능 없이 계속 동작하다 |
 | hardening check | 경화 검사 | 보안 설정 검사 |
+
+### 화면 라벨
+
+앱 화면에 표시되는 말은 화면과 똑같이 씁니다(예: "모니터링 안 됨", "원격에 올리기", "API 키").
+독자가 문서에서 읽은 말을 화면에서 찾을 수 있어야 합니다.
+
+화면 라벨을 바꿀 때는 먼저 앱 문자열(`web/src/i18n/locales/ko/`)을 하나로 정하고, 같은
+변경에서 문서를 맞춥니다. 같은 상태에 라벨이 둘이면 문서가 둘 중 하나를 고를 수 없습니다.
 
 ### 용어
 

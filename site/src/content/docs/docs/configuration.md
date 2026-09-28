@@ -22,11 +22,21 @@ The most common ones are below.
 
 | Variable                 | Default | Notes                                                                 |
 | ------------------------ | ------- | --------------------------------------------------------------------- |
-| `SORACK_AUTH_SECRET`     | Random  | Secret used when hashing session tokens. Set it; if it is unset, a new value is generated at each start and every session ends. Generate one with `openssl rand -base64 48`. |
+| `SORACK_AUTH_SECRET`     | Random  | Secret used when hashing session tokens and API keys. Set it; see the caution below. Generate one with `openssl rand -base64 48`. |
 | `SORACK_ADMIN_USERNAME`  | `admin` | Initial admin user.                                                   |
 | `SORACK_ADMIN_PASSWORD`  | Random  | If unset, a password is generated on first start and printed to the log once. |
 | `SORACK_COOKIE_SECURE`   | `true`  | Set to `false` only when serving over plain HTTP locally.             |
 | `SORACK_ALLOWED_ORIGINS` | —       | Comma-separated CORS allowlist. Needed only if the web UI is served from a different origin than the api. |
+
+:::caution[Set `SORACK_AUTH_SECRET` before you create API keys]
+If `SORACK_AUTH_SECRET` is not set, the api generates a new value each time it
+starts. After a restart, every session ends and every API key stops working
+(requests return `401`). You then have to create new keys and update every tool
+that uses them.
+
+If you set `SORACK_AUTH_SECRET` after keys already exist, those keys stop
+working in the same way. Set it first.
+:::
 
 ## Health collector
 

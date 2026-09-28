@@ -91,8 +91,9 @@ users exist, update the admin row instead.
 
 ## Everyone got logged out after a pod restart
 
-`SORACK_AUTH_SECRET` is not set, so the api generates a new one on each start
-and existing sessions stop working. Set it in the `sorack-app` Secret:
+`SORACK_AUTH_SECRET` is not set, so the api generates a new one on each start.
+Existing sessions stop working, and so do all API keys: scripts get `401`. Set
+it in the `sorack-app` Secret, then create new API keys:
 
 ```bash
 openssl rand -base64 48
