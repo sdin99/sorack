@@ -69,6 +69,27 @@ def main(argv: list[str]) -> int:
             if frag and urllib.parse.unquote(frag) not in anchors[page]:
                 problems.append(f"{rel}: {target} — page exists, no such heading")
 
+    # Links the theme and the landing page generate, not only the ones written
+    # in markdown. The Korean docs shipped with a site-title link to /ko that
+    # returned 404 on every page, and this script passed: it read the markdown
+    # and the markdown never mentions /ko. Every internal href in the built
+    # HTML now has to resolve to a built page (and an anchor, if it names one).
+    HREF = re.compile(r'<a\b[^>]*\bhref="(/[^"#?]*)(?:#([^"]*))?"')
+    built = 0
+    for f in dist.rglob("*.html"):
+        src_page = page_url(f, dist) if f.name == "index.html" else "/" + f.relative_to(dist).as_posix()
+        for m in HREF.finditer(f.read_text(encoding="utf-8")):
+            target, frag = m.group(1), m.group(2)
+            if target.startswith("/_astro/") or "." in target.rsplit("/", 1)[-1]:
+                continue  # assets and files (favicon.svg, pagefind, …), not pages
+            page = target if target.endswith("/") else target + "/"
+            built += 1
+            if page not in anchors:
+                problems.append(f"{src_page} (built HTML): href={target} — no such page in the build")
+            elif frag and urllib.parse.unquote(frag) not in anchors[page]:
+                problems.append(f"{src_page} (built HTML): href={target}#{frag} — no such heading")
+    links += built
+
     if problems:
         print(f"docs-links: {len(problems)} broken of {links} internal link(s)\n")
         for p in problems:

@@ -4,7 +4,11 @@ Marketing site + documentation for [sorack](https://github.com/sdin99/sorack),
 built with [Astro](https://astro.build) + [Starlight](https://starlight.astro.build)
 and deployed to Cloudflare Pages.
 
-- `/` — landing page (`src/pages/index.astro`)
+- `/` and `/ko/` — landing page, English and Korean. Both render
+  `src/components/Landing.astro`; the only difference is the strings in
+  `src/i18n/landing.ts`. The build fails if a key is missing in either language.
+  Keep markup out of those strings: the component's CSS is scoped and does not
+  reach markup injected with `set:html`.
 - `/docs/*` — documentation in English (Starlight, `src/content/docs/docs/`)
 - `/ko/docs/*` — the same documentation in Korean (`src/content/docs/ko/docs/`)
 - Theme tokens mirror the sorack app UI (`src/styles/sorack.css`).
