@@ -83,6 +83,14 @@ export function LoginOverlay() {
 
         {err && <div className="login-err" data-testid="login-error">{err}</div>}
 
+        {/* ‼ `login-submit` is also an operational contract, not only an e2e
+            hook. Deployments monitor that the UI actually renders by loading
+            the root URL in a headless browser and waiting for this element:
+            it is absent from the HTML the server sends and appears only once
+            the bundle has run and React has rendered. A blank screen that
+            still returns 200 fails that check; nothing else catches it.
+            Renaming or removing it breaks those monitors silently on the
+            operator's side, so call it out in the release notes. */}
         <button
           className="login-submit"
           data-testid="login-submit"
