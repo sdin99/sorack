@@ -38,6 +38,20 @@ npm run dev      # http://localhost:4321
 npm run build    # → dist/
 ```
 
+Two warnings are expected on every build:
+
+```
+[WARN] [content] The collection "i18n" does not exist or is empty.
+[WARN] [content] Entry docs → 404 was not found.
+```
+
+Starlight looks for an optional collection of custom UI strings and an
+optional custom 404 page. Neither exists here, so it uses its built-in
+Korean and English UI strings and its default 404 page, which is what the
+site should serve. Declaring an empty `i18n` collection does not remove the
+first warning; it adds a second one about the missing directory. Any other
+warning is new and worth reading.
+
 ## Editing the docs
 
 English is the source. It lives at the root (`/docs/...`) and the Korean
