@@ -71,6 +71,13 @@ to a sentence breaks on a copy change, and the usual response to that is to
 loosen the test until it asserts nothing. Use `data-testid`, and add one to
 the component when a flow needs a new hook.
 
+**`login-submit` is used outside this suite.** Deployments use it to monitor
+that the UI renders: a headless browser loads the root URL, signed out, and
+waits for `[data-testid="login-submit"]`. It is not in the HTML the server
+sends, so its presence means the bundle loaded and React rendered — the check
+that catches a blank page served with `200`. Renaming or removing it is a
+breaking change for operators: say so in the release notes.
+
 **Assert what is true, not what is absent.** `toBeHidden()` passes for an
 element that has not rendered yet, which right after a navigation means it
 passes before the app has decided anything. The first version of the login
