@@ -19,7 +19,7 @@
     "@uiw/react-codemirror": "^4.25.10",
     "@xyflow/react": "^12.8.6",
     "diff": "^9.0.0",
-    "dompurify": "^3.4.3",
+    "dompurify": "^3.4.17",
     "i18next": "^26.3.0",
     "i18next-browser-languagedetector": "^8.2.1",
     "marked": "^18.0.3",
