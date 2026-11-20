@@ -1,0 +1,507 @@
+name: security-scan
+
+# ── 발행 규칙 (SEC-125, 2026-09-30) ────────────────────────────────────────
+# 호출자는 main 이 아니라 **발행 태그**를 SHA 로 핀한다:
+#   uses: sdin99/homelab/.github/workflows/security-scan.yml@<태그의 커밋 sha> # vX.Y.Z
+# 태그는 "security-scan 규칙 판" 이다. MAJOR = 호출자 입력·동작 호환이 깨짐 ·
+# MINOR = 새 규칙 추가(호출자가 빨개질 수 있음 — 그 갱신 PR 이 레포별 기준선을 넣는 자리) ·
+# PATCH = 오탐 수정·문구.
+# ‼ **발행한 태그는 옮기지 않는다.** 잘못 발행했으면 새 PATCH 로 덮는다 — 옮기면 Renovate 가
+#   "같은 태그, 다른 SHA" PR 을 내고, 어느 레포가 어느 판을 쓰는지 태그로 읽을 수 없게 된다.
+# ‼ 접두어 태그(scan-v1…)를 쓰지 않는다 — Renovate 가 semver 로 못 읽어 조용히 안 따라간다.
+# 호출자 쪽 갱신은 자동 머지하지 않는다(공유 renovate.json — PATCH=오탐 수정은 검사를 느슨하게 한다).
+# ────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      manifests-paths:
+        description: "Space-separated dirs to scan for K8s manifests (skipped if all missing)"
+        required: false
+        type: string
+        default: "platform argocd-apps k8s manifests deploy"
+      kubeconform-version:
+        description: "kubeconform binary version"
+        required: false
+        type: string
+        default: "0.7.0"
+
+permissions:
+  contents: read
+
+# ── 비용 ────────────────────────────────────────────────────────────────────
+# GitHub Actions 는 **잡 단위로 분을 올림 과금**한다. 잡 7개가 각각 10초씩 돌면
+# 실제 83초인데 7분으로 청구된다(2026-09-23 실측: util security 1회 = 잡 7개 = 7분).
+# 그래서 검사를 잡으로 쪼개지 않고 **한 잡 안의 단계**로 묶는다.
+# 잃는 것: 검사 목록의 개별 빨간불(단계 이름으로 대체) · 병렬성(총 ~90초, 문제 없음).
+# ────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  scan:
+    name: 보안 스캔 (시크릿·CVE·misconfig·스키마·정책)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # gitleaks ScanPullRequest 가 PR 파일 목록을 읽는다
+    env:
+      TRIVY_VERSION: "0.70.0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      # ── 도구 설치 (체크섬 검증) ─────────────────────────────────────────
+      - name: Install trivy / kubeconform
+        run: |
+          set -euo pipefail
+          tb="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL -o "$tb" "$base/$tb"
+          curl -fsSL -o trivy-sums.txt "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  ${tb}$" trivy-sums.txt | sha256sum -c -
+          tar xzf "$tb" trivy && sudo mv trivy /usr/local/bin/
+
+          kb="kubeconform-linux-amd64.tar.gz"
+          kbase="https://github.com/yannh/kubeconform/releases/download/v${{ inputs.kubeconform-version }}"
+          curl -fsSL -o "$kb" "$kbase/$kb"
+          curl -fsSL -o kc-sums.txt "$kbase/CHECKSUMS"
+          grep "  ${kb}$" kc-sums.txt | sha256sum -c -
+          tar xzf "$kb" kubeconform && sudo mv kubeconform /usr/local/bin/
+
+      - name: 매니페스트 디렉토리 탐지
+        id: dirs
+        env:
+          CANDIDATES: ${{ inputs.manifests-paths }}
+        run: |
+          set -euo pipefail
+          existing=()
+          for d in $CANDIDATES; do [ -d "$d" ] && existing+=("$d"); done
+          if [ ${#existing[@]} -eq 0 ]; then
+            echo "dirs=" >> "$GITHUB_OUTPUT"; echo "K8s 매니페스트 디렉토리 없음 — 관련 검사 건너뜀"
+          else
+            echo "dirs=${existing[*]}" >> "$GITHUB_OUTPUT"; printf '대상: %s\n' "${existing[*]}"
+          fi
+
+      # ── 검사 (하나가 실패해도 나머지는 돈다) ────────────────────────────
+      # ── gitleaks 기준선 (SEC-220, v1.0.2) ──────────────────────────────
+      # fleet 불변값 둘만 허용한다 — 레포마다 따로 두면 같은 오탐이 레포 수만큼 반복된다.
+      #   ① SealedSecret 암호문: **탐지값 전체가** `Ag…` base64 200자 이상일 때만(공개키 암호문 — 시크릿이 아니다).
+      #      줄(regexTarget=line)로 허용하지 않는다 — gitleaks 8.24.3 에서 line 대상 전역 허용이 SealedSecret 이 아닌
+      #      오탐(4,269자 HTML 줄)까지 지우는 것을 실측했다(원인 미상). 탐지값 대상이 더 좁고 정확하다.
+      #   ② `atlas.sum` 의 h1: 해시(경로).
+      # 평문 stringData·짧은 Ag 값·atlas 가 아닌 .sum 은 계속 잡힌다(변이 시험 — PR 본문).
+      # 레포 자체 `.gitleaks.toml` 은 덮지 않는다 — 있으면 [extend] path 로 바탕에 두고 기준선만 더한다.
+      # 레포별 예외(문서 예시·자리표시 값)는 그 레포의 `.gitleaksignore`(지문)·`.gitleaks.toml` 에 둔다 — 기준선에 넣지 않는다.
+      # ‼ 예약 실행의 전체 이력 스캔은 그대로다 — 이력 속 진짜 시크릿을 잡는 값이 있다.
+      - name: gitleaks 기준선 설정
+        id: glbase
+        run: |
+          set -euo pipefail
+          cfg="$RUNNER_TEMP/gitleaks-baseline.toml"
+          if [ -f .gitleaks.toml ]; then
+            ext="path = \"$GITHUB_WORKSPACE/.gitleaks.toml\""
+            echo "레포 .gitleaks.toml 을 바탕에 두고 기준선을 더한다"
+          else
+            ext="useDefault = true"
+            echo "레포 설정 없음 — 기본 규칙 + 기준선"
+          fi
+          {
+            echo 'title = "homelab security-scan fleet baseline (SEC-220)"'
+            echo '[extend]'
+            echo "$ext"
+            echo '[allowlist]'
+            echo 'description = "fleet 불변값 — SealedSecret 암호문(탐지값 전체) · atlas.sum 해시"'
+            echo "regexes = ['''^Ag[A-Za-z0-9+/]{200,}={0,2}\$''']"
+            echo "paths = ['''(^|/)atlas\\.sum\$''']"
+          } > "$cfg"
+          cat "$cfg"
+          echo "config=$cfg" >> "$GITHUB_OUTPUT"
+
+      - name: gitleaks (시크릿)
+        id: gitleaks
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_CONFIG: ${{ steps.glbase.outputs.config }}
+
+      - name: trivy (의존성 CVE)
+        id: trivyfs
+        continue-on-error: true
+        run: trivy fs --scanners vuln --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 .
+
+      - name: trivy (K8s misconfig)
+        id: trivyconf
+        continue-on-error: true
+        env:
+          DIRS: ${{ steps.dirs.outputs.dirs }}
+        run: |
+          set -uo pipefail
+          [ -n "$DIRS" ] || { echo "대상 없음 — 건너뜀"; exit 0; }
+          ignore=()
+          # 베이스라인 파일은 레포마다 있을 수도, 없을 수도 있다. 없는데 --ignorefile 을 주면 trivy 가 죽는다.
+          [ -f .trivyignore.yaml ] && ignore=(--ignorefile .trivyignore.yaml)
+          rc=0
+          # shellcheck disable=SC2086
+          for d in $DIRS; do
+            echo "::group::trivy config $d"
+            trivy config --severity CRITICAL,HIGH --exit-code 1 "${ignore[@]}" "$d" || rc=$?
+            echo "::endgroup::"
+          done
+          exit "$rc"
+
+      - name: trivy (Dockerfile misconfig)
+        id: trivydf
+        continue-on-error: true
+        env:
+          DIRS: ${{ steps.dirs.outputs.dirs }}
+        # SEC-184: 위 "K8s misconfig" 단계는 매니페스트 디렉토리만 본다 — 그 **밖**의 Dockerfile 은 어느 단계도
+        # 안 봤다(2026-09-29 실측: 호출 레포 전체에서 10개). 여기서 그것만 본다. 매니페스트 디렉토리 **안**의
+        # Dockerfile 은 위 단계가 이미 본다(trivy config 기본 스캐너에 dockerfile 포함) — 같은 파일을 두 번 보면
+        # 기준선도 두 벌이 되므로 --skip-dirs 로 뺀다. 두 단계를 합치면 레포의 모든 Dockerfile 이다.
+        # 경로는 레포 루트 기준이다(.trivyignore.yaml 의 paths 도 그렇게 적는다 — K8s 단계는 스캔 디렉토리 기준).
+        run: |
+          set -uo pipefail
+          skip=(--skip-dirs node_modules --skip-dirs .claude)
+          # shellcheck disable=SC2086
+          for d in $DIRS; do skip+=(--skip-dirs "$d"); done
+          n=0
+          while IFS= read -r f; do
+            in=0
+            for d in $DIRS; do case "$f" in "$d"/*) in=1 ;; esac; done
+            [ "$in" = 1 ] || n=$((n+1))
+          done < <(git ls-files | grep -E '(^|/)(Dockerfile[^/]*|Containerfile[^/]*|[^/]+\.Dockerfile)$' | grep -vE '(^|/)(node_modules|\.claude)/' || true)
+          # ‼ 0 개면 "대상 없음" 을 찍는다 — 초록이 "봤는데 없다" 와 "안 봤다" 를 섞지 않게(SEC-166).
+          [ "$n" -gt 0 ] || { echo "대상 없음 — 매니페스트 디렉토리 밖 Dockerfile 0개"; exit 0; }
+          echo "대상: 매니페스트 디렉토리 밖 Dockerfile ${n}개"
+          ignore=()
+          [ -f .trivyignore.yaml ] && ignore=(--ignorefile .trivyignore.yaml)
+          trivy config --misconfig-scanners dockerfile "${skip[@]}" \
+            --severity CRITICAL,HIGH --exit-code 0 "${ignore[@]}" --format json --output /tmp/trivydf.json . || exit 1
+          # ‼ 센 도구(git ls-files)와 스캔한 도구(trivy 탐지기)가 다르다 — 파일명 규칙이 어긋나면 "대상 N개" 라고
+          #   찍고 일부만 보고도 초록이 된다. trivy 가 **실제로 본** 목록을 찍고 수가 다르면 실패로 둔다.
+          N="$n" python3 - <<'PY'
+          import json, os, sys
+          d = json.load(open("/tmp/trivydf.json"))
+          res = d.get("Results") or []
+          print(f"trivy 가 본 Dockerfile {len(res)}개:")
+          for r in res:
+              print(f"  - {r['Target']}")
+          bad = 0
+          for r in res:
+              for m in r.get("Misconfigurations") or []:
+                  bad += 1
+                  line = (m.get("CauseMetadata") or {}).get("StartLine") or 1
+                  print(f"::error file={r['Target']},line={line}::[{m['ID']}] {m['Severity']} {m['Title']}")
+          if len(res) != int(os.environ["N"]):
+              print(f"::error::센 수({os.environ['N']})와 trivy 가 본 수({len(res)})가 다르다 — 탐지 규칙 불일치. 초록을 믿지 말 것.")
+              sys.exit(1)
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: 기준선 경로 대조 (.trivyignore.yaml)
+        id: ignorepaths
+        continue-on-error: true
+        env:
+          DIRS: ${{ steps.dirs.outputs.dirs }}
+        # ‼ 같은 .trivyignore.yaml 을 두 단계가 **다른 경로 기준**으로 읽는다(기술지원팀 sandbox#5 실측):
+        #     K8s misconfig 단계   → 스캔 디렉토리 기준(예: platform 안이면 "jellyfin/image/Dockerfile")
+        #     Dockerfile 단계      → 레포 루트 기준(예: "local-ai/Dockerfile")
+        #   기준을 틀리게 적으면 **아무것도 무시되지 않는데 trivy 는 알려 주지 않는다.** 그래서 여기서
+        #   각 paths 항목이 어느 기준으로든 실제 파일과 맞는지 보고, 안 맞으면 **경고**한다(실패 아님 — 검사를 느슨하게 하지 않는다). v1.0.1.
+        run: |
+          set -uo pipefail
+          [ -f .trivyignore.yaml ] || { echo "기준선 파일 없음 — 건너뜀"; exit 0; }
+          DIRS="$DIRS" python3 - <<'PY'
+          import fnmatch, glob, os, yaml
+          d = yaml.safe_load(open(".trivyignore.yaml")) or {}
+          bases = ["."] + [x for x in os.environ.get("DIRS", "").split() if x]
+          files = {b: [os.path.relpath(p, b) for p in glob.glob(os.path.join(b, "**", "*"), recursive=True) if os.path.isfile(p)] for b in bases}
+          n = bad = 0
+          for sec in ("misconfigurations", "vulnerabilities", "secrets"):
+              for e in d.get(sec) or []:
+                  for pat in e.get("paths") or []:
+                      n += 1
+                      hit = [b for b in bases if any(fnmatch.fnmatch(f, pat) for f in files[b])]
+                      if not hit:
+                          bad += 1
+                          print(f"::warning file=.trivyignore.yaml::[{e.get('id')}] paths '{pat}' 이 어느 기준(레포 루트 · {' · '.join(bases[1:]) or '매니페스트 디렉토리 없음'})으로도 파일과 맞지 않는다 — 이 항목은 아무것도 무시하지 않는다")
+          print(f"기준선 경로 {n}개 · 어느 기준과도 안 맞는 것 {bad}개 (K8s 단계=스캔 디렉토리 기준, Dockerfile 단계=레포 루트 기준)")
+          PY
+
+      - name: kubeconform (스키마)
+        id: kubeconform
+        continue-on-error: true
+        env:
+          DIRS: ${{ steps.dirs.outputs.dirs }}
+        run: |
+          set -uo pipefail
+          [ -n "$DIRS" ] || { echo "대상 없음 — 건너뜀"; exit 0; }
+          # YAML 파일만 넘긴다 — 디렉토리를 그대로 주면 package.json·tsconfig.json 까지 읽고
+          # "missing 'kind' key" 로 실패한다. 제외 패턴:
+          #   values/Chart.yaml(ArgoCD helm.valueFiles) · kustomization.yaml(kustomize 지시문)
+          #   argocd-apps/projects/*.yaml(ApplicationSet git-generator 값 파일)
+          # ‼ YAML 이 0개면 xargs 가 kubeconform 을 **인자 없이** 실행하고, kubeconform 은 stdin 을 읽다 죽는다
+          #   (exit 123 — dogam 이 09-26 부터 15런 연속 빨강, deploy/ 에 YAML 아닌 파일만 있었다).
+          #   0개면 "대상 없음" 을 찍고 통과한다 — 빨강도 초록도 아닌 사실을 그대로 적는다(SEC-166). v1.0.1.
+          files=()
+          # shellcheck disable=SC2086
+          while IFS= read -r -d '' f; do files+=("$f"); done < <(find $DIRS \( -name '*.yaml' -o -name '*.yml' \) -print0)
+          [ ${#files[@]} -gt 0 ] || { echo "대상 없음 — 매니페스트 디렉토리에 YAML 0개($DIRS)"; exit 0; }
+          echo "대상: YAML ${#files[@]}개"
+          printf '%s\0' "${files[@]}" | \
+            xargs -0 kubeconform \
+              -strict -ignore-missing-schemas -summary \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              -ignore-filename-pattern '(^|/)(values|Chart|kustomization)\.ya?ml$' \
+              -ignore-filename-pattern '(^|/)argocd-apps/projects/[^/]+\.ya?ml$'
+
+      - name: 보안 정책 게이트 (POLICY.md)
+        id: policy
+        continue-on-error: true
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: |
+          cat > /tmp/policy_check.py <<'POLICY_CHECK_EOF'
+          #!/usr/bin/env python3
+          """홈랩 보안 정책(POLICY.md)에서 기계적으로 판정 가능한 MUST 항목을 레포 전체에 대해 검사한다.
+
+          정본은 sdin99/security 의 POLICY.md 다. 사람이 읽는 규칙과 어긋나면 POLICY.md 가 이긴다.
+          여기 없는 규칙이 안전하다는 뜻이 아니라, 자동 판정이 어려울 뿐이다.
+
+          종료코드 1 = 위반. 의도된 예외는 레포 루트 `.secpolicyignore` 에
+          `<규칙ID> <경로글롭>   # 사유` 형식으로 한 줄씩 적는다.
+          """
+          from __future__ import annotations
+          import fnmatch, os, re, sys
+          from pathlib import Path
+
+          ROOT = Path(os.environ.get("GITHUB_WORKSPACE", ".")).resolve()
+          SKIP_DIRS = {".git", ".claude", "node_modules", ".venv", "venv", "dist", "build", ".next", "vendor", "__pycache__"}
+
+          RULES = {
+              "1.1": "시크릿 평문 매니페스트 (SealedSecret/InfisicalSecret 로만 반입)",
+              "2.6": "NodePort/hostPort 로 서비스 노출",
+              "3.1": "자체 이미지의 mutable 태그(:latest 등)",
+              "3.2": "서드파티 이미지가 불변 참조가 아님 — @sha256 digest 또는 패치 자리까지의 버전 태그",
+              "4.1": "privileged / hostNetwork / hostPID",
+              "5.1": "GitHub Actions uses: 가 40자 commit SHA 로 pin 되지 않음",
+          }
+
+
+          def load_ignores() -> list[tuple[str, str]]:
+              f = ROOT / ".secpolicyignore"
+              out = []
+              if f.exists():
+                  for line in f.read_text(encoding="utf-8").splitlines():
+                      line = line.split("#", 1)[0].strip()
+                      if not line:
+                          continue
+                      parts = line.split(None, 1)
+                      if len(parts) == 2:
+                          out.append((parts[0], parts[1].strip()))
+              return out
+
+
+          IGNORES = load_ignores()
+          findings: list[tuple[str, str, int, str]] = []
+          # 판정 불가 — 통과로도 실패로도 세지 않는다. "0건" 이 "봤는데 없다" 와 "못 봤다" 를 섞지 않게 따로 보고한다.
+          undetermined: list[tuple[str, str, int, str]] = []
+
+
+          def add(rule: str, path: Path, lineno: int, msg: str) -> None:
+              rel = str(path.relative_to(ROOT))
+              if not any(r == rule and fnmatch.fnmatch(rel, pat) for r, pat in IGNORES):
+                  findings.append((rule, rel, lineno, msg))
+
+
+          def walk(suffixes: tuple[str, ...]):
+              for dirpath, dirnames, filenames in os.walk(ROOT):
+                  dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+                  for fn in filenames:
+                      if fn.endswith(suffixes):
+                          yield Path(dirpath) / fn
+
+
+          DOCKERFILE = re.compile(r"^(Dockerfile.*|Containerfile.*|.+\.Dockerfile)$")
+
+
+          def walk_dockerfiles():
+              for dirpath, dirnames, filenames in os.walk(ROOT):
+                  dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+                  for fn in filenames:
+                      if DOCKERFILE.match(fn):
+                          yield Path(dirpath) / fn
+
+
+          YAML = (".yaml", ".yml")
+          # [3.1] 자체 이미지.
+          OWN_IMAGE = re.compile(r"image:\s*[\"']?((?:(?:ghcr|docker)\.io/)?sdin99/[\w./-]+?)(?::([\w.-]+))?[\"']?\s*(?:#.*)?$")
+          MUTABLE = {"latest", "main", "master", "dev", "edge", "stable", "prod", ""}
+
+          # [3.2] 서드파티 이미지 (SEC-185). 판정 기준은 정책에서 가져온다 — trivy DS-0001 은 "태그가 있는가" 만 보고
+          # "불변인가" 는 안 봐서 `7-slim`·`3.12-slim` 을 통과시킨다.
+          #   통과: @sha256:<64hex> · 또는 패치 자리까지의 버전 (v0.15.5 · 1.25.3-alpine · 2026.5.0)
+          #   실패: 그 밖의 태그(7-slim · 3.12-slim · latest · bookworm) · 태그 없음
+          #   판정 불가: ${ARG}·{{ 템플릿 }} 로 된 참조 — 따로 보고한다
+          OWN_REF = re.compile(r"^(?:(?:ghcr|docker)\.io/)?sdin99/")
+          PINNED_TAG = re.compile(r"^v?\d+\.\d+\.\d+([-.+_][0-9A-Za-z.]+)?$")
+          ANY_IMAGE = re.compile(r"^\s*-?\s*image:\s*[\"']?([^\s\"'#]+)")
+
+
+          def judge_third_party(ref: str) -> str | None:
+              """None = 자체 이미지(3.1 담당). 그 밖엔 pass / fail / undetermined."""
+              if "$" in ref or "{{" in ref:
+                  return "undetermined"
+              if OWN_REF.match(ref):
+                  return None
+              if "@" in ref:
+                  return "pass" if re.search(r"@sha256:[0-9a-f]{64}$", ref) else "fail"
+              last = ref.rsplit("/", 1)[-1]
+              if ":" not in last:
+                  return "fail"
+              return "pass" if PINNED_TAG.match(last.split(":", 1)[1]) else "fail"
+
+
+          def check_32(p: Path, lineno: int, ref: str, where: str) -> None:
+              verdict = judge_third_party(ref)
+              if verdict == "fail":
+                  add("3.2", p, lineno, f"{where} {ref} — digest(@sha256) 또는 x.y.z 버전으로")
+              elif verdict == "undetermined":
+                  undetermined.append(("3.2", str(p.relative_to(ROOT)), lineno, f"{where} {ref} — 변수·템플릿 참조"))
+
+          for p in walk(YAML):
+              rel = str(p.relative_to(ROOT))
+              if rel.startswith(".github/"):
+                  continue
+              try:
+                  lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+              except OSError:
+                  continue
+              is_k8s = re.search(r"^(apiVersion|kind):", "\n".join(lines), re.M) is not None
+              in_secret = False
+              for i, line in enumerate(lines, 1):
+                  s = line.strip()
+                  if s.startswith("kind:"):
+                      in_secret = s == "kind: Secret"
+                  if in_secret and re.match(r"^(data|stringData):", s):
+                      nxt = lines[i] if i < len(lines) else ""
+                      if re.match(r"\s+\S+:\s*\S", nxt) and "{{" not in nxt:
+                          add("1.1", p, i, "평문 Secret 매니페스트 — SealedSecret/InfisicalSecret 사용")
+                  if re.match(r"^type:\s*NodePort", s) or re.match(r"^-?\s*nodePort:\s*\d+", s):
+                      add("2.6", p, i, "NodePort — 접근은 kubectl port-forward")
+                  if re.match(r"^-?\s*hostPort:\s*\d+", s) and is_k8s:
+                      add("2.6", p, i, "hostPort — 노드 포트 직접 바인딩")
+                  if re.match(r"^privileged:\s*true", s):
+                      add("4.1", p, i, "privileged: true")
+                  if re.match(r"^hostNetwork:\s*true", s):
+                      add("4.1", p, i, "hostNetwork: true")
+                  if re.match(r"^hostPID:\s*true", s):
+                      add("4.1", p, i, "hostPID: true")
+                  m = OWN_IMAGE.search(line)
+                  if m and "@sha256:" not in line:
+                      tag = (m.group(2) or "").strip()
+                      if tag in MUTABLE:
+                          add("3.1", p, i, f"자체 이미지 mutable 태그: {m.group(1)}:{tag or '(태그 없음)'} — sha-<git> 또는 digest 로")
+                  m = ANY_IMAGE.match(line)
+                  if m:
+                      check_32(p, i, m.group(1), "image:")
+
+          # [3.2] Dockerfile 의 FROM — YAML 만 걷던 검사기가 보지 못하던 자리다.
+          for p in walk_dockerfiles():
+              stages: set[str] = set()
+              try:
+                  lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+              except OSError:
+                  continue
+              for i, line in enumerate(lines, 1):
+                  m = re.match(r"\s*FROM\s+(.*)$", line, re.I)
+                  if not m:
+                      continue
+                  toks = [t for t in m.group(1).split() if not t.startswith("--")]   # --platform=… 를 벗긴다
+                  if not toks:
+                      continue
+                  ref = toks[0]
+                  if len(toks) >= 3 and toks[1].lower() == "as":
+                      stages.add(toks[2].lower())
+                  if ref.lower() in stages or ref == "scratch":
+                      continue   # 앞선 스테이지 이름 · scratch
+                  check_32(p, i, ref, "FROM")
+
+          for p in walk((".yml", ".yaml")):
+              if ".github/workflows" not in str(p):
+                  continue
+              for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                  m = re.match(r"\s*-?\s*uses:\s*([^\s#]+)", line)
+                  if not m:
+                      continue
+                  ref = m.group(1)
+                  if ref.startswith("./") or ref.startswith("docker://") or ref.startswith("sdin99/"):
+                      continue  # 로컬·자기 조직 재사용 워크플로는 내부 신뢰 경계
+                  if "@" not in ref:
+                      add("5.1", p, i, f"uses: {ref} — ref 없음")
+                      continue
+                  if not re.fullmatch(r"[0-9a-f]{40}", ref.rsplit("@", 1)[1]):
+                      add("5.1", p, i, f"uses: {ref} — 40자 commit SHA 로 pin 필요")
+
+          if undetermined:
+              print(f"판정 불가 {len(undetermined)}건 — 통과로도 실패로도 세지 않는다(변수·템플릿 참조)")
+              for rule, rel, lineno, msg in sorted(undetermined):
+                  print(f"  [{rule}] {rel}:{lineno}  {msg}")
+                  print(f"::notice file={rel},line={lineno}::[{rule}] 판정 불가 — {msg}")
+              print()
+
+          if not findings:
+              print(f"정책 검사 통과 — 위반 없음 (규칙 {', '.join(sorted(RULES))} / 예외 {len(IGNORES)}건 / 판정 불가 {len(undetermined)}건)")
+              sys.exit(0)
+
+          by_rule: dict[str, list] = {}
+          for rule, rel, lineno, msg in findings:
+              by_rule.setdefault(rule, []).append((rel, lineno, msg))
+          print(f"정책 위반 {len(findings)}건\n")
+          for rule in sorted(by_rule):
+              print(f"[{rule}] {RULES[rule]}")
+              for rel, lineno, msg in sorted(by_rule[rule]):
+                  print(f"  {rel}:{lineno}  {msg}")
+                  print(f"::error file={rel},line={lineno}::[{rule}] {msg}")
+              print()
+          print("해소하거나, 의도된 예외면 .secpolicyignore 에 `<규칙ID> <경로글롭>  # 사유` 로 등록하고")
+          print("sdin99/security 의 exceptions.md 에도 만료일과 함께 남겨라.")
+          sys.exit(1)
+          POLICY_CHECK_EOF
+          python3 /tmp/policy_check.py
+
+      - name: 검사기 사본 일치 (homelab 전용)
+        id: sync
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          f=.github/workflows/security-scan.yml
+          if [ ! -f "$f" ] || [ ! -f .github/scripts/policy_check.py ]; then
+            echo "이 레포에는 검사기 사본이 없다 — 건너뜀"; exit 0
+          fi
+          # 첫 블록만 뽑는다 — 이 awk 프로그램 자체에도 같은 마커 문자열이 들어 있다
+          awk "/<<'POLICY_CHECK_EOF'/ && !d {f=1; next} /^ *POLICY_CHECK_EOF\$/ && f {f=0; d=1} f" "$f" \
+            | sed 's/^          //' > /tmp/embedded.py
+          if ! diff -u .github/scripts/policy_check.py /tmp/embedded.py; then
+            echo "::error::워크플로에 박힌 검사기와 .github/scripts/policy_check.py 가 다르다."
+            exit 1
+          fi
+          echo "일치"
+
+      # ── 집계 ────────────────────────────────────────────────────────────
+      - name: 결과 집계
+        env:
+          R: ${{ steps.gitleaks.outcome }}/${{ steps.trivyfs.outcome }}/${{ steps.trivyconf.outcome }}/${{ steps.trivydf.outcome }}/${{ steps.kubeconform.outcome }}/${{ steps.policy.outcome }}/${{ steps.sync.outcome }}
+        run: |
+          set -uo pipefail
+          names=(gitleaks "trivy(의존성)" "trivy(misconfig)" "trivy(Dockerfile)" kubeconform "정책게이트" "검사기사본")
+          IFS=/ read -ra out <<< "$R"
+          fail=0
+          for i in "${!names[@]}"; do
+            if [ "${out[$i]}" = "failure" ]; then echo "✗ ${names[$i]}"; fail=1; else echo "✓ ${names[$i]}"; fi
+          done
+          [ "$fail" = 0 ] || { echo "::error::보안 스캔 실패 — 위 항목 확인"; exit 1; }
