@@ -11,8 +11,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  # Shared security gate. Pinned by commit SHA of the published tag:
-  #   v1.0.2 = 486887bc (same pin as other repos, checked 2026-11-04).
+  # Shared security gate, called from a local byte copy (this repo is public and cannot call the private homelab one).
+  #   The copy must stay byte-identical to homelab@486887bc (v1.0.2) .github/workflows/security-scan.yml, git blob 937155f2.
   # The job name 'scan' becomes the check name 'scan / ...' that the main branch ruleset requires.
   scan:
     uses: ./.github/workflows/security-scan.yml
