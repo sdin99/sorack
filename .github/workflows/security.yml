@@ -1,0 +1,18 @@
+name: security
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "40 6 * * 1"   # re-scan weekly with a fresh CVE database even if the code did not change
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Shared security gate. Pinned by commit SHA of the published tag:
+  #   v1.0.2 = 486887bc (same pin as other repos, checked 2026-11-04).
+  # The job name 'scan' becomes the check name 'scan / ...' that the main branch ruleset requires.
+  scan:
+    uses: sdin99/homelab/.github/workflows/security-scan.yml@486887bc17c7a1eefc88a5813d764d30e97b7666 # v1.0.2
